@@ -31,6 +31,9 @@ of `p3_*` actions.
 
 ## Car models
 
+`Low Poly Car.blend` is the only file in the author's Blender folder that
+belongs to this project; the others there are unrelated work.
+
 The car is authored in Blender and committed as a `.glb`. `.glb` is preferred
 over `.fbx` here: the original `car1.fbx` contained only the body, while the
 `.blend` has the four wheels as separate objects, which the game needs in order
@@ -59,7 +62,9 @@ would fight over which is current.
 
 Each half of the screen shows a small arrow orbiting that player's car at a
 fixed radius, pointing along the ground towards the other car and painted in
-the rival's colour. It is most useful when the rival is off-screen.
+the rival's colour. It hides itself while the rival is already on screen, and
+uses a wider margin to hide than to reappear, so it cannot flicker while the
+rival sits on the edge of the view.
 
 Both views render the same `World3D`, so each arrow sits on its own visual
 layer that the *other* player's camera culls; otherwise both arrows would show

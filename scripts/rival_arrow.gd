@@ -16,6 +16,21 @@ extends MeshInstance3D
 ## snapping about while the cars jostle at close range.
 @export var smoothing := 12.0
 
+@export_group("Auto hide")
+## Hide the arrow while the rival is already on screen, since it is only
+## useful for finding a car you cannot see.
+@export var hide_when_rival_on_screen := true
+## The two margins are deliberately different, which gives the arrow
+## hysteresis: the rival must come well inside the view before the arrow
+## hides, but only just leave it before the arrow comes back. A single
+## threshold would make the arrow flicker while the rival sat on the edge.
+## Fraction of the view the rival must be inside before the arrow hides.
+@export_range(0.0, 0.45) var hide_margin := 0.12
+## Fraction of the view the rival must leave before the arrow returns.
+@export_range(0.0, 0.45) var show_margin := 0.02
+## Aim the on-screen test at the car's body rather than its floor.
+@export var rival_centre_height := 0.7
+
 var _owner_car: Node3D
 var _rival_car: Node3D
 ## The one camera that renders this arrow, used to keep its face readable.
@@ -40,6 +55,7 @@ func setup(
 
 	_bearing = _target_bearing()
 	_place()
+	_update_visibility()
 
 
 ## Runs with physics, like the cars and cameras, so the arrow cannot jitter
@@ -50,6 +66,7 @@ func _physics_process(delta: float) -> void:
 	var weight := 1.0 - exp(-smoothing * delta)
 	_bearing = _bearing.slerp(_target_bearing(), weight)
 	_place()
+	_update_visibility()
 
 
 ## Direction from the owner to the rival, flattened onto the ground.
@@ -89,6 +106,32 @@ func _face_camera() -> void:
 	var face := global_transform.basis.y
 	var side := global_transform.basis.x
 	rotate_object_local(Vector3.BACK, -atan2(target.dot(side), target.dot(face)))
+
+
+## Show the arrow only while the rival is off screen.
+func _update_visibility() -> void:
+	if not hide_when_rival_on_screen or _camera == null:
+		visible = true
+		return
+	visible = not _rival_on_screen()
+
+
+func _rival_on_screen() -> bool:
+	var target := _rival_car.global_position + Vector3.UP * rival_centre_height
+	# Behind the camera unprojects to a meaningless point, so rule it out first.
+	if _camera.is_position_behind(target):
+		return false
+
+	var view: Vector2 = _camera.get_viewport().get_visible_rect().size
+	if view.x <= 0.0 or view.y <= 0.0:
+		return false
+
+	# Widen the test while the arrow is hidden, so it takes a clear exit from
+	# the view to bring the arrow back. See the margin exports above.
+	var margin := hide_margin if visible else show_margin
+	var inset := view * margin
+	var box := Rect2(inset, view - inset * 2.0)
+	return box.has_point(_camera.unproject_position(target))
 
 
 ## A flat chevron lying in the XZ plane, nose towards -Z.
