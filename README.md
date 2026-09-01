@@ -18,15 +18,16 @@ tools/            Blender export scripts (not shipped in the game)
 
 ## Controls
 
-| Action     | Player 1 |
-| ---------- | -------- |
-| Accelerate | W        |
-| Brake      | S        |
-| Steer      | A / D    |
+| Action     | Player 1 (red) | Player 2 (blue) |
+| ---------- | -------------- | --------------- |
+| Accelerate | W              | Up              |
+| Brake      | S              | Down            |
+| Steer      | A / D          | Left / Right    |
 
-Player 2 (arrow keys) arrives in Phase 2. The car script reads its actions from
-an `input_prefix` export, so a second car only needs a new prefix and a new set
-of `p2_*` actions.
+Both players use the same `scenes/car/car.tscn`. A car reads its actions from an
+`input_prefix` export (`p1` / `p2`) and takes its paint from a `body_color`
+export, so adding a third player would mean one more instance and one more set
+of `p3_*` actions.
 
 ## Car models
 
@@ -46,12 +47,20 @@ It drops the Camera/Floor/Sun, applies the Mirror modifier, scales the car to
 own centre so it spins in place, and names the wheels from their measured
 position (`Wheel_FL`, `Wheel_FR`, `Wheel_BL`, `Wheel_BR`).
 
+## Split screen
+
+The cars live in `main.tscn` so they share one `World3D` and can collide. Each
+half of the screen is a `SubViewport` that inherits that same world and adds
+only its own `ChaseCamera`, which the level wires to a car in `main.gd`. The
+cameras are deliberately *not* children of the cars: two cameras in one viewport
+would fight over which is current.
+
 ## Phases
 
 - [x] **0** — repo, Godot project, `.gitignore`
-- [ ] **1** — one car driving (WASD)
-- [ ] **2** — second car (arrow keys)
-- [ ] **3** — split screen
+- [x] **1** — one car driving (WASD)
+- [x] **2** — second car (arrow keys)
+- [x] **3** — split screen
 - [ ] **4** — a hand-made track
 - [ ] **5** — procedural track generation
 - [ ] **6** — countdown, checkpoints, finish, winner, timer

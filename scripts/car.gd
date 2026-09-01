@@ -8,9 +8,16 @@ extends CharacterBody3D
 ## That is far easier to tune for split-screen arcade racing than
 ## VehicleBody3D, and it will not flip over on a procedural track.
 
+## Name of the material in the model that carries the car's paint. Every
+## surface using it gets recoloured; the tyres, glass and chrome are left alone.
+const PAINT_MATERIAL := "Body"
+
 ## Which set of input actions to read, e.g. "p1" -> p1_accelerate, p1_brake,
-## p1_steer_left, p1_steer_right. Player 2 gets its own prefix later.
+## p1_steer_left, p1_steer_right.
 @export var input_prefix := "p1"
+
+## Paint colour. Defaults to the red the model ships with.
+@export var body_color := Color(0.9063, 0.0, 0.0224)
 
 @export_group("Driving")
 @export var max_speed := 25.0          ## m/s going forward
@@ -55,6 +62,27 @@ func _ready() -> void:
 	_rear_wheels = _collect_wheels(["Wheel_BL", "Wheel_BR"])
 	for wheel in _front_wheels + _rear_wheels:
 		_wheel_rest.append(wheel.transform.basis)
+
+	_paint_body()
+
+
+## Recolour the paintwork. The imported materials are shared between every car
+## instance, so this overrides with a private copy rather than editing them in
+## place, which would repaint both players' cars at once.
+func _paint_body() -> void:
+	var paint: StandardMaterial3D = null
+	for mesh in find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := mesh as MeshInstance3D
+		for surface in mesh_instance.get_surface_override_material_count():
+			var material := mesh_instance.get_active_material(surface)
+			if material == null or material.resource_name != PAINT_MATERIAL:
+				continue
+			if paint == null:
+				paint = (material as StandardMaterial3D).duplicate()
+				paint.albedo_color = body_color
+			mesh_instance.set_surface_override_material(surface, paint)
+	if paint == null:
+		push_warning("Car: no '%s' material found to paint" % PAINT_MATERIAL)
 
 
 ## Found by name rather than by path: the glTF importer decides how deeply it

@@ -6,17 +6,11 @@
 [sub_resource type="BoxShape3D" id="BoxShape3D_body"]
 size = Vector3(2.53, 1.39, 4.3)
 
-[node name="Car1" type="CharacterBody3D"]
+[node name="Car" type="CharacterBody3D"]
 script = ExtResource("1_car")
-input_prefix = "p1"
 
 [node name="Collision" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.695, 0)
 shape = SubResource("BoxShape3D_body")
 
 [node name="Model" parent="." instance=ExtResource("2_model")]
-
-[node name="CameraPivot" type="Node3D" parent="."]
-
-[node name="Camera3D" type="Camera3D" parent="CameraPivot"]
-transform = Transform3D(1, 0, 0, 0, 0.94, -0.342, 0, 0.342, 0.94, 0, 4.5, 9.5)
