@@ -73,13 +73,31 @@ it. The arrow also rolls about its own nose to keep its flat face turned
 towards its camera - without that it is edge-on and nearly invisible whenever
 the rival is straight ahead or behind.
 
+## Track
+
+`scenes/track/track.tscn` is a `Path3D` whose `Curve3D` is extruded into a road
+by two `CSGPolygon3D` nodes - a wider light one for the kerbs and a narrower
+dark one for the asphalt - both with `use_collision` on. Drag the path's points
+in the editor to reshape the circuit; nothing is baked.
+
+The curve repeats its first point at the end so that it genuinely closes,
+rather than relying on `path_joined` to close the road visually. That matters
+beyond looks: `get_baked_length()` and `sample_baked()` are what lap timing and
+checkpoints will use in Phase 6, and on an unclosed curve they silently omit the
+final segment.
+
+The starting grid is derived from the curve at run time in `main.gd`, so it
+follows the track when the path is edited.
+
+Current circuit: 12 control points, 701.6 m a lap, 14.4 m wide.
+
 ## Phases
 
 - [x] **0** — repo, Godot project, `.gitignore`
 - [x] **1** — one car driving (WASD)
 - [x] **2** — second car (arrow keys)
 - [x] **3** — split screen
-- [ ] **4** — a hand-made track
+- [x] **4** — a hand-made track
 - [ ] **5** — procedural track generation
 - [ ] **6** — countdown, checkpoints, finish, winner, timer
 - [ ] **7** — polish: models, environment, audio, particles, UI, themes, boosts

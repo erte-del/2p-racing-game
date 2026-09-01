@@ -22,9 +22,20 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @onready var _camera2: ChaseCamera = $Split/BottomView/SubViewport/Camera
 @onready var _arrow1: RivalArrow = $ArrowP1
 @onready var _arrow2: RivalArrow = $ArrowP2
+@onready var _path: Path3D = $Track/Path3D
+
+@export_group("Starting grid")
+## Sideways offset from the racing line, in metres.
+@export var grid_spread := 3.6
+## How far the second car starts back along the track, in metres.
+@export var grid_stagger := 6.0
+## Ride height above the road surface at the spawn point.
+@export var grid_clearance := 0.05
 
 
 func _ready() -> void:
+	_place_on_grid()
+
 	_camera1.follow(_car1)
 	_camera2.follow(_car2)
 
@@ -41,3 +52,32 @@ func _ready() -> void:
 
 func _bit(layer: int) -> int:
 	return 1 << (layer - 1)
+
+
+## Line the cars up on the track's own curve, staggered, facing the racing
+## direction. Deriving the grid from the path means it keeps working when the
+## track is reshaped in the editor, and it avoids hand-written basis maths.
+func _place_on_grid() -> void:
+	var curve := _path.curve
+	var to_world := _path.global_transform
+	var lap := curve.get_baked_length()
+	var cars: Array[Car] = [_car1, _car2]
+
+	for i in cars.size():
+		var along := fposmod(-grid_stagger * i, lap)
+		var here := to_world * curve.sample_baked(along)
+		var ahead := to_world * curve.sample_baked(fposmod(along + 1.0, lap))
+
+		var forward := ahead - here
+		forward.y = 0.0
+		if forward.length_squared() < 0.000001:
+			push_warning("Main: degenerate track tangent at %.1f m" % along)
+			continue
+		forward = forward.normalized()
+		var across := forward.cross(Vector3.UP)
+
+		var side := grid_spread if i % 2 == 1 else -grid_spread
+		var car := cars[i]
+		car.global_position = here + across * side + Vector3.UP * grid_clearance
+		# look_at aims -Z, which is the car's forward.
+		car.look_at(car.global_position + forward, Vector3.UP)
