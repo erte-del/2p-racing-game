@@ -1,41 +1,20 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=2 format=3]
 
-[sub_resource type="Curve3D" id="Curve3D_track"]
-_data = {
-"points": PackedVector3Array(-19.6667, 0, -0.666667, 19.6667, 0, 0.666667, 0, 0.15, -92, -18.6667, 0, -7.66667, 18.6667, 0, 7.66667, 62, 0.15, -84, -10.6667, 0, -15, 10.6667, 0, 15, 112, 0.15, -46, 1.33333, 0, -17.3333, -1.33333, 0, 17.3333, 126, 0.15, 6, 12.3333, 0, -12.3333, -12.3333, 0, 12.3333, 104, 0.15, 58, 18.3333, 0, -2.66667, -18.3333, 0, 2.66667, 52, 0.15, 80, 18.3333, 0, -0.333333, -18.3333, 0, 0.333333, -6, 0.15, 74, 17, 0, 3.66667, -17, 0, -3.66667, -58, 0.15, 82, 11.3333, 0, 14.3333, -11.3333, 0, -14.3333, -108, 0.15, 52, -0.666667, 0, 19, 0.666667, 0, -19, -126, 0.15, -4, -11.6667, 0, 14, 11.6667, 0, -14, -104, 0.15, -62, -17.3333, 0, 5, 17.3333, 0, -5, -56, 0.15, -88, -19.6667, 0, -0.666667, 19.6667, 0, 0.666667, 0, 0.15, -92),
-"tilts": PackedFloat32Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-}
-point_count = 13
-
-[sub_resource type="StandardMaterial3D" id="Asphalt"]
-albedo_color = Color(0.176, 0.18, 0.196, 1)
-roughness = 0.92
-
-[sub_resource type="StandardMaterial3D" id="Kerb"]
-albedo_color = Color(0.85, 0.85, 0.87, 1)
-roughness = 0.8
+[ext_resource type="Script" path="res://scripts/track.gd" id="1_track"]
 
 [node name="Track" type="Node3D"]
+script = ExtResource("1_track")
 
 [node name="Path3D" type="Path3D" parent="."]
-curve = SubResource("Curve3D_track")
 
-[node name="Kerbs" type="CSGPolygon3D" parent="."]
-use_collision = true
-polygon = PackedVector2Array(-8.2, -0.55, 8.2, -0.55, 8.2, 0.02, -8.2, 0.02)
-mode = 2
-path_node = NodePath("../Path3D")
-path_interval_type = 0
-path_interval = 3.0
-path_rotation = 2
-material = SubResource("Kerb")
+[node name="Road" type="MeshInstance3D" parent="."]
 
-[node name="Road" type="CSGPolygon3D" parent="."]
-use_collision = true
-polygon = PackedVector2Array(-7.2, -0.6, 7.2, -0.6, 7.2, 0.05, -7.2, 0.05)
-mode = 2
-path_node = NodePath("../Path3D")
-path_interval_type = 0
-path_interval = 3.0
-path_rotation = 2
-material = SubResource("Asphalt")
+[node name="RoadBody" type="StaticBody3D" parent="."]
+
+[node name="Shape" type="CollisionShape3D" parent="RoadBody"]
+
+[node name="Mountains" type="MeshInstance3D" parent="."]
+
+[node name="MountainBody" type="StaticBody3D" parent="."]
+
+[node name="Shape" type="CollisionShape3D" parent="MountainBody"]

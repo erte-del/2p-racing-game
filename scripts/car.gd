@@ -28,13 +28,38 @@ const PAINT_MATERIAL := "Body"
 @export var steering := 1.8            ## rad/s at full steering effect
 @export var gravity := 24.0            ## m/s^2, tuned for arcade feel
 
+@export_group("Slipstream")
+## Tucking in behind the other car gives a top-speed boost, so a trailing
+## player has a way back into the race on the straights.
+@export var slipstream_enabled := true
+## Beyond this distance there is no effect at all.
+@export var slipstream_range := 22.0
+## Inside this distance the effect stops growing, so ramming is not rewarded.
+@export var slipstream_peak_range := 4.0
+## Extra top speed at full effect, as a fraction.
+@export var slipstream_bonus := 0.22
+## How directly ahead the rival must be, as a dot product.
+@export var slipstream_cone := 0.82
+## How closely the two cars must be pointing the same way.
+@export var slipstream_alignment := 0.6
+## How quickly the effect builds and fades.
+@export var slipstream_fade := 2.5
+
 @export_group("Wheels")
 @export var wheel_radius := 0.312      ## metres, wheel centre height in-game
 @export var max_wheel_steer := 0.5     ## rad the front wheels visually turn
 @export var wheel_steer_speed := 4.0   ## how fast the wheels visually turn
 
+## The other car, for slipstream. Wired up by the level.
+var rival: Car
+## While frozen the car ignores input and holds still, used for the pause
+## between generated tracks.
+var frozen := false
+
 ## Signed speed along local -Z. Positive is forwards.
 var _speed := 0.0
+## Current slipstream strength, 0 to 1, smoothed.
+var _slipstream := 0.0
 ## Visual-only wheel state.
 var _wheel_steer := 0.0
 var _wheel_roll := 0.0
@@ -99,13 +124,54 @@ func _collect_wheels(names: Array[String]) -> Array[Node3D]:
 
 
 func _physics_process(delta: float) -> void:
+	if frozen:
+		velocity = Vector3.ZERO
+		return
+
 	var throttle := Input.get_axis(_brake, _accelerate)
 	var steer := Input.get_axis(_steer_right, _steer_left)
 
+	_update_slipstream(delta)
 	_apply_throttle(throttle, delta)
 	_apply_steering(steer, delta)
 	_drive(delta)
 	_animate_wheels(steer, delta)
+
+
+## Stop dead and forget any slipstream. Used when the track is replaced.
+func reset_motion() -> void:
+	_speed = 0.0
+	_slipstream = 0.0
+	velocity = Vector3.ZERO
+
+
+## How much top speed the car currently has, including any slipstream.
+func top_speed() -> float:
+	return max_speed * (1.0 + slipstream_bonus * _slipstream)
+
+
+## True while the car is drafting, for effects and UI later.
+func is_drafting() -> bool:
+	return _slipstream > 0.05
+
+
+## Build or decay the slipstream effect. It applies only to the car that is
+## behind: the rival has to be ahead of us, within range, and travelling the
+## same way, which is what makes it an overtaking aid rather than a free boost.
+func _update_slipstream(delta: float) -> void:
+	var target := 0.0
+	if slipstream_enabled and rival != null and _speed > 0.0:
+		var to_rival := rival.global_position - global_position
+		to_rival.y = 0.0
+		var gap := to_rival.length()
+		if gap > 0.001 and gap <= slipstream_range:
+			var forward := -global_transform.basis.z
+			var ahead := forward.dot(to_rival / gap)
+			var same_way := forward.dot(-rival.global_transform.basis.z)
+			if ahead >= slipstream_cone and same_way >= slipstream_alignment:
+				# Full strength from the peak range out to the limit.
+				target = 1.0 - smoothstep(slipstream_peak_range, slipstream_range, gap)
+	_slipstream = move_toward(_slipstream, target, slipstream_fade * delta)
 
 
 ## Turn throttle input into a change in speed. Pressing back while rolling
@@ -115,7 +181,7 @@ func _apply_throttle(throttle: float, delta: float) -> void:
 		_speed = move_toward(_speed, 0.0, engine_braking * delta)
 	elif throttle > 0.0:
 		var rate := braking if _speed < 0.0 else acceleration
-		_speed = move_toward(_speed, max_speed, rate * throttle * delta)
+		_speed = move_toward(_speed, top_speed(), rate * throttle * delta)
 	else:
 		var rate := braking if _speed > 0.0 else acceleration
 		_speed = move_toward(_speed, -max_reverse_speed, rate * -throttle * delta)
