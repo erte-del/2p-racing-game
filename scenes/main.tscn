@@ -1,8 +1,9 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/car/car.tscn" id="2_car"]
 [ext_resource type="Script" path="res://scripts/chase_camera.gd" id="3_cam"]
+[ext_resource type="Script" path="res://scripts/rival_arrow.gd" id="4_arrow"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
 
@@ -50,6 +51,12 @@ body_color = Color(0.9063, 0, 0.0224, 1)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0.1, 0)
 input_prefix = "p2"
 body_color = Color(0.05, 0.25, 0.9, 1)
+
+[node name="ArrowP1" type="MeshInstance3D" parent="."]
+script = ExtResource("4_arrow")
+
+[node name="ArrowP2" type="MeshInstance3D" parent="."]
+script = ExtResource("4_arrow")
 
 [node name="Split" type="VBoxContainer" parent="."]
 anchors_preset = 15

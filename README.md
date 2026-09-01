@@ -55,6 +55,19 @@ only its own `ChaseCamera`, which the level wires to a car in `main.gd`. The
 cameras are deliberately *not* children of the cars: two cameras in one viewport
 would fight over which is current.
 
+## Rival arrow
+
+Each half of the screen shows a small arrow orbiting that player's car at a
+fixed radius, pointing along the ground towards the other car and painted in
+the rival's colour. It is most useful when the rival is off-screen.
+
+Both views render the same `World3D`, so each arrow sits on its own visual
+layer that the *other* player's camera culls; otherwise both arrows would show
+up in both halves. `main.gd` pairs each layer with the camera that must ignore
+it. The arrow also rolls about its own nose to keep its flat face turned
+towards its camera - without that it is edge-on and nearly invisible whenever
+the rival is straight ahead or behind.
+
 ## Phases
 
 - [x] **0** — repo, Godot project, `.gitignore`
