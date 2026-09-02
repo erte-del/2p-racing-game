@@ -1,9 +1,9 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene format=3 uid="uid://clit8swc1cobs"]
 
-[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" uid="uid://3dilv775c7av" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/car/car.tscn" id="2_car"]
-[ext_resource type="Script" path="res://scripts/chase_camera.gd" id="3_cam"]
-[ext_resource type="Script" path="res://scripts/rival_arrow.gd" id="4_arrow"]
+[ext_resource type="Script" uid="uid://bgixbbwu47xnr" path="res://scripts/chase_camera.gd" id="3_cam"]
+[ext_resource type="Script" uid="uid://bb8h05not4sca" path="res://scripts/rival_arrow.gd" id="4_arrow"]
 [ext_resource type="PackedScene" path="res://scenes/track/track.tscn" id="5_track"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
@@ -20,7 +20,6 @@ ssao_enabled = true
 
 [sub_resource type="StandardMaterial3D" id="Grass"]
 albedo_color = Color(0.259, 0.4, 0.212, 1)
-roughness = 1.0
 
 [sub_resource type="PlaneMesh" id="Ground_mesh"]
 material = SubResource("Grass")
@@ -29,44 +28,43 @@ size = Vector2(1200, 1200)
 [sub_resource type="BoxShape3D" id="Ground_shape"]
 size = Vector3(1200, 1, 1200)
 
-[node name="Main" type="Node3D"]
+[node name="Main" type="Node3D" unique_id=1451798057]
 script = ExtResource("1_main")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=592871142]
 environment = SubResource("Env_res")
 
-[node name="Sun" type="DirectionalLight3D" parent="."]
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1641107349]
 transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 0, 20, 0)
 shadow_enabled = true
 
-[node name="Track" parent="." instance=ExtResource("5_track")]
+[node name="Track" parent="." unique_id=1379249976 instance=ExtResource("5_track")]
+transform = Transform3D(1.0021281, 0, 0, 0, 1.0021281, 0, 0, 0, 1.0021281, 0, 0, 0)
 
-[node name="Ground" type="StaticBody3D" parent="."]
+[node name="Ground" type="StaticBody3D" parent="." unique_id=821519252]
 
-[node name="Mesh" type="MeshInstance3D" parent="Ground"]
+[node name="Mesh" type="MeshInstance3D" parent="Ground" unique_id=1127665626]
 mesh = SubResource("Ground_mesh")
 
-[node name="Collision" type="CollisionShape3D" parent="Ground"]
+[node name="Collision" type="CollisionShape3D" parent="Ground" unique_id=2126937310]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 shape = SubResource("Ground_shape")
 
-[node name="Car1" parent="." instance=ExtResource("2_car")]
+[node name="Car1" parent="." unique_id=1527555947 instance=ExtResource("2_car")]
 transform = Transform3D(-0.0338788, 0, 0.999426, 0, 1, 0, -0.999426, 0, -0.0338788, 0.121964, 0.2, -95.5979)
-input_prefix = "p1"
-body_color = Color(0.9063, 0, 0.0224, 1)
 
-[node name="Car2" parent="." instance=ExtResource("2_car")]
+[node name="Car2" parent="." unique_id=885679509 instance=ExtResource("2_car")]
 transform = Transform3D(-0.0338788, 0, 0.999426, 0, 1, 0, -0.999426, 0, -0.0338788, -6.11852, 0.2, -88.6053)
 input_prefix = "p2"
 body_color = Color(0.05, 0.25, 0.9, 1)
 
-[node name="ArrowP1" type="MeshInstance3D" parent="."]
+[node name="ArrowP1" type="MeshInstance3D" parent="." unique_id=1997241987]
 script = ExtResource("4_arrow")
 
-[node name="ArrowP2" type="MeshInstance3D" parent="."]
+[node name="ArrowP2" type="MeshInstance3D" parent="." unique_id=249523199]
 script = ExtResource("4_arrow")
 
-[node name="Split" type="VBoxContainer" parent="."]
+[node name="Split" type="VBoxContainer" parent="." unique_id=83862917]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -74,28 +72,30 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 4
 
-[node name="TopView" type="SubViewportContainer" parent="Split"]
+[node name="TopView" type="SubViewportContainer" parent="Split" unique_id=1201121425]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 stretch = true
 
-[node name="SubViewport" type="SubViewport" parent="Split/TopView"]
+[node name="SubViewport" type="SubViewport" parent="Split/TopView" unique_id=1047607665]
 handle_input_locally = false
+size = Vector2i(1280, 358)
 render_target_update_mode = 4
 
-[node name="Camera" type="Camera3D" parent="Split/TopView/SubViewport"]
+[node name="Camera" type="Camera3D" parent="Split/TopView/SubViewport" unique_id=1538202260]
 script = ExtResource("3_cam")
 
-[node name="BottomView" type="SubViewportContainer" parent="Split"]
+[node name="BottomView" type="SubViewportContainer" parent="Split" unique_id=1477111754]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 stretch = true
 
-[node name="SubViewport" type="SubViewport" parent="Split/BottomView"]
+[node name="SubViewport" type="SubViewport" parent="Split/BottomView" unique_id=517676283]
 handle_input_locally = false
+size = Vector2i(1280, 358)
 render_target_update_mode = 4
 
-[node name="Camera" type="Camera3D" parent="Split/BottomView/SubViewport"]
+[node name="Camera" type="Camera3D" parent="Split/BottomView/SubViewport" unique_id=60247963]
 script = ExtResource("3_cam")

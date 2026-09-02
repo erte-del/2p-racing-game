@@ -25,7 +25,12 @@ const PAINT_MATERIAL := "Body"
 @export var acceleration := 12.0       ## m/s^2 under throttle
 @export var braking := 24.0            ## m/s^2 under brake
 @export var engine_braking := 6.0      ## m/s^2 coasting with no input
-@export var steering := 1.8            ## rad/s at full steering effect
+## Turning circle at a crawl and at top speed, in metres. Steering is
+## expressed as a radius rather than a rate because the tracks are built from
+## corners of a known radius, so these numbers say directly which corners the
+## car can take. Radius grows with speed, the way a real car washes wide.
+@export var tight_turn_radius := 6.5
+@export var fast_turn_radius := 16.0
 @export var gravity := 24.0            ## m/s^2, tuned for arcade feel
 
 @export_group("Slipstream")
@@ -89,6 +94,10 @@ func _ready() -> void:
 		_wheel_rest.append(wheel.transform.basis)
 
 	_paint_body()
+
+	# Courses have climbs, and a body that only zeroes its vertical velocity on
+	# the floor launches off every crest. Snapping keeps it on the surface.
+	floor_snap_length = 0.6
 
 
 ## Recolour the paintwork. The imported materials are shared between every car
@@ -189,11 +198,26 @@ func _apply_throttle(throttle: float, delta: float) -> void:
 
 ## Rotate the car. Steering has no effect when stopped and inverts in
 ## reverse, so the car handles the way a real one does.
+##
+## The turning radius is what varies with speed, not the turn rate. An earlier
+## version scaled the turn rate by speed, which cancelled the speed out
+## entirely and left one fixed 13.9 m turning circle at every speed, so no
+## hairpin was ever drivable however slowly you took it.
 func _apply_steering(steer: float, delta: float) -> void:
 	if is_zero_approx(steer) or is_zero_approx(_speed):
 		return
-	var grip := clampf(absf(_speed) / max_speed, 0.0, 1.0)
-	rotate_y(steer * steering * grip * signf(_speed) * delta)
+	var speed := absf(_speed)
+	# Squared, so the car stays tight through slow corners and only washes
+	# wide as it approaches top speed.
+	var pace := clampf(speed / max_speed, 0.0, 1.0)
+	var radius := lerpf(tight_turn_radius, fast_turn_radius, pace * pace)
+	rotate_y(steer * (speed / radius) * signf(_speed) * delta)
+
+
+## The tightest corner the car can hold at a given speed, in metres.
+func turn_radius_at(speed: float) -> float:
+	var pace := clampf(absf(speed) / max_speed, 0.0, 1.0)
+	return lerpf(tight_turn_radius, fast_turn_radius, pace * pace)
 
 
 ## Move along the car's facing, keeping it pinned to the ground.

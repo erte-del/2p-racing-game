@@ -24,7 +24,7 @@ tools/            Blender export scripts (not shipped in the game)
 | Brake      | S              | Down            |
 | Steer      | A / D          | Left / Right    |
 
-Finishing a lap generates a new circuit and pauses for three seconds.
+Reaching the finish generates a new course and pauses for three seconds.
 
 Both players use the same `scenes/car/car.tscn`. A car reads its actions from an
 `input_prefix` export (`p1` / `p2`) and takes its paint from a `body_color`
@@ -77,24 +77,34 @@ the rival is straight ahead or behind.
 
 ## Track
 
-Circuits are generated at run time by `scripts/track.gd` from a seed, so the
-same seed always gives the same track.
+Courses are generated at run time from a seed and run **point to point**: they
+start at a start line and end somewhere else entirely, rather than looping.
+Reaching the finish generates a new one.
 
-The shape is a closed loop whose radius comes from three harmonics around the
-circle rather than from independent random values per point. Independent values
-had to be smoothed so hard to avoid undrivable spikes that every circuit came
-out a near-circle. Keeping the control-point angles strictly increasing and the
-radii positive makes the loop star-shaped, which is what guarantees it cannot
-cross itself.
+`scripts/track_layout.gd` chains modular pieces - straights, corners and
+climbs. Each piece joins the last at a socket, taking its position, heading and
+height from the previous piece's exit, so a seam can never gap or kink. Not
+having to close the loop is what keeps this simple: corner angles, directions
+and climbs are all chosen freely, with no closure constraint to satisfy.
 
-The road is a generated mesh, not a `CSGPolygon3D` extrusion, because CSG has a
-single fixed cross-section for the whole path and so cannot narrow the road in
-the corners. Width is driven by local curvature: tight corners taper to
-`narrow_half_width`, open sweepers reach `wide_half_width`. Building the ribbon
-by hand also gives the collision shape and the mountains the same sampling.
+Piece lengths are rounded to a whole number of samples, so every point on the
+centreline is exactly `sample_step` from the next and a distance along the
+course indexes the sample arrays directly.
 
-Triangles are wound clockwise seen from above, which is Godot's front face.
-Getting that backwards makes the road invisible from above and, because a
+Two things can still go wrong, and both are checked with the caller retrying on
+the next seed: a course can wander into itself, and it can wander off the
+ground. About 80% of seeds pass, so a retry is cheap.
+
+`scripts/track.gd` turns that centreline into geometry. Nothing there wraps
+from the last sample back to the first - on a course that does not rejoin
+itself, wrapping would draw a road from the finish straight back to the start.
+
+Corner pieces carry their own width: tight radii get `narrow_half_width`, open
+sweepers the full width, blended across the seams so a hairpin opens out into
+the straight rather than stepping.
+
+Road triangles are wound clockwise seen from above, which is Godot's front
+face. Getting that backwards makes the road invisible from above and, because a
 `ConcavePolygonShape3D` only collides with its front faces, drivable straight
 through.
 
@@ -102,27 +112,36 @@ through.
 
 A ridge runs down each side, built from a foot, a crest and an outer foot per
 cross-section, with heights from `FastNoiseLite`. The inner slopes are far too
-steep to climb, which is what keeps the cars on the circuit.
+steep to climb, which is what keeps the cars on the course. The feet sit on the
+ground plane while crests are measured from the road, so the range still towers
+over a section that has climbed.
 
 On the inside of a corner the cross-section is scaled down to fit within the
 local radius of curvature: offsetting a curve inwards by more than that radius
 folds the offset line through itself, which threw mountain geometry across the
-road. The scaling is smoothed along the track, or neighbouring sections shrink
+road. The scaling is smoothed along the course, or neighbouring sections shrink
 by different amounts and the range breaks into slivers.
+
+## Steering
+
+Steering is expressed as a **turning radius** rather than a turn rate, because
+courses are built from corners of a known radius, so the numbers say directly
+which corners the car can take. The radius grows with speed, the way a real car
+washes wide.
+
+An earlier version scaled the turn *rate* by speed. That cancelled the speed
+out of the turning-circle equation entirely and left one fixed 13.9 m circle at
+every speed, so no hairpin was drivable however slowly it was taken.
 
 ## Race loop
 
-Completing a lap swaps in a freshly generated circuit, then holds both cars
-still for `preview_seconds` (3 s) so the players can read the new track before
-it starts.
+Reaching the finish line swaps in a freshly generated course, then holds both
+cars still for `preview_seconds` (3 s) so the players can read the new one
+before it starts.
 
-A lap is counted with four ordered sectors rather than by watching progress
-wrap past zero. Progress alone cannot tell a car that has driven all the way
-round from one sitting just behind the line, since both read as almost a full
-lap; and the curve's start and end coincide, so a car on the grid can report
-either nearly zero or nearly a whole lap. Requiring all four sectors in order
-fixes both, and rejects course-cutting for free. These sectors become Phase 6's
-checkpoints.
+A car counts as finished only while it is still within `finish_corridor` of the
+centreline: a car lost out in the scenery projects onto the nearest point of
+the course, which can be the finish.
 
 ## Slipstream
 

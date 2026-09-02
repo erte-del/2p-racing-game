@@ -1,6 +1,10 @@
 extends Node3D
 
-## Builds the two split-screen views and runs the race loop.
+## Builds the two split-screen views and runs the race.
+##
+## A course runs from a start line to a finish line rather than looping. When
+## either player reaches the end, a fresh course is generated and both cars are
+## held still for a moment so the players can read it before setting off again.
 ##
 ## The cars live here, in the main scene, so they share one World3D and can
 ## collide with each other. Each SubViewport inherits that same world and
@@ -16,9 +20,6 @@ const LAYER_P2_ONLY := 3
 
 const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 
-## How many sectors a lap is split into for checkpoint purposes.
-const SECTORS := 4
-
 @onready var _car1: Car = $Car1
 @onready var _car2: Car = $Car2
 @onready var _camera1: ChaseCamera = $Split/TopView/SubViewport/Camera
@@ -28,28 +29,26 @@ const SECTORS := 4
 @onready var _track: Track = $Track
 
 @export_group("Starting grid")
-## Sideways offset from the racing line, in metres.
+## Sideways offset from the centreline, in metres.
 @export var grid_spread := 3.6
-## How far the second car starts back along the track, in metres.
-@export var grid_stagger := 6.0
+## How far past the start line the cars are placed.
+@export var grid_offset := 10.0
 ## Ride height above the road surface at the spawn point.
 @export var grid_clearance := 0.05
 
 @export_group("Race")
-## Seed for the first track. Zero picks a random one each run.
+## Seed for the first course. Zero picks a random one each run.
 @export var starting_seed := 0
-## How long the cars are held still after a new track appears, so the players
+## How long the cars are held still after a new course appears, so the players
 ## can look at what they are about to drive.
 @export var preview_seconds := 3.0
+## How close to the end of the course counts as finishing.
+@export var finish_margin := 6.0
+## A car further than this from the centreline is not really on the course, so
+## it cannot trip the finish line from somewhere out in the scenery.
+@export var finish_corridor := 25.0
 
 var _cars: Array[Car] = []
-## Distance along the curve where each car started this track.
-var _spawn_offset := PackedFloat32Array()
-## The sector each car must reach next. A lap counts only when all four are
-## passed in order, which is the only way to tell a car that has driven round
-## from one that is simply sitting just behind the line: both read as almost a
-## full lap of progress. These sectors become Phase 6's checkpoints.
-var _next_sector: Array[int] = []
 var _racing := false
 
 
@@ -58,12 +57,7 @@ func _ready() -> void:
 	_car1.rival = _car2
 	_car2.rival = _car1
 
-	var first := starting_seed if starting_seed != 0 else randi()
-	_track.generate(first)
-	_place_on_grid()
-
-	_camera1.follow(_car1)
-	_camera2.follow(_car2)
+	_new_course(starting_seed if starting_seed != 0 else randi())
 
 	# Each player sees an arrow in the *other* car's colour.
 	_arrow1.setup(_car1, _car2, _car2.body_color, LAYER_P1_ONLY, _camera1)
@@ -75,22 +69,15 @@ func _ready() -> void:
 	_camera1.cull_mask = ALL_LAYERS & ~_bit(LAYER_P2_ONLY)
 	_camera2.cull_mask = ALL_LAYERS & ~_bit(LAYER_P1_ONLY)
 
-	_start_racing()
+	_racing = true
 
 
 func _physics_process(_delta: float) -> void:
 	if not _racing:
 		return
-	var lap := _track.curve().get_baked_length()
-	for i in _cars.size():
-		var sector := _sector_of(_progress_of(i), lap)
-		if sector != _next_sector[i]:
-			continue
-		_next_sector[i] = (sector + 1) % SECTORS
-		# Arriving back in the first sector, having passed the rest in order,
-		# is a completed lap.
-		if sector == 0:
-			_finish_lap()
+	for car in _cars:
+		if _has_finished(car):
+			_finish_course()
 			return
 
 
@@ -98,77 +85,78 @@ func _bit(layer: int) -> int:
 	return 1 << (layer - 1)
 
 
-## How far this car has travelled round the lap from where it started.
-func _progress_of(index: int) -> float:
+## The curve's points are in the Track node's own space. Going through its
+## transform keeps the grid and the finish line correct even if that node is
+## moved or scaled, rather than silently assuming it sits at the origin.
+func _to_world(local: Vector3) -> Vector3:
+	return _track.global_transform * local
+
+
+func _to_track(world: Vector3) -> Vector3:
+	return _track.global_transform.affine_inverse() * world
+
+
+## A car finishes by reaching the end of the course while still on it. The
+## corridor check matters because a car lost out in the mountains can project
+## onto any part of the centreline, including the finish.
+func _has_finished(car: Car) -> bool:
 	var curve := _track.curve()
-	var lap := curve.get_baked_length()
-	var here := curve.get_closest_offset(_cars[index].global_position)
-	return fposmod(here - _spawn_offset[index], lap)
+	var offset := curve.get_closest_offset(_to_track(car.global_position))
+	if offset < _track.length() - finish_margin:
+		return false
+	var centre := _to_world(curve.sample_baked(offset))
+	return car.global_position.distance_to(centre) < finish_corridor
 
 
-## Freeze both cars, lay out a fresh track, and hold still long enough for the
-## players to read the new circuit before letting them go again.
-func _finish_lap() -> void:
-	_racing = false
-	for car in _cars:
-		car.frozen = true
-		car.reset_motion()
-
-	_track.generate(randi())
+## Lay out a new course and put the cars on the line.
+func _new_course(course_seed: int) -> void:
+	_track.generate(course_seed)
 	_place_on_grid()
 	# Snap both cameras, or they fly across the world to the new grid.
 	_camera1.follow(_car1)
 	_camera2.follow(_car2)
 
+
+## Swap in a fresh course, then hold the cars still long enough for the players
+## to read it before letting them go.
+func _finish_course() -> void:
+	_racing = false
+	for car in _cars:
+		car.frozen = true
+		car.reset_motion()
+
+	_new_course(randi())
+
 	await get_tree().create_timer(preview_seconds).timeout
 
 	for car in _cars:
 		car.frozen = false
-	_start_racing()
-
-
-func _start_racing() -> void:
-	_next_sector = []
-	for i in _cars.size():
-		# Always sector 1, rather than reading the car's current sector: cars
-		# start on the line, where the curve's start and end coincide, so
-		# get_closest_offset can report either nearly zero or nearly a full
-		# lap. Requiring the quarter-lap mark first sidesteps that ambiguity.
-		_next_sector.append(1)
 	_racing = true
 
 
-func _sector_of(progress: float, lap: float) -> int:
-	return clampi(int(progress / (lap / SECTORS)), 0, SECTORS - 1)
-
-
-## Line the cars up on the track's own curve, staggered, facing the racing
-## direction. Deriving the grid from the path means it keeps working whenever
-## the track is regenerated, and it avoids hand-written basis maths.
+## Line the cars up side by side on the start line, facing down the course.
+## Deriving the grid from the curve means it keeps working for every course.
 func _place_on_grid() -> void:
 	var curve := _track.curve()
-	var lap := curve.get_baked_length()
-	_spawn_offset = PackedFloat32Array()
+	var here := _to_world(curve.sample_baked(grid_offset))
+	var ahead := _to_world(curve.sample_baked(grid_offset + 1.0))
+
+	var forward := ahead - here
+	forward.y = 0.0
+	if forward.length_squared() < 0.000001:
+		push_warning("Main: degenerate course tangent at the start")
+		forward = Vector3.FORWARD
+	forward = forward.normalized()
+	var across := forward.cross(Vector3.UP)
+
+	# Keep the grid on the road even if the course opens narrow.
+	var room: float = maxf(_track.half_width_at(grid_offset) - 1.6, 0.5)
+	var side: float = minf(grid_spread, room)
 
 	for i in _cars.size():
-		var along := fposmod(-grid_stagger * i, lap)
-		var here := curve.sample_baked(along)
-		var ahead := curve.sample_baked(fposmod(along + 1.0, lap))
-
-		var forward := ahead - here
-		forward.y = 0.0
-		if forward.length_squared() < 0.000001:
-			push_warning("Main: degenerate track tangent at %.1f m" % along)
-			forward = Vector3.FORWARD
-		forward = forward.normalized()
-		var across := forward.cross(Vector3.UP)
-
-		# Keep the grid inside the road even where it narrows into a corner.
-		var room: float = maxf(_track.half_width_at(along) - 1.6, 0.5)
-		var side: float = minf(grid_spread, room) * (1.0 if i % 2 == 1 else -1.0)
-
 		var car := _cars[i]
-		car.global_position = here + across * side + Vector3.UP * grid_clearance
+		car.global_position = (here
+				+ across * (side if i % 2 == 1 else -side)
+				+ Vector3.UP * grid_clearance)
 		# look_at aims -Z, which is the car's forward.
 		car.look_at(car.global_position + forward, Vector3.UP)
-		_spawn_offset.append(along)

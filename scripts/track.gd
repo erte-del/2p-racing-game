@@ -1,24 +1,16 @@
 class_name Track
 extends Node3D
 
-## A procedurally generated circuit: a random closed loop, a road mesh whose
-## width follows the curvature, and a mountain range down each side.
+## Builds the world for one course: the road mesh, its collision, and a
+## mountain range down each side.
 ##
-## The road is built as a mesh rather than extruded with CSGPolygon3D because
-## CSG has a single fixed cross-section for the whole path, so it cannot make
-## the road narrow in the corners. Building the ribbon by hand also gives the
-## collision shape and the mountains the same sampling for free.
+## The shape itself comes from TrackLayout, which chains modular pieces. This
+## node turns that centreline into geometry. Nothing here wraps from the last
+## sample back to the first: a course runs from a start line to a finish line
+## and does not rejoin itself, so wrapping would draw a road from the finish
+## straight back to the start.
 
 signal regenerated
-
-@export_group("Shape")
-@export var min_points := 11
-@export var max_points := 15
-@export var min_radius := 100.0
-@export var max_radius := 160.0
-## Angular wobble per control point. Must stay well under half the angular
-## step, or points can swap order and the loop crosses itself.
-@export var angle_jitter := 0.28
 
 @export_group("Road")
 ## Distance between cross-sections. Smaller is smoother and heavier.
@@ -26,11 +18,16 @@ signal regenerated
 @export var wide_half_width := 8.0
 @export var narrow_half_width := 4.2
 @export var kerb_width := 1.1
-## Height of the road surface above the ground plane.
+## Height of the start of the course above the ground plane.
 @export var road_height := 0.06
-## Curvature (1/metres) at which the road reaches its narrowest. A 50 m radius
-## corner is 0.02, a 100 m radius sweeper is 0.01.
-@export var curvature_for_narrow := 0.019
+
+@export_group("Shape")
+@export var min_course_length := 620.0
+@export var max_course_length := 1050.0
+@export var min_corner_radius := 11.0
+@export var max_corner_radius := 70.0
+## How many seeds to try before giving up on finding a valid course.
+@export var max_attempts := 60
 
 @export_group("Mountains")
 ## Flat ground between the kerb and the foot of the range.
@@ -51,7 +48,8 @@ signal regenerated
 @onready var _mountains: MeshInstance3D = $Mountains
 @onready var _mountain_shape: CollisionShape3D = $MountainBody/Shape
 
-## Cross-sections of the finished road, kept so the race can query the track.
+var _layout: TrackLayout
+## Cross-sections of the finished road.
 var _points: PackedVector3Array
 var _rights: PackedVector3Array
 var _half_widths: PackedFloat32Array
@@ -67,120 +65,106 @@ func _ready() -> void:
 	_build_materials()
 
 
-## The curve is the source of truth for lap length, progress and the grid.
+## The curve is the source of truth for progress along the course and for
+## placing the cars on the grid.
 func curve() -> Curve3D:
 	return _path.curve
 
 
-## Half-width of the road at a distance along the curve, for spawning and
-## for telling whether a car has left the track.
+## Distance from the start line to the finish line.
+func length() -> float:
+	return _layout.length() if _layout else 0.0
+
+
+## Half-width of the road at a distance along the course.
 func half_width_at(offset: float) -> float:
 	if _half_widths.is_empty():
 		return wide_half_width
-	var i := int(offset / sample_step) % _half_widths.size()
+	var i := clampi(int(offset / sample_step), 0, _half_widths.size() - 1)
 	return _half_widths[i]
 
 
-## Rebuild the whole circuit from a seed. Passing the same seed twice gives
-## the same track, which makes problems reproducible.
+## The pieces this course was built from, for debugging and for the README.
+func piece_summary() -> String:
+	if _layout == null:
+		return "no course"
+	var straights := 0
+	var corners := 0
+	var climbs := 0
+	for piece in _layout.pieces:
+		match piece.kind:
+			TrackLayout.CORNER: corners += 1
+			TrackLayout.CLIMB: climbs += 1
+			_: straights += 1
+	return "%d pieces (%d straights, %d corners, %d climbs), %.0f m" % [
+		_layout.pieces.size(), straights, corners, climbs, length()]
+
+
+## Lay out a fresh course. The seed is advanced until one is found that neither
+## crosses itself nor runs off the ground, so a bad roll costs a retry rather
+## than producing a broken track.
 func generate(track_seed: int) -> void:
 	if _asphalt == null:
 		_build_materials()
 
-	var rng := RandomNumberGenerator.new()
-	rng.seed = track_seed
+	var tuning := {
+		"step": sample_step,
+		"min_length": min_course_length,
+		"max_length": max_course_length,
+		"min_corner_radius": min_corner_radius,
+		"max_corner_radius": max_corner_radius,
+		"narrow_half_width": narrow_half_width,
+		"wide_half_width": wide_half_width,
+	}
 
-	_path.curve = _random_loop(rng)
-	_measure_road()
+	var layout: TrackLayout = null
+	for attempt in max_attempts:
+		layout = TrackLayout.build(track_seed + attempt, tuning)
+		if layout != null:
+			break
+	if layout == null:
+		push_error("Track: no valid course after %d attempts" % max_attempts)
+		return
+
+	_layout = layout
+	_adopt(layout)
+	_build_curve()
 	_build_road()
 	_build_mountains(track_seed)
 	regenerated.emit()
 
 
-# --- shape -------------------------------------------------------------
+# --- reading the layout -------------------------------------------------
 
-## A closed loop of control points at increasing angles around the origin.
-## Keeping the angles strictly increasing and the radii positive makes the
-## polygon star-shaped, which guarantees it cannot cross itself.
-func _random_loop(rng: RandomNumberGenerator) -> Curve3D:
-	var count := rng.randi_range(min_points, max_points)
-	var step := TAU / count
-	var jitter: float = minf(angle_jitter, step * 0.35)
-
-	# Build the radius from a few harmonics around the loop rather than from
-	# independent random values. Independent values had to be smoothed so hard
-	# to avoid undrivable spikes that every circuit came out a near-circle;
-	# harmonics give long straights and real corners while staying smooth.
-	# Vary the overall size too, or every circuit comes out the same length.
-	var mid := (min_radius + max_radius) * 0.5 * rng.randf_range(0.8, 1.2)
-	var swing := (max_radius - min_radius) / (min_radius + max_radius)
-	var amp := [
-		rng.randf_range(0.45, 1.0) * swing,
-		rng.randf_range(0.30, 0.75) * swing,
-		rng.randf_range(0.15, 0.45) * swing,
-	]
-	var phase := [rng.randf() * TAU, rng.randf() * TAU, rng.randf() * TAU]
-
-	var radii := PackedFloat32Array()
-	for i in count:
-		var theta := step * i
-		var shape := 1.0
-		for h in 3:
-			shape += amp[h] * sin(float(h + 1) * theta + phase[h])
-		# A little per-point noise keeps corners from feeling mechanical.
-		radii.append(mid * shape * rng.randf_range(0.97, 1.03))
-	radii = _smooth_cyclic(radii, 1, 1)
-
-	var flat: Array[Vector2] = []
-	for i in count:
-		var angle := step * i + rng.randf_range(-jitter, jitter)
-		flat.append(Vector2(cos(angle), sin(angle)) * radii[i])
-
-	var curve := Curve3D.new()
-	for i in count + 1:  # repeat the first point so the curve truly closes
-		var j := i % count
-		var prev := flat[(j - 1 + count) % count]
-		var next := flat[(j + 1) % count]
-		# Catmull-Rom tangent, converted to a bezier handle length.
-		var tangent := (next - prev) * 0.5 / 3.0
-		curve.add_point(
-			Vector3(flat[j].x, road_height, flat[j].y),
-			Vector3(-tangent.x, 0.0, -tangent.y),
-			Vector3(tangent.x, 0.0, tangent.y)
-		)
-	return curve
-
-
-## Walk the curve at a fixed spacing, recording position, sideways direction
-## and a width that narrows through the corners.
-func _measure_road() -> void:
-	var c := curve()
-	var lap := c.get_baked_length()
-	var count := maxi(8, int(lap / sample_step))
-
+func _adopt(layout: TrackLayout) -> void:
 	_points = PackedVector3Array()
+	for p in layout.points:
+		_points.append(p + Vector3.UP * road_height)
+	_half_widths = layout.half_widths
+
+	var count := _points.size()
 	_rights = PackedVector3Array()
 	for i in count:
-		var here := c.sample_baked(fposmod(float(i) * sample_step, lap))
-		var ahead := c.sample_baked(fposmod(float(i + 1) * sample_step, lap))
-		var forward := ahead - here
+		# The last sample has no next point, so it borrows the previous
+		# heading rather than wrapping round to the start.
+		var a := _points[i if i < count - 1 else count - 2]
+		var b := _points[i + 1 if i < count - 1 else count - 1]
+		var forward := b - a
 		forward.y = 0.0
 		if forward.length_squared() < 0.000001:
 			forward = Vector3.FORWARD
-		forward = forward.normalized()
-		_points.append(here)
-		_rights.append(forward.cross(Vector3.UP))
+		_rights.append(forward.normalized().cross(Vector3.UP))
 
-	# Signed curvature from the turn angle between neighbouring segments.
-	# Positive means the track is bending to the right, which tells the
-	# mountain builder which side is the inside of the corner.
+	# Signed curvature, used to decide which side of a corner is the inside.
 	var raw := PackedFloat32Array()
 	for i in count:
-		var a := _points[(i - 1 + count) % count]
-		var b := _points[i]
-		var d := _points[(i + 1) % count]
-		var into := (b - a)
-		var out_of := (d - b)
+		if i == 0 or i == count - 1:
+			raw.append(0.0)
+			continue
+		var into := _points[i] - _points[i - 1]
+		var out_of := _points[i + 1] - _points[i]
+		into.y = 0.0
+		out_of.y = 0.0
 		if into.length_squared() < 0.000001 or out_of.length_squared() < 0.000001:
 			raw.append(0.0)
 			continue
@@ -188,30 +172,33 @@ func _measure_road() -> void:
 		var f1 := out_of.normalized()
 		# A right-hand turn rotates the heading towards +right, giving a
 		# negative Y on this cross product, so negate to make right positive.
-		var direction := signf(-f0.cross(f1).y)
-		raw.append(direction * f0.angle_to(f1) / sample_step)
-	# Smooth hard, so the road tapers into a corner instead of stepping.
-	raw = _smooth_cyclic(raw, 6, 3)
-	_curvature = raw
-
-	_half_widths = PackedFloat32Array()
-	for i in count:
-		var tightness := clampf(absf(raw[i]) / curvature_for_narrow, 0.0, 1.0)
-		_half_widths.append(lerpf(wide_half_width, narrow_half_width, tightness))
+		raw.append(signf(-f0.cross(f1).y) * f0.angle_to(f1) / sample_step)
+	_curvature = _smooth(raw, 4, 3)
 
 
-func _smooth_cyclic(values: PackedFloat32Array, passes: int, window: int) -> PackedFloat32Array:
+## Moving average that holds its end values instead of wrapping, since the
+## course does not join back to itself.
+func _smooth(values: PackedFloat32Array, passes: int, window: int) -> PackedFloat32Array:
 	var n := values.size()
+	if n < 3:
+		return values
 	var current := values.duplicate()
 	for _pass in passes:
 		var next := current.duplicate()
 		for i in n:
 			var total := 0.0
 			for k in range(-window, window + 1):
-				total += current[(i + k + n) % n]
+				total += current[clampi(i + k, 0, n - 1)]
 			next[i] = total / float(window * 2 + 1)
 		current = next
 	return current
+
+
+func _build_curve() -> void:
+	var curve3d := Curve3D.new()
+	for p in _points:
+		curve3d.add_point(p)
+	_path.curve = curve3d
 
 
 # --- road --------------------------------------------------------------
@@ -226,8 +213,8 @@ func _build_road() -> void:
 	kerbs.begin(Mesh.PRIMITIVE_TRIANGLES)
 
 	var run := 0.0
-	for i in count:
-		var j := (i + 1) % count
+	for i in count - 1:
+		var j := i + 1
 		var run_next := run + sample_step
 
 		var pi := _points[i]
@@ -275,9 +262,9 @@ func _strip(
 
 # --- mountains ---------------------------------------------------------
 
-## A ridge down each side of the track. Each cross-section is a foot, a crest
-## and an outer foot, so the range reads as terrain rather than as a wall,
-## while still being far too steep to drive up.
+## A ridge down each side. Each cross-section is a foot on the ground, a crest
+## and an outer foot, so the range reads as terrain rather than as a wall while
+## still being far too steep to drive up.
 func _build_mountains(track_seed: int) -> void:
 	var noise := FastNoiseLite.new()
 	noise.seed = track_seed
@@ -298,16 +285,16 @@ func _build_mountains(track_seed: int) -> void:
 			crests.append(lerpf(min_height, max_height, (n + 1.0) * 0.5))
 			runs.append(ridge_run * lerpf(0.75, 1.45, (noise.get_noise_2d(
 					p.z * 2.0, p.x + side * 250.0) + 1.0) * 0.5))
-		crests = _smooth_cyclic(crests, 1, 1)
-		runs = _smooth_cyclic(runs, 1, 1)
-
-		# Mirroring the cross-section to the inside of the loop reverses the
-		# winding, so that side has to be wound the other way or its faces
-		# point into the mountain and the whole inner range is invisible.
-		var flip: bool = side < 0.0
+		crests = _smooth(crests, 1, 1)
+		runs = _smooth(runs, 1, 1)
 		var scales := _ridge_scales(side, runs)
-		for i in count:
-			var j := (i + 1) % count
+
+		# Mirroring the cross-section to the other side reverses the winding,
+		# so one side has to be wound the other way or its faces point into
+		# the mountain and that whole range is invisible.
+		var flip: bool = side < 0.0
+		for i in count - 1:
+			var j := i + 1
 			var a := _ridge_section(i, side, crests[i], runs[i], scales[i])
 			var b := _ridge_section(j, side, crests[j], runs[j], scales[j])
 			# foot -> crest, then crest -> outer foot
@@ -321,17 +308,20 @@ func _build_mountains(track_seed: int) -> void:
 	_mountain_shape.shape = mesh.create_trimesh_shape()
 
 
-## The three points of one mountain cross-section: inner foot, crest, outer foot.
+## The three points of one mountain cross-section: inner foot, crest, outer
+## foot. The feet sit on the ground plane while the crest is measured from the
+## road, so the range still towers over a section that has climbed.
 func _ridge_section(i: int, side: float, crest: float, run: float, scale: float) -> Array:
 	var p := _points[i]
+	var ground := Vector3(p.x, 0.0, p.z)
 	var r := _rights[i] * side
 	var foot_at := _half_widths[i] + kerb_width + verge
 	var rise := run * scale
 	var fall := outer_run * scale
 	return [
-		p + r * foot_at,
-		p + r * (foot_at + rise) + Vector3.UP * (crest * scale),
-		p + r * (foot_at + rise + fall),
+		ground + r * foot_at,
+		ground + r * (foot_at + rise) + Vector3.UP * (p.y + crest * scale),
+		ground + r * (foot_at + rise + fall),
 	]
 
 
@@ -353,7 +343,7 @@ func _ridge_scales(side: float, runs: PackedFloat32Array) -> PackedFloat32Array:
 		scales.append(scale)
 	# Smooth it, or neighbouring sections shrink by very different amounts and
 	# the range breaks up into thin slivers.
-	return _smooth_cyclic(scales, 3, 2)
+	return _smooth(scales, 3, 2)
 
 
 func _ridge_quad(
