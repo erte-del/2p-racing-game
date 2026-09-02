@@ -100,7 +100,7 @@ render_target_update_mode = 4
 [node name="Camera" type="Camera3D" parent="Split/BottomView/SubViewport" unique_id=60247963]
 script = ExtResource("3_cam")
 
-[node name="Hud" type="VBoxContainer" parent="." unique_id=1203870661]
+[node name="Hud" type="VBoxContainer" parent="."]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -109,39 +109,108 @@ grow_vertical = 2
 mouse_filter = 2
 theme_override_constants/separation = 4
 
-[node name="Top" type="MarginContainer" parent="Hud" unique_id=1724868903]
+[node name="Top" type="MarginContainer" parent="Hud"]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
-theme_override_constants/margin_right = 28
-theme_override_constants/margin_bottom = 16
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 10
 
-[node name="Label" type="Label" parent="Hud/Top" unique_id=811456760]
+[node name="Box" type="VBoxContainer" parent="Hud/Top"]
 layout_mode = 2
-size_flags_vertical = 8
+size_flags_vertical = 0
+mouse_filter = 2
+theme_override_constants/separation = -6
+
+[node name="Place" type="Label" parent="Hud/Top/Box"]
+layout_mode = 2
+mouse_filter = 2
+horizontal_alignment = 0
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 10
 theme_override_font_sizes/font_size = 46
-horizontal_alignment = 2
-vertical_alignment = 2
 
-[node name="Bottom" type="MarginContainer" parent="Hud" unique_id=2052892177]
+[node name="Clock" type="Label" parent="Hud/Top/Box"]
 layout_mode = 2
-size_flags_vertical = 3
 mouse_filter = 2
-theme_override_constants/margin_right = 28
-theme_override_constants/margin_bottom = 16
-
-[node name="Label" type="Label" parent="Hud/Bottom" unique_id=1202034009]
-layout_mode = 2
-size_flags_vertical = 8
+horizontal_alignment = 0
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 10
 theme_override_font_sizes/font_size = 46
-horizontal_alignment = 2
-vertical_alignment = 2
+
+[node name="Bottom" type="MarginContainer" parent="Hud"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/margin_left = 28
+theme_override_constants/margin_top = 10
+
+[node name="Box" type="VBoxContainer" parent="Hud/Bottom"]
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+theme_override_constants/separation = -6
+
+[node name="Place" type="Label" parent="Hud/Bottom/Box"]
+layout_mode = 2
+mouse_filter = 2
+horizontal_alignment = 0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 46
+
+[node name="Clock" type="Label" parent="Hud/Bottom/Box"]
+layout_mode = 2
+mouse_filter = 2
+horizontal_alignment = 0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 46
+
+[node name="Progress" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Top" type="MarginContainer" parent="Progress"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/margin_top = 6
+
+[node name="Label" type="Label" parent="Progress/Top"]
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 46
+
+[node name="Bottom" type="MarginContainer" parent="Progress"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/margin_top = 6
+
+[node name="Label" type="Label" parent="Progress/Bottom"]
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 46
 
 [node name="Countdown" type="VBoxContainer" parent="." unique_id=99635084]
 anchors_preset = 15

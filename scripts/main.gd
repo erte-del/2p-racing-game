@@ -30,8 +30,10 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @onready var _counts: Array[Label] = [
 	$Countdown/Top/Label, $Countdown/Bottom/Label,
 ]
-@onready var _clocks: Array[Label] = [$Hud/Top/Label, $Hud/Bottom/Label]
+@onready var _clocks: Array[Label] = [$Hud/Top/Box/Clock, $Hud/Bottom/Box/Clock]
+@onready var _places: Array[Label] = [$Hud/Top/Box/Place, $Hud/Bottom/Box/Place]
 @onready var _results: Array[Label] = [$Result/Top/Label, $Result/Bottom/Label]
+@onready var _tallies: Array[Label] = [$Progress/Top/Label, $Progress/Bottom/Label]
 
 @export_group("Starting grid")
 ## Sideways offset from the centreline, in metres.
@@ -97,6 +99,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_race_time += delta
 	_show_clock(_format_time(_race_time))
+	_show_places()
 	for i in _cars.size():
 		if Input.is_action_just_pressed(_cars[i].input_prefix + "_reset"):
 			_reset_to_checkpoint(i)
@@ -147,6 +150,7 @@ func _bank_checkpoints(index: int) -> void:
 			return
 		_respawn[index] = marks[_next_checkpoint[index]]
 		_next_checkpoint[index] += 1
+		_show_tally(index)
 
 
 ## Put a car back on the course at its last checkpoint, facing the right way
@@ -227,6 +231,7 @@ func _start_after_countdown() -> void:
 	_show_count("GO")
 	_race_time = 0.0
 	_show_clock(_format_time(0.0))
+	_show_places()
 	for car in _cars:
 		car.frozen = false
 	_racing = true
@@ -247,6 +252,21 @@ func _show_count(text: String) -> void:
 func _show_clock(text: String) -> void:
 	for label in _clocks:
 		label.text = text
+
+
+## Who is ahead, by distance along the course. Each player is told their own
+## position, in their own half.
+func _show_places() -> void:
+	var ahead := _offset_of(_cars[0]) >= _offset_of(_cars[1])
+	_places[0].text = "1st" if ahead else "2nd"
+	_places[1].text = "2nd" if ahead else "1st"
+
+
+## How many checkpoints this player has banked, in their own half only, since
+## each player is tracking their own run.
+func _show_tally(index: int) -> void:
+	_tallies[index].text = "%d/%d" % [
+		_next_checkpoint[index], _track.checkpoint_count]
 
 
 func _show_result(text: String) -> void:
@@ -312,6 +332,7 @@ func _place_on_grid() -> void:
 	for i in _cars.size():
 		_respawn.append(at)
 		_next_checkpoint.append(0)
+		_show_tally(i)
 
 	# Keep the grid on the road even if the course opens narrow.
 	var room: float = maxf(_track.half_width_at(at) - 1.6, 0.5)

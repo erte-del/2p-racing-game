@@ -155,9 +155,12 @@ and holds both on screen for `result_seconds` (2 s) *before* the next course is
 built, so the players see the result over the course they just drove rather than over a track they
 have not seen yet.
 
-The clock sits in the bottom right of each half and runs only while the cars
-are actually free, so neither the countdown nor the result screen is counted in
-a player's time.
+Each half carries its own HUD: the player's position in the top left with the
+clock beneath it, and their checkpoint tally centred at the top. All three are
+per player, since each is tracking their own run.
+
+The clock runs only while the cars are actually free, so neither the countdown
+nor the result screen is counted in a player's time.
 
 The winner's name comes from their `body_color` rather than from which player
 they are, so recolouring a car renames it too.
@@ -182,7 +185,8 @@ Before the first checkpoint that is the grid itself.
 
 A checkpoint is only banked while the car is actually on the course, so a
 player cannot collect them by driving across the scenery and then reset forward
-onto ground they never drove.
+onto ground they never drove. The tally at the top of each half counts them,
+0/4 up to 4/4.
 
 ## Slipstream
 
