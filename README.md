@@ -101,9 +101,19 @@ from `self_clearance`. Clearance only rejects courses that fold too tightly; it
 never makes the generator fold them, so lowering it alone barely changes the
 result.
 
-The ground is flat, and nothing currently stops a car leaving the road - the
-mountain ranges that used to line the course were removed because they did not
-work well enough to keep. Barriers are still to come.
+## Rails
+
+A low barrier runs down both edges of the road and across both ends. It stands
+on the outer part of the kerb rather than just beyond it, so on a raised
+section it rests on solid road instead of hanging over the embankment's slope.
+
+Both ends are capped. The sides alone leave the course open behind the start
+line and past the finish, and a car that turns round simply drives out of the
+open end and off the raised road - which is exactly what testing found.
+
+Its collision shape takes backfaces, because a rail is a thin sheet that cars
+arrive at from the inside; without that they would drive through it whichever
+way its faces happened to point.
 
 Because the ground is a single flat plane, a course that descends does not cut
 into a hillside, it is simply buried: the road vanishes under the grass and the

@@ -40,6 +40,13 @@ signal regenerated
 ## reads as built-up ground; a vertical face reads as a cliff.
 @export var embankment_batter := 1.8
 
+@export_group("Rails")
+## Low barrier down each edge, enough to bounce a car back onto the road
+## rather than let it slide off into the grass.
+@export var rail_height := 0.75
+@export var rail_thickness := 0.28
+@export var rail_color := Color(0.72, 0.74, 0.78)
+
 @export_group("Checkpoints")
 ## Respawn points spread along the course. They are what a stuck player is
 ## sent back to, so they are painted as well as counted.
@@ -70,6 +77,8 @@ signal regenerated
 @onready var _finish: MeshInstance3D = $FinishLine
 @onready var _start: MeshInstance3D = $StartLine
 @onready var _checkpoints: MeshInstance3D = $Checkpoints
+@onready var _rails: MeshInstance3D = $Rails
+@onready var _rail_shape: CollisionShape3D = $RailBody/Shape
 
 var _layout: TrackLayout
 ## Cross-sections of the finished road.
@@ -83,6 +92,7 @@ var _earth: StandardMaterial3D
 var _chequer: StandardMaterial3D
 var _paint: StandardMaterial3D
 var _marker: StandardMaterial3D
+var _rail: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -161,6 +171,7 @@ func generate(track_seed: int) -> void:
 	_build_finish_line()
 	_build_start_line()
 	_build_checkpoints()
+	_build_rails()
 	regenerated.emit()
 
 
@@ -359,6 +370,68 @@ func _append_band(
 	return true
 
 
+## A low barrier down each edge of the road.
+##
+## It stands on the outer part of the kerb rather than just beyond it, so that
+## on a raised section it rests on solid road instead of hanging over the
+## embankment's slope.
+func _build_rails() -> void:
+	var count := _points.size()
+	if count < 2:
+		_rails.mesh = null
+		_rail_shape.shape = null
+		return
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for side: float in [-1.0, 1.0]:
+		for i in count - 1:
+			var j := i + 1
+			var outer_i := _half_widths[i] + kerb_width
+			var outer_j := _half_widths[j] + kerb_width
+			var ri := _rights[i] * side
+			var rj := _rights[j] * side
+
+			var in_a := _points[i] + ri * (outer_i - rail_thickness)
+			var out_a := _points[i] + ri * outer_i
+			var in_b := _points[j] + rj * (outer_j - rail_thickness)
+			var out_b := _points[j] + rj * outer_j
+			var up := Vector3.UP * rail_height
+
+			# Inner face, top, then outer face. The material is two-sided and
+			# the collision takes backfaces, so the winding of a thin barrier
+			# cannot leave it invisible or drivable from one side.
+			_rail_quad(st, in_a, in_b, in_a + up, in_b + up)
+			_rail_quad(st, in_a + up, in_b + up, out_a + up, out_b + up)
+			_rail_quad(st, out_a + up, out_b + up, out_a, out_b)
+
+	# Cap both ends. The sides alone leave the course open behind the start
+	# line and past the finish, and a car that turns round simply drives out
+	# of the open end and off the raised road.
+	for i in [0, count - 1]:
+		var edge := _half_widths[i] + kerb_width
+		var left := _points[i] - _rights[i] * edge
+		var right := _points[i] + _rights[i] * edge
+		var up := Vector3.UP * rail_height
+		_rail_quad(st, left, right, left + up, right + up)
+
+	st.generate_normals()
+	var mesh: ArrayMesh = st.commit()
+	_rails.mesh = mesh
+	_rails.set_surface_override_material(0, _rail)
+
+	var shape := mesh.create_trimesh_shape()
+	# A rail is a thin sheet and cars arrive at it from the inside; without
+	# this they would drive through whichever way the faces happen to point.
+	shape.backface_collision = true
+	_rail_shape.shape = shape
+
+
+func _rail_quad(st: SurfaceTool, a0: Vector3, b0: Vector3, a1: Vector3, b1: Vector3) -> void:
+	for v in [a0, b0, b1, a0, b1, a1]:
+		st.add_vertex(v)
+
+
 ## Skirt the raised parts of the road down to the ground, so a climb reads as
 ## an embankment instead of a ribbon floating over the grass.
 ##
@@ -428,3 +501,9 @@ func _build_materials() -> void:
 	_marker = StandardMaterial3D.new()
 	_marker.vertex_color_use_as_albedo = true
 	_marker.roughness = 0.7
+
+	_rail = StandardMaterial3D.new()
+	_rail.albedo_color = rail_color
+	_rail.roughness = 0.55
+	_rail.metallic = 0.3
+	_rail.cull_mode = BaseMaterial3D.CULL_DISABLED
