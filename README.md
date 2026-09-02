@@ -93,7 +93,12 @@ course indexes the sample arrays directly.
 
 Two things can still go wrong, and both are checked with the caller retrying on
 the next seed: a course can wander into itself, and it can wander off the
-ground. About 80% of seeds pass, so a retry is cheap.
+ground. Roughly three quarters of seeds pass, so a retry is cheap.
+
+How twisty a course is comes from `max_straight` and `max_corner_radius`, not
+from `self_clearance`. Clearance only rejects courses that fold too tightly; it
+never makes the generator fold them, so lowering it alone barely changes the
+result.
 
 The ground is flat, and nothing currently stops a car leaving the road - the
 mountain ranges that used to line the course were removed because they did not

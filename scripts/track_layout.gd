@@ -44,11 +44,11 @@ var min_length := 620.0          ## how long a course to build, in metres
 var max_length := 1050.0
 var apron := 55.0                ## straight run at the start and the finish
 var min_corner_radius := 11.0    ## the car can hold ~6.5 m at a crawl
-var max_corner_radius := 70.0
+var max_corner_radius := 45.0
 var min_corner := 22.0           ## degrees
 var max_corner := 145.0
 var min_straight := 28.0
-var max_straight := 165.0
+var max_straight := 110.0
 var narrow_half_width := 4.2
 var wide_half_width := 8.0
 ## Corners at or below this radius get the narrowest road.
@@ -57,7 +57,10 @@ var narrow_radius := 22.0
 var wide_radius := 55.0
 var max_climb := 9.0             ## metres of rise on a single climb piece
 var height_limit := 18.0         ## how far above or below the start it may go
-var clearance := 27.0            ## metres the course must keep from itself
+## Metres the course must keep from itself. The road is at most 18.2 m wide
+## across both kerbs, so anything above that stops two passes touching; the
+## margin above it is what decides how tightly the course may double back.
+var clearance := 20.0
 var extent := 480.0              ## the course must fit inside this half-size
 
 # --- results ------------------------------------------------------------

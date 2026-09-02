@@ -25,7 +25,15 @@ signal regenerated
 @export var min_course_length := 620.0
 @export var max_course_length := 1050.0
 @export var min_corner_radius := 11.0
-@export var max_corner_radius := 70.0
+## Lower for a twistier course. Corner radius and straight length are what
+## actually decide how twisty a course is; the clearance below only rejects
+## courses that fold too tightly, it never makes the generator fold them.
+@export var max_corner_radius := 45.0
+@export var min_straight := 28.0
+@export var max_straight := 110.0
+## How close the course may pass to another part of itself. Lower is twistier;
+## below about 19 m the road starts overlapping itself.
+@export var self_clearance := 20.0
 ## How many seeds to try before giving up on finding a valid course.
 @export var max_attempts := 60
 
@@ -95,6 +103,9 @@ func generate(track_seed: int) -> void:
 		"max_length": max_course_length,
 		"min_corner_radius": min_corner_radius,
 		"max_corner_radius": max_corner_radius,
+		"min_straight": min_straight,
+		"max_straight": max_straight,
+		"clearance": self_clearance,
 		"narrow_half_width": narrow_half_width,
 		"wide_half_width": wide_half_width,
 	}
@@ -139,6 +150,11 @@ func _adopt(layout: TrackLayout) -> void:
 
 func _build_curve() -> void:
 	var curve3d := Curve3D.new()
+	# The centreline is dense and collinear along the straights, so baking up
+	# vectors degenerates: consecutive tangents are identical and the cross
+	# product used to carry the up vector along has no direction. Nothing here
+	# uses curve tilt, so baking them is pure noise.
+	curve3d.up_vector_enabled = false
 	for p in _points:
 		curve3d.add_point(p)
 	_path.curve = curve3d
