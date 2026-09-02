@@ -19,16 +19,18 @@ const SCENERY := preload("res://assets/models/scenery.glb")
 ## 480 m half-extent, and an island is about 290 m across at this scale.
 @export var ring_radius := 900.0
 @export var radius_jitter := 110.0
-@export var island_scale := 210.0
+@export var island_scale := 245.0
 @export var scale_jitter := 0.3
 ## How far to sink the islands into the ground plane.
 ##
-## This has to clear the lake, not just the rim. Each island's water is a
-## single plate most of its width, sitting about a sixteenth of the way up it;
-## left above ground level, ten of them ring the horizon and are seen edge-on
-## from beneath as a dark band across the sky. Dropping the waterline below the
-## ground hides them and leaves the hills.
-@export var sink := 24.0
+## This has to clear two things. The lake is a single plate most of an
+## island's width, about a sixteenth of the way up it; above ground level, ten
+## of them ring the horizon and are seen edge-on from beneath as a dark band.
+## And the island is a cut-out piece of ground, so wherever its surface crosses
+## the ground plane there is a visible seam. Sunk shallowly that seam falls on
+## the gentle outer slope and reads as a ring round the foot of each hill;
+## deeper, it lands high up where the terrain is steep and disappears.
+@export var sink := 52.0
 @export var layout_seed := 20260902
 
 var _meshes: Dictionary = {}

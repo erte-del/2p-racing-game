@@ -123,8 +123,15 @@ bugs but are not:
   each ramp down to one flat colour, which suits flat-shaded low poly anyway.
 - Each island's lake is a single plate most of its width. Left above ground
   level, ten of them ring the horizon and read as a dark band across the sky,
-  seen edge-on from beneath. The islands are sunk far enough to put the
-  waterline under the ground plane.
+  seen edge-on from beneath.
+- An island is a cut-out piece of ground, so wherever its surface crosses the
+  ground plane there is a seam. Sunk shallowly that seam falls on the gentle
+  outer slope and reads as a ring round the foot of each hill.
+
+Sinking them deeply solves both: the waterline goes under the ground, and the
+seam lands high up where the terrain is steep enough to hide it. The islands
+are enlarged to compensate, which also makes them overlap into a continuous
+range rather than a row of separate lumps.
 
 The other packs in that folder were measured and left alone: the trees are
 33k-356k triangles apiece and the rocks 8k with 4096px PBR maps, all photoreal
