@@ -104,6 +104,14 @@ The ground is flat, and nothing currently stops a car leaving the road - the
 mountain ranges that used to line the course were removed because they did not
 work well enough to keep. Barriers are still to come.
 
+Because the ground is a single flat plane, a course that descends does not cut
+into a hillside, it is simply buried: the road vanishes under the grass and the
+cars drive over the top of it, which looks exactly like the road has been cut
+in half. The whole course is therefore lifted so its lowest point rests on the
+ground, and raised sections are skirted down to it by an embankment. The
+embankment carries no collision on purpose - driving off a raised section
+should drop the car onto the grass, not run it into a wall.
+
 `scripts/track.gd` turns that centreline into geometry. Nothing there wraps
 from the last sample back to the first - on a course that does not rejoin
 itself, wrapping would draw a road from the finish straight back to the start.

@@ -55,8 +55,11 @@ var wide_half_width := 8.0
 var narrow_radius := 22.0
 ## Corners at or above this radius get the full width.
 var wide_radius := 55.0
-var max_climb := 9.0             ## metres of rise on a single climb piece
-var height_limit := 18.0         ## how far above or below the start it may go
+var max_climb := 5.0             ## metres of rise on a single climb piece
+## How far above or below its starting height the course may wander. The
+## whole course is lifted so its lowest point rests on the ground, so this
+## also sets how high the tallest embankment ends up.
+var height_limit := 5.0
 ## Metres the course must keep from itself. The road is at most 18.2 m wide
 ## across both kerbs, so anything above that stops two passes touching; the
 ## margin above it is what decides how tightly the course may double back.
@@ -201,8 +204,13 @@ func _sample() -> void:
 	half_widths.append(pieces[-1].half_width if not pieces.is_empty() else wide_half_width)
 
 
-## Shift the whole course so it sits centred on the world origin, keeping it
-## on the ground plane wherever it happened to wander.
+## Shift the whole course so it sits centred on the world origin and never
+## dips below the ground.
+##
+## The ground is one flat plane, so a descending section does not cut into a
+## hillside, it is simply buried: the road disappears under the grass and the
+## cars drive over the top of it. Lifting the lowest point of the course to
+## ground level keeps every part of it visible.
 func _centre() -> void:
 	if points.is_empty():
 		return
@@ -211,8 +219,7 @@ func _centre() -> void:
 	for p in points:
 		lo = Vector3(minf(lo.x, p.x), minf(lo.y, p.y), minf(lo.z, p.z))
 		hi = Vector3(maxf(hi.x, p.x), maxf(hi.y, p.y), maxf(hi.z, p.z))
-	# Centre horizontally; leave heights alone so the start stays at zero.
-	var shift := Vector3((lo.x + hi.x) * -0.5, 0.0, (lo.z + hi.z) * -0.5)
+	var shift := Vector3((lo.x + hi.x) * -0.5, -lo.y, (lo.z + hi.z) * -0.5)
 	for i in points.size():
 		points[i] = points[i] + shift
 

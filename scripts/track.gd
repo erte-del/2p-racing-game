@@ -20,6 +20,9 @@ signal regenerated
 @export var kerb_width := 1.1
 ## Height of the start of the course above the ground plane.
 @export var road_height := 0.06
+## How far out the foot of an embankment sits per metre of height. Sloping it
+## reads as built-up ground; a vertical face reads as a cliff.
+@export var embankment_batter := 1.8
 
 @export_group("Shape")
 @export var min_course_length := 620.0
@@ -40,6 +43,7 @@ signal regenerated
 @onready var _path: Path3D = $Path3D
 @onready var _road: MeshInstance3D = $Road
 @onready var _road_shape: CollisionShape3D = $RoadBody/Shape
+@onready var _embankment: MeshInstance3D = $Embankment
 
 var _layout: TrackLayout
 ## Cross-sections of the finished road.
@@ -49,6 +53,7 @@ var _half_widths: PackedFloat32Array
 
 var _asphalt: StandardMaterial3D
 var _kerb: StandardMaterial3D
+var _earth: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -123,6 +128,7 @@ func generate(track_seed: int) -> void:
 	_adopt(layout)
 	_build_curve()
 	_build_road()
+	_build_embankment()
 	regenerated.emit()
 
 
@@ -219,6 +225,46 @@ func _strip(
 		st.add_vertex(corner[0])
 
 
+## Skirt the raised parts of the road down to the ground, so a climb reads as
+## an embankment instead of a ribbon floating over the grass.
+##
+## This carries no collision on purpose: driving off the edge of a raised
+## section should drop the car onto the grass, not run it into a wall.
+func _build_embankment() -> void:
+	var count := _points.size()
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var any := false
+
+	for i in count - 1:
+		var j := i + 1
+		# Only where the road actually stands above the ground.
+		if _points[i].y < 0.15 and _points[j].y < 0.15:
+			continue
+		any = true
+		var edge_i := _half_widths[i] + kerb_width
+		var edge_j := _half_widths[j] + kerb_width
+		for side: float in [-1.0, 1.0]:
+			var out_i := _rights[i] * side
+			var out_j := _rights[j] * side
+			var top_a := _points[i] + out_i * edge_i
+			var top_b := _points[j] + out_j * edge_j
+			# Splay the foot outwards in proportion to the height.
+			var foot_a := (top_a + out_i * top_a.y * embankment_batter)
+			var foot_b := (top_b + out_j * top_b.y * embankment_batter)
+			foot_a.y = 0.0
+			foot_b.y = 0.0
+			for v in [top_a, foot_a, top_b, foot_a, foot_b, top_b]:
+				st.add_vertex(v)
+
+	if not any:
+		_embankment.mesh = null
+		return
+	st.generate_normals()
+	_embankment.mesh = st.commit()
+	_embankment.set_surface_override_material(0, _earth)
+
+
 # --- materials ---------------------------------------------------------
 
 func _build_materials() -> void:
@@ -229,3 +275,10 @@ func _build_materials() -> void:
 	_kerb = StandardMaterial3D.new()
 	_kerb.albedo_color = Color(0.85, 0.85, 0.87)
 	_kerb.roughness = 0.8
+
+	_earth = StandardMaterial3D.new()
+	_earth.albedo_color = Color(0.28, 0.33, 0.20)
+	_earth.roughness = 1.0
+	# Two-sided: the skirt is a single sheet, and which way each quad faces
+	# depends on the side of the road and the direction of travel.
+	_earth.cull_mode = BaseMaterial3D.CULL_DISABLED
