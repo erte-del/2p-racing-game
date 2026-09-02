@@ -10,7 +10,9 @@ extends CharacterBody3D
 
 ## Name of the material in the model that carries the car's paint. Every
 ## surface using it gets recoloured; the tyres, glass and chrome are left alone.
-const PAINT_MATERIAL := "Body"
+const PAINT_MATERIAL := "Paint"
+## The model's glass exports as opaque, which walls the first person view in.
+const GLASS_MATERIAL := "Glass"
 
 ## Which set of input actions to read, e.g. "p1" -> p1_accelerate, p1_brake,
 ## p1_steer_left, p1_steer_right.
@@ -50,10 +52,23 @@ const PAINT_MATERIAL := "Body"
 ## How quickly the effect builds and fades.
 @export var slipstream_fade := 2.5
 
+@export_group("Cockpit")
+## Where the driver's eye sits, in the car's own space. The car is right hand
+## drive, so this sits over on the +X side behind the wheel.
+@export var eye_point := Vector3(0.4, 1.13, 0.14)
+## How much of the world shows through the windows.
+@export_range(0.0, 1.0) var glass_opacity := 0.18
+## A steering wheel turns much further than the road wheels do.
+@export var wheel_turn_ratio := 3.0
+
 @export_group("Wheels")
-@export var wheel_radius := 0.312      ## metres, wheel centre height in-game
+@export var wheel_radius := 0.355      ## metres, wheel centre height in-game
 @export var max_wheel_steer := 0.5     ## rad the front wheels visually turn
 @export var wheel_steer_speed := 4.0   ## how fast the wheels visually turn
+
+## The model's own steering wheel, turned along with the front wheels.
+var _steering_wheel: Node3D
+var _wheel_rest_basis := Basis.IDENTITY
 
 ## The other car, for slipstream. Wired up by the level.
 var rival: Car
@@ -93,29 +108,55 @@ func _ready() -> void:
 	for wheel in _front_wheels + _rear_wheels:
 		_wheel_rest.append(wheel.transform.basis)
 
-	_paint_body()
+	_prepare_materials()
+	_steering_wheel = find_child("SteeringWheel", true, false) as Node3D
+	if _steering_wheel:
+		_wheel_rest_basis = _steering_wheel.transform.basis
+	else:
+		push_warning("Car: no SteeringWheel in the model")
 
 	# Courses have climbs, and a body that only zeroes its vertical velocity on
 	# the floor launches off every crest. Snapping keeps it on the surface.
 	floor_snap_length = 0.6
 
 
-## Recolour the paintwork. The imported materials are shared between every car
-## instance, so this overrides with a private copy rather than editing them in
-## place, which would repaint both players' cars at once.
-func _paint_body() -> void:
-	var paint: StandardMaterial3D = null
-	for mesh in find_children("*", "MeshInstance3D", true, false):
-		var mesh_instance := mesh as MeshInstance3D
+## Where the driver's eye sits, in world space.
+func eye_transform() -> Transform3D:
+	return Transform3D(global_transform.basis, global_transform * eye_point)
+
+
+## Give this car its own copy of the materials it needs changed.
+##
+## The imported materials are shared between both car instances, so editing
+## one in place would change the other. Two need changing: the paint, which
+## carries the player's colour, and the glass, which the model exports fully
+## opaque and which therefore walls the driver in. Everything else is left as
+## authored, including the double-sided faces - this car has a real interior,
+## so the shell reading solid from within is what encloses the cockpit.
+func _prepare_materials() -> void:
+	var copies: Dictionary = {}
+	for node in find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := node as MeshInstance3D
 		for surface in mesh_instance.get_surface_override_material_count():
-			var material := mesh_instance.get_active_material(surface)
-			if material == null or material.resource_name != PAINT_MATERIAL:
+			var source := mesh_instance.get_active_material(surface) as StandardMaterial3D
+			if source == null:
 				continue
-			if paint == null:
-				paint = (material as StandardMaterial3D).duplicate()
-				paint.albedo_color = body_color
-			mesh_instance.set_surface_override_material(surface, paint)
-	if paint == null:
+			var key := source.resource_name
+			if key != PAINT_MATERIAL and key != GLASS_MATERIAL:
+				continue
+			if not copies.has(key):
+				var copy := source.duplicate() as StandardMaterial3D
+				if key == PAINT_MATERIAL:
+					copy.albedo_color = body_color
+				else:
+					copy.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+					copy.albedo_color.a = glass_opacity
+					# Glass casting a solid shadow would put a dark slab over
+					# the cabin from inside.
+					copy.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+				copies[key] = copy
+			mesh_instance.set_surface_override_material(surface, copies[key])
+	if not copies.has(PAINT_MATERIAL):
 		push_warning("Car: no '%s' material found to paint" % PAINT_MATERIAL)
 
 
@@ -241,6 +282,12 @@ func _animate_wheels(steer: float, delta: float) -> void:
 		_set_wheel(_front_wheels[i], _wheel_rest[i], _wheel_steer)
 	for i in _rear_wheels.size():
 		_set_wheel(_rear_wheels[i], _wheel_rest[_front_wheels.size() + i], 0.0)
+
+	if _steering_wheel:
+		# The wheel's disc lies in its own XZ plane, so local Y is the column
+		# it turns about. Post-multiplying keeps the model's column tilt.
+		_steering_wheel.transform.basis = _wheel_rest_basis * Basis(
+			Vector3.UP, -_wheel_steer * wheel_turn_ratio)
 
 
 ## Roll about the wheel's own lateral axis, then yaw it for steering.

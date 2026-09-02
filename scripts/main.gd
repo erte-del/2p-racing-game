@@ -103,6 +103,9 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	# The view can be swapped at any time, including while the cars are held
+	# for the countdown, so this sits ahead of the racing check.
+	_poll_view_toggles()
 	if not _racing:
 		return
 	_race_time += delta
@@ -116,6 +119,14 @@ func _physics_process(delta: float) -> void:
 		if _has_finished(_cars[i]):
 			_finish_course(i)
 			return
+
+
+## C and L flip each player between the chase camera and the driver's eye.
+func _poll_view_toggles() -> void:
+	var cameras: Array[ChaseCamera] = [_camera1, _camera2]
+	for i in _cars.size():
+		if Input.is_action_just_pressed(_cars[i].input_prefix + "_view"):
+			cameras[i].set_inside(not cameras[i].is_inside())
 
 
 func _bit(layer: int) -> int:

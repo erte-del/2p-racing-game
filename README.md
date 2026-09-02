@@ -24,6 +24,7 @@ tools/            Blender export scripts (not shipped in the game)
 | Brake      | S              | Down            |
 | Steer      | A / D          | Left / Right    |
 | Reset      | R              | M               |
+| View       | C              | L               |
 
 Reaching the finish generates a new course and pauses for three seconds.
 
@@ -32,26 +33,37 @@ Both players use the same `scenes/car/car.tscn`. A car reads its actions from an
 export, so adding a third player would mean one more instance and one more set
 of `p3_*` actions.
 
-## Car models
+## Car model
 
-`Low Poly Car.blend` is the only file in the author's Blender folder that
-belongs to this project; the others there are unrelated work.
-
-The car is authored in Blender and committed as a `.glb`. `.glb` is preferred
-over `.fbx` here: the original `car1.fbx` contained only the body, while the
-`.blend` has the four wheels as separate objects, which the game needs in order
-to steer and spin them.
-
-The export is scripted so it can be reproduced rather than hand-repeated:
+Both players drive `car_low-poly_jdm.blend`, exported to `assets/models/car.glb`
+by `tools/export_car.py`:
 
 ```bash
-/Applications/Blender.app/Contents/MacOS/Blender -b "path/to/Low Poly Car.blend" --python tools/export_car1.py
+/Applications/Blender.app/Contents/MacOS/Blender -b "path/to/car_low-poly_jdm.blend" --python tools/export_car.py
 ```
 
-It drops the Camera/Floor/Sun, applies the Mirror modifier, scales the car to
-4.3 m long, sits it on the ground at the origin, moves each wheel's pivot to its
-own centre so it spins in place, and names the wheels from their measured
-position (`Wheel_FL`, `Wheel_FR`, `Wheel_BL`, `Wheel_BR`).
+It replaced an earlier low poly car that was only a body shell and four wheels.
+This one carries an interior, a steering wheel and a gear stick, which is what
+makes the first person view worth having. The export turns it to face +Y, which
+glTF maps to Godot's forward -Z - the model is authored facing -Y - re-origins
+it to the centre of the wheelbase sitting on the ground, and renames the rear
+wheels from RL/RR to the BL/BR the car script looks for. Its authored size,
+4.87 m long, is left alone.
+
+At run time the car takes private copies of two of its materials. The paint
+carries the player's colour, and the glass is authored fully opaque, which
+walls the driver in; it is made transparent instead. Everything else is left as
+authored, including the double-sided faces: with a real interior, the shell
+reading solid from within is what encloses the cockpit rather than leaving the
+first person view open to the sky.
+
+## Views
+
+Each player can switch between the chase camera and the driver's eye - C for
+player one, L for player two. The first person camera is bolted rigidly to the
+car rather than smoothed: lagging a first person view behind the steering reads
+as the whole world sliding about. The model's own steering wheel turns with the
+front wheels, three times as far, about the column its disc sits on.
 
 ## Split screen
 
