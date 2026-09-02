@@ -145,7 +145,15 @@ before it starts.
 The finish is painted as a chequered band across the road, drawn at
 `Track.finish_offset()` - the same value the race checks - so the line the
 players cross is exactly the line that ends the race, and the two cannot drift
-apart.
+apart. A plain white band marks the start, at `Track.start_offset()`, with the
+grid placed `grid_setback` metres behind it; the start is deliberately not
+chequered so the two are never confused on an unfamiliar course.
+
+A countdown fills the preview pause rather than adding to it: three, two, one,
+GO, with the cars released on GO. It runs for the first course as well as every
+later one, and appears in both halves of the screen. Each countdown carries a
+run number so a timer left over from the previous one cannot blank the text of
+the current one.
 
 A car counts as finished only while it is still within `finish_corridor` of the
 centreline: a car lost out in the scenery projects onto the nearest point of

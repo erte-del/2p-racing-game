@@ -21,6 +21,12 @@ signal regenerated
 ## Height of the start of the course above the ground plane.
 @export var road_height := 0.06
 
+@export_group("Start line")
+## Where the start line is painted, as a distance along the course. The grid
+## is placed just behind it, so the cars always sit where the line says.
+@export var start_line_at := 14.0
+@export var start_depth := 2.5        ## metres of paint along the course
+
 @export_group("Finish line")
 ## How far before the very end of the course the finish line sits. The race
 ## and the painted line both read this, so what the players cross is exactly
@@ -55,6 +61,7 @@ signal regenerated
 @onready var _road_shape: CollisionShape3D = $RoadBody/Shape
 @onready var _embankment: MeshInstance3D = $Embankment
 @onready var _finish: MeshInstance3D = $FinishLine
+@onready var _start: MeshInstance3D = $StartLine
 
 var _layout: TrackLayout
 ## Cross-sections of the finished road.
@@ -66,6 +73,7 @@ var _asphalt: StandardMaterial3D
 var _kerb: StandardMaterial3D
 var _earth: StandardMaterial3D
 var _chequer: StandardMaterial3D
+var _paint: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -142,6 +150,7 @@ func generate(track_seed: int) -> void:
 	_build_road()
 	_build_embankment()
 	_build_finish_line()
+	_build_start_line()
 	regenerated.emit()
 
 
@@ -243,19 +252,43 @@ func finish_offset() -> float:
 	return maxf(length() - finish_setback, 0.0)
 
 
+## Where the start line is painted. The grid sits just behind it.
+func start_offset() -> float:
+	return minf(start_line_at, length())
+
+
 ## Paint a chequered band across the road at the finish, so the players can
 ## see where the race ends rather than having to guess from the road running
 ## out. It is drawn at finish_offset(), the same place the race checks.
 func _build_finish_line() -> void:
+	_paint_band(_finish, finish_offset(), finish_depth, _chequer, true)
+
+
+## A plain band at the start. Kept visually distinct from the chequered
+## finish so the two are never mistaken for each other on a new course.
+func _build_start_line() -> void:
+	_paint_band(_start, start_offset(), start_depth, _paint, false)
+
+
+## Lay a band of paint across the full width of the road, following its
+## curvature, lifted clear of the asphalt so the two do not z-fight.
+func _paint_band(
+	target: MeshInstance3D, offset: float, depth: float,
+	material: StandardMaterial3D, chequered: bool
+) -> void:
 	var count := _points.size()
 	if count < 2:
-		_finish.mesh = null
+		target.mesh = null
 		return
 
-	var first := clampi(int(finish_offset() / sample_step), 0, count - 2)
-	var rows: int = maxi(1, int(round(finish_depth / sample_step)))
+	var first := clampi(int(offset / sample_step), 0, count - 2)
+	var rows: int = maxi(1, int(round(depth / sample_step)))
 	var last: int = mini(first + rows, count - 1)
+	if last <= first:
+		target.mesh = null
+		return
 
+	var columns := finish_columns if chequered else 1
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in range(first, last):
@@ -264,20 +297,23 @@ func _build_finish_line() -> void:
 		var pb := _points[j] + Vector3.UP * finish_lift
 		var ra := _rights[i] * (_half_widths[i] + kerb_width)
 		var rb := _rights[j] * (_half_widths[j] + kerb_width)
-		for c in finish_columns:
+		for c in columns:
 			# -1 at the left edge of the road, +1 at the right.
-			var t0 := float(c) / float(finish_columns) * 2.0 - 1.0
-			var t1 := float(c + 1) / float(finish_columns) * 2.0 - 1.0
-			var dark := ((i - first) + c) % 2 == 0
-			st.set_color(Color(0.05, 0.05, 0.06) if dark else Color(0.95, 0.95, 0.95))
+			var t0 := float(c) / float(columns) * 2.0 - 1.0
+			var t1 := float(c + 1) / float(columns) * 2.0 - 1.0
+			if chequered:
+				var dark := ((i - first) + c) % 2 == 0
+				st.set_color(Color(0.05, 0.05, 0.06) if dark else Color(0.95, 0.95, 0.95))
+			else:
+				st.set_color(Color(0.95, 0.95, 0.95))
 			st.set_normal(Vector3.UP)
 			# Same clockwise-from-above winding as the road itself.
 			for v in [pa + ra * t0, pb + rb * t1, pa + ra * t1,
 					pa + ra * t0, pb + rb * t0, pb + rb * t1]:
 				st.add_vertex(v)
 
-	_finish.mesh = st.commit()
-	_finish.set_surface_override_material(0, _chequer)
+	target.mesh = st.commit()
+	target.set_surface_override_material(0, material)
 
 
 ## Skirt the raised parts of the road down to the ground, so a climb reads as
@@ -341,3 +377,7 @@ func _build_materials() -> void:
 	_chequer = StandardMaterial3D.new()
 	_chequer.vertex_color_use_as_albedo = true
 	_chequer.roughness = 0.7
+
+	_paint = StandardMaterial3D.new()
+	_paint.vertex_color_use_as_albedo = true
+	_paint.roughness = 0.7

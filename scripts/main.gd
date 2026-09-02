@@ -27,12 +27,16 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @onready var _arrow1: RivalArrow = $ArrowP1
 @onready var _arrow2: RivalArrow = $ArrowP2
 @onready var _track: Track = $Track
+@onready var _counts: Array[Label] = [
+	$Countdown/Top/Label, $Countdown/Bottom/Label,
+]
 
 @export_group("Starting grid")
 ## Sideways offset from the centreline, in metres.
 @export var grid_spread := 3.6
-## How far past the start line the cars are placed.
-@export var grid_offset := 10.0
+## How far behind the painted start line the cars sit, in metres. The line
+## itself is owned by the track, so the two cannot drift apart.
+@export var grid_setback := 4.0
 ## Ride height above the road surface at the spawn point.
 @export var grid_clearance := 0.05
 
@@ -40,14 +44,19 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 ## Seed for the first course. Zero picks a random one each run.
 @export var starting_seed := 0
 ## How long the cars are held still after a new course appears, so the players
-## can look at what they are about to drive.
+## can look at what they are about to drive. The countdown fills this time.
 @export var preview_seconds := 3.0
+## How long "GO" stays up after the cars are released.
+@export var go_seconds := 0.7
 ## A car further than this from the centreline is not really on the course, so
 ## it cannot trip the finish line from somewhere out in the scenery.
 @export var finish_corridor := 25.0
 
 var _cars: Array[Car] = []
 var _racing := false
+## Bumped for every countdown, so a timer left over from the previous one
+## cannot wipe the text of the current one.
+var _countdown_run := 0
 
 
 func _ready() -> void:
@@ -67,7 +76,8 @@ func _ready() -> void:
 	_camera1.cull_mask = ALL_LAYERS & ~_bit(LAYER_P2_ONLY)
 	_camera2.cull_mask = ALL_LAYERS & ~_bit(LAYER_P1_ONLY)
 
-	_racing = true
+	# The first course gets the same countdown as every later one.
+	_start_after_countdown()
 
 
 func _physics_process(_delta: float) -> void:
@@ -126,20 +136,50 @@ func _finish_course() -> void:
 		car.reset_motion()
 
 	_new_course(randi())
+	_start_after_countdown()
 
-	await get_tree().create_timer(preview_seconds).timeout
 
+## Hold the cars while the countdown runs, then let them go. The countdown
+## fills the preview pause rather than adding to it, so the players spend that
+## time reading the new course instead of waiting blind.
+func _start_after_countdown() -> void:
+	_countdown_run += 1
+	var run := _countdown_run
+	for car in _cars:
+		car.frozen = true
+		car.reset_motion()
+
+	var steps: int = maxi(1, int(round(preview_seconds)))
+	var each := preview_seconds / float(steps)
+	for remaining in range(steps, 0, -1):
+		_show_count(str(remaining))
+		await get_tree().create_timer(each).timeout
+
+	_show_count("GO")
 	for car in _cars:
 		car.frozen = false
 	_racing = true
+
+	await get_tree().create_timer(go_seconds).timeout
+	# Only clear if another countdown has not started in the meantime.
+	if run == _countdown_run:
+		_show_count("")
+
+
+## The same text in both halves of the screen, since each player needs to see
+## it in their own view.
+func _show_count(text: String) -> void:
+	for label in _counts:
+		label.text = text
 
 
 ## Line the cars up side by side on the start line, facing down the course.
 ## Deriving the grid from the curve means it keeps working for every course.
 func _place_on_grid() -> void:
 	var curve := _track.curve()
-	var here := _to_world(curve.sample_baked(grid_offset))
-	var ahead := _to_world(curve.sample_baked(grid_offset + 1.0))
+	var at: float = maxf(_track.start_offset() - grid_setback, 0.0)
+	var here := _to_world(curve.sample_baked(at))
+	var ahead := _to_world(curve.sample_baked(at + 1.0))
 
 	var forward := ahead - here
 	forward.y = 0.0
@@ -150,7 +190,7 @@ func _place_on_grid() -> void:
 	var across := forward.cross(Vector3.UP)
 
 	# Keep the grid on the road even if the course opens narrow.
-	var room: float = maxf(_track.half_width_at(grid_offset) - 1.6, 0.5)
+	var room: float = maxf(_track.half_width_at(at) - 1.6, 0.5)
 	var side: float = minf(grid_spread, room)
 
 	for i in _cars.size():

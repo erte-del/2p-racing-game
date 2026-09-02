@@ -99,3 +99,44 @@ render_target_update_mode = 4
 
 [node name="Camera" type="Camera3D" parent="Split/BottomView/SubViewport" unique_id=60247963]
 script = ExtResource("3_cam")
+
+[node name="Countdown" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Top" type="MarginContainer" parent="Countdown"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/margin_bottom = 170
+
+[node name="Label" type="Label" parent="Countdown/Top"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 12
+theme_override_font_sizes/font_size = 88
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Bottom" type="MarginContainer" parent="Countdown"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/margin_bottom = 170
+
+[node name="Label" type="Label" parent="Countdown/Bottom"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 12
+theme_override_font_sizes/font_size = 88
+horizontal_alignment = 1
+vertical_alignment = 1
