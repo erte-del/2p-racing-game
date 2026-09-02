@@ -142,6 +142,11 @@ Reaching the finish line swaps in a freshly generated course, then holds both
 cars still for `preview_seconds` (3 s) so the players can read the new one
 before it starts.
 
+The finish is painted as a chequered band across the road, drawn at
+`Track.finish_offset()` - the same value the race checks - so the line the
+players cross is exactly the line that ends the race, and the two cannot drift
+apart.
+
 A car counts as finished only while it is still within `finish_corridor` of the
 centreline: a car lost out in the scenery projects onto the nearest point of
 the course, which can be the finish.

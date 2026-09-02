@@ -42,8 +42,6 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 ## How long the cars are held still after a new course appears, so the players
 ## can look at what they are about to drive.
 @export var preview_seconds := 3.0
-## How close to the end of the course counts as finishing.
-@export var finish_margin := 6.0
 ## A car further than this from the centreline is not really on the course, so
 ## it cannot trip the finish line from somewhere out in the scenery.
 @export var finish_corridor := 25.0
@@ -102,7 +100,9 @@ func _to_track(world: Vector3) -> Vector3:
 func _has_finished(car: Car) -> bool:
 	var curve := _track.curve()
 	var offset := curve.get_closest_offset(_to_track(car.global_position))
-	if offset < _track.length() - finish_margin:
+	# The track owns where the finish is, so the painted line and the race
+	# cannot drift apart.
+	if offset < _track.finish_offset():
 		return false
 	var centre := _to_world(curve.sample_baked(offset))
 	return car.global_position.distance_to(centre) < finish_corridor

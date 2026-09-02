@@ -14,3 +14,5 @@ script = ExtResource("1_track")
 [node name="Shape" type="CollisionShape3D" parent="RoadBody"]
 
 [node name="Embankment" type="MeshInstance3D" parent="."]
+
+[node name="FinishLine" type="MeshInstance3D" parent="."]

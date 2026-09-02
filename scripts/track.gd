@@ -20,6 +20,16 @@ signal regenerated
 @export var kerb_width := 1.1
 ## Height of the start of the course above the ground plane.
 @export var road_height := 0.06
+
+@export_group("Finish line")
+## How far before the very end of the course the finish line sits. The race
+## and the painted line both read this, so what the players cross is exactly
+## what ends the race.
+@export var finish_setback := 6.0
+@export var finish_depth := 4.0      ## metres of chequer along the course
+@export var finish_columns := 10     ## chequers across the road
+## Lifted clear of the asphalt so the two surfaces do not z-fight.
+@export var finish_lift := 0.02
 ## How far out the foot of an embankment sits per metre of height. Sloping it
 ## reads as built-up ground; a vertical face reads as a cliff.
 @export var embankment_batter := 1.8
@@ -44,6 +54,7 @@ signal regenerated
 @onready var _road: MeshInstance3D = $Road
 @onready var _road_shape: CollisionShape3D = $RoadBody/Shape
 @onready var _embankment: MeshInstance3D = $Embankment
+@onready var _finish: MeshInstance3D = $FinishLine
 
 var _layout: TrackLayout
 ## Cross-sections of the finished road.
@@ -54,6 +65,7 @@ var _half_widths: PackedFloat32Array
 var _asphalt: StandardMaterial3D
 var _kerb: StandardMaterial3D
 var _earth: StandardMaterial3D
+var _chequer: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -129,6 +141,7 @@ func generate(track_seed: int) -> void:
 	_build_curve()
 	_build_road()
 	_build_embankment()
+	_build_finish_line()
 	regenerated.emit()
 
 
@@ -225,6 +238,48 @@ func _strip(
 		st.add_vertex(corner[0])
 
 
+## Where the race ends, as a distance along the course.
+func finish_offset() -> float:
+	return maxf(length() - finish_setback, 0.0)
+
+
+## Paint a chequered band across the road at the finish, so the players can
+## see where the race ends rather than having to guess from the road running
+## out. It is drawn at finish_offset(), the same place the race checks.
+func _build_finish_line() -> void:
+	var count := _points.size()
+	if count < 2:
+		_finish.mesh = null
+		return
+
+	var first := clampi(int(finish_offset() / sample_step), 0, count - 2)
+	var rows: int = maxi(1, int(round(finish_depth / sample_step)))
+	var last: int = mini(first + rows, count - 1)
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in range(first, last):
+		var j := i + 1
+		var pa := _points[i] + Vector3.UP * finish_lift
+		var pb := _points[j] + Vector3.UP * finish_lift
+		var ra := _rights[i] * (_half_widths[i] + kerb_width)
+		var rb := _rights[j] * (_half_widths[j] + kerb_width)
+		for c in finish_columns:
+			# -1 at the left edge of the road, +1 at the right.
+			var t0 := float(c) / float(finish_columns) * 2.0 - 1.0
+			var t1 := float(c + 1) / float(finish_columns) * 2.0 - 1.0
+			var dark := ((i - first) + c) % 2 == 0
+			st.set_color(Color(0.05, 0.05, 0.06) if dark else Color(0.95, 0.95, 0.95))
+			st.set_normal(Vector3.UP)
+			# Same clockwise-from-above winding as the road itself.
+			for v in [pa + ra * t0, pb + rb * t1, pa + ra * t1,
+					pa + ra * t0, pb + rb * t0, pb + rb * t1]:
+				st.add_vertex(v)
+
+	_finish.mesh = st.commit()
+	_finish.set_surface_override_material(0, _chequer)
+
+
 ## Skirt the raised parts of the road down to the ground, so a climb reads as
 ## an embankment instead of a ribbon floating over the grass.
 ##
@@ -282,3 +337,7 @@ func _build_materials() -> void:
 	# Two-sided: the skirt is a single sheet, and which way each quad faces
 	# depends on the side of the road and the direction of travel.
 	_earth.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+	_chequer = StandardMaterial3D.new()
+	_chequer.vertex_color_use_as_albedo = true
+	_chequer.roughness = 0.7
