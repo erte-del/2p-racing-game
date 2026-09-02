@@ -225,7 +225,7 @@ theme_override_constants/separation = 4
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
-theme_override_constants/margin_bottom = 170
+theme_override_constants/margin_bottom = 90
 
 [node name="Label" type="Label" parent="Countdown/Top" unique_id=294020423]
 layout_mode = 2
@@ -240,7 +240,7 @@ vertical_alignment = 1
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
-theme_override_constants/margin_bottom = 170
+theme_override_constants/margin_bottom = 90
 
 [node name="Label" type="Label" parent="Countdown/Bottom" unique_id=2060257741]
 layout_mode = 2

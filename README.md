@@ -159,6 +159,11 @@ Each half carries its own HUD: the player's position in the top left with the
 clock beneath it, and their checkpoint tally centred at the top. All three are
 per player, since each is tracking their own run.
 
+Position shows a dash until somebody actually leads, rather than picking one of
+two cars that are level on the grid. It takes `lead_margin` to claim a place
+and a fall back inside the smaller `level_margin` to give it up, so the display
+cannot strobe while the cars run wheel to wheel.
+
 The clock runs only while the cars are actually free, so neither the countdown
 nor the result screen is counted in a player's time.
 

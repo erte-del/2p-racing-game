@@ -57,6 +57,12 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 ## A car further than this from the centreline is not really on the course, so
 ## it cannot trip the finish line from somewhere out in the scenery.
 @export var finish_corridor := 25.0
+## Metres of lead needed before a player is shown as leading. Until then, and
+## whenever they are level again, both see a dash.
+@export var lead_margin := 1.5
+## Falling back inside this gap makes it level again. The two differ so the
+## places cannot strobe while the cars run wheel to wheel.
+@export var level_margin := 0.6
 
 var _cars: Array[Car] = []
 var _racing := false
@@ -71,6 +77,8 @@ var _race_time := 0.0
 var _respawn := PackedFloat32Array()
 ## The next checkpoint each car has yet to reach.
 var _next_checkpoint := PackedInt32Array()
+## Who is currently ahead, or -1 while the cars are level.
+var _leader := -1
 
 
 func _ready() -> void:
@@ -256,10 +264,23 @@ func _show_clock(text: String) -> void:
 
 ## Who is ahead, by distance along the course. Each player is told their own
 ## position, in their own half.
+##
+## Nobody leads off the grid, where both cars are the same distance along, so
+## the places start as a dash rather than picking one arbitrarily. The two
+## margins give it hysteresis: a lead has to be earned, and only a clear return
+## to level gives it up, so the display cannot strobe wheel to wheel.
 func _show_places() -> void:
-	var ahead := _offset_of(_cars[0]) >= _offset_of(_cars[1])
-	_places[0].text = "1st" if ahead else "2nd"
-	_places[1].text = "2nd" if ahead else "1st"
+	var gap := _offset_of(_cars[0]) - _offset_of(_cars[1])
+	if absf(gap) < level_margin:
+		_leader = -1
+	elif absf(gap) > lead_margin:
+		_leader = 0 if gap > 0.0 else 1
+
+	for i in _places.size():
+		if _leader < 0:
+			_places[i].text = "\u2013"
+		else:
+			_places[i].text = "1st" if i == _leader else "2nd"
 
 
 ## How many checkpoints this player has banked, in their own half only, since
@@ -345,3 +366,8 @@ func _place_on_grid() -> void:
 				+ Vector3.UP * grid_clearance)
 		# look_at aims -Z, which is the car's forward.
 		car.look_at(car.global_position + forward, Vector3.UP)
+
+	# Only once the cars are actually on the grid, or this reads their old
+	# positions and hands someone a lead they no longer have.
+	_leader = -1
+	_show_places()
