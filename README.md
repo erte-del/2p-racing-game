@@ -95,6 +95,10 @@ Two things can still go wrong, and both are checked with the caller retrying on
 the next seed: a course can wander into itself, and it can wander off the
 ground. About 80% of seeds pass, so a retry is cheap.
 
+The ground is flat, and nothing currently stops a car leaving the road - the
+mountain ranges that used to line the course were removed because they did not
+work well enough to keep. Barriers are still to come.
+
 `scripts/track.gd` turns that centreline into geometry. Nothing there wraps
 from the last sample back to the first - on a course that does not rejoin
 itself, wrapping would draw a road from the finish straight back to the start.
@@ -107,20 +111,6 @@ Road triangles are wound clockwise seen from above, which is Godot's front
 face. Getting that backwards makes the road invisible from above and, because a
 `ConcavePolygonShape3D` only collides with its front faces, drivable straight
 through.
-
-## Mountains
-
-A ridge runs down each side, built from a foot, a crest and an outer foot per
-cross-section, with heights from `FastNoiseLite`. The inner slopes are far too
-steep to climb, which is what keeps the cars on the course. The feet sit on the
-ground plane while crests are measured from the road, so the range still towers
-over a section that has climbed.
-
-On the inside of a corner the cross-section is scaled down to fit within the
-local radius of curvature: offsetting a curve inwards by more than that radius
-folds the offset line through itself, which threw mountain geometry across the
-road. The scaling is smoothed along the course, or neighbouring sections shrink
-by different amounts and the range breaks into slivers.
 
 ## Steering
 
