@@ -55,7 +55,7 @@ const GLASS_MATERIAL := "Glass"
 @export_group("Cockpit")
 ## Where the driver's eye sits, in the car's own space. The car is right hand
 ## drive, so this sits over on the +X side behind the wheel.
-@export var eye_point := Vector3(0.4, 1.13, 0.14)
+@export var eye_point := Vector3(0.4, 1.18, 0.14)
 ## How much of the world shows through the windows.
 @export_range(0.0, 1.0) var glass_opacity := 0.18
 ## A steering wheel turns much further than the road wheels do.
@@ -287,7 +287,7 @@ func _animate_wheels(steer: float, delta: float) -> void:
 		# The wheel's disc lies in its own XZ plane, so local Y is the column
 		# it turns about. Post-multiplying keeps the model's column tilt.
 		_steering_wheel.transform.basis = _wheel_rest_basis * Basis(
-			Vector3.UP, -_wheel_steer * wheel_turn_ratio)
+			Vector3.UP, _wheel_steer * wheel_turn_ratio)
 
 
 ## Roll about the wheel's own lateral axis, then yaw it for steering.
