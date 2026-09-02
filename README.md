@@ -23,6 +23,7 @@ tools/            Blender export scripts (not shipped in the game)
 | Accelerate | W              | Up              |
 | Brake      | S              | Down            |
 | Steer      | A / D          | Left / Right    |
+| Reset      | R              | M               |
 
 Reaching the finish generates a new course and pauses for three seconds.
 
@@ -151,8 +152,7 @@ chequered so the two are never confused on an unfamiliar course.
 
 Crossing the line stops the clock, names the winner by the colour of their car
 and holds both on screen for `result_seconds` (2 s) *before* the next course is
-built, so the players
-see the result over the course they just drove rather than over a track they
+built, so the players see the result over the course they just drove rather than over a track they
 have not seen yet.
 
 The clock sits in the bottom right of each half and runs only while the cars
@@ -172,6 +172,18 @@ A car counts as finished only while it is still within `finish_corridor` of the
 centreline: a car lost out in the scenery projects onto the nearest point of
 the course, which can be the finish.
 
+## Checkpoints
+
+Four checkpoints are spread evenly between the start and the finish, painted as
+yellow bands. They exist to be reset to: a player who falls off, gets stuck or
+ends up facing the wrong way presses their reset key and is put back on the
+centreline at the last one they passed, stopped and facing down the course.
+Before the first checkpoint that is the grid itself.
+
+A checkpoint is only banked while the car is actually on the course, so a
+player cannot collect them by driving across the scenery and then reset forward
+onto ground they never drove.
+
 ## Slipstream
 
 Tucking in behind the other car raises top speed by up to `slipstream_bonus`
@@ -187,5 +199,5 @@ same way, which makes it an overtaking aid rather than a free boost.
 - [x] **3** — split screen
 - [x] **4** — a hand-made track
 - [x] **5** — procedural track generation
-- [x] **6** — countdown, finish line, winner, timer
+- [x] **6** — countdown, checkpoints, finish line, winner, timer
 - [ ] **7** — polish: models, environment, audio, particles, UI, themes, boosts

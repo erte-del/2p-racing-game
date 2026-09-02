@@ -40,6 +40,13 @@ signal regenerated
 ## reads as built-up ground; a vertical face reads as a cliff.
 @export var embankment_batter := 1.8
 
+@export_group("Checkpoints")
+## Respawn points spread along the course. They are what a stuck player is
+## sent back to, so they are painted as well as counted.
+@export var checkpoint_count := 4
+@export var checkpoint_depth := 2.5
+@export var checkpoint_color := Color(0.95, 0.72, 0.12)
+
 @export_group("Shape")
 @export var min_course_length := 620.0
 @export var max_course_length := 1050.0
@@ -62,6 +69,7 @@ signal regenerated
 @onready var _embankment: MeshInstance3D = $Embankment
 @onready var _finish: MeshInstance3D = $FinishLine
 @onready var _start: MeshInstance3D = $StartLine
+@onready var _checkpoints: MeshInstance3D = $Checkpoints
 
 var _layout: TrackLayout
 ## Cross-sections of the finished road.
@@ -74,6 +82,7 @@ var _kerb: StandardMaterial3D
 var _earth: StandardMaterial3D
 var _chequer: StandardMaterial3D
 var _paint: StandardMaterial3D
+var _marker: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -151,6 +160,7 @@ func generate(track_seed: int) -> void:
 	_build_embankment()
 	_build_finish_line()
 	_build_start_line()
+	_build_checkpoints()
 	regenerated.emit()
 
 
@@ -257,6 +267,16 @@ func start_offset() -> float:
 	return minf(start_line_at, length())
 
 
+## Distances along the course where the checkpoints sit, evenly spread between
+## the start and the finish.
+func checkpoint_offsets() -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	var span := finish_offset() - start_offset()
+	for i in checkpoint_count:
+		out.append(start_offset() + span * float(i + 1) / float(checkpoint_count + 1))
+	return out
+
+
 ## Paint a chequered band across the road at the finish, so the players can
 ## see where the race ends rather than having to guess from the road running
 ## out. It is drawn at finish_offset(), the same place the race checks.
@@ -270,27 +290,52 @@ func _build_start_line() -> void:
 	_paint_band(_start, start_offset(), start_depth, _paint, false)
 
 
+## All the checkpoint markers in one mesh, since they never differ from each
+## other and there is nothing to gain from a node apiece.
+func _build_checkpoints() -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var any := false
+	for offset in checkpoint_offsets():
+		any = _append_band(st, offset, checkpoint_depth, false, checkpoint_color) or any
+	if not any:
+		_checkpoints.mesh = null
+		return
+	_checkpoints.mesh = st.commit()
+	_checkpoints.set_surface_override_material(0, _marker)
+
+
 ## Lay a band of paint across the full width of the road, following its
 ## curvature, lifted clear of the asphalt so the two do not z-fight.
 func _paint_band(
 	target: MeshInstance3D, offset: float, depth: float,
-	material: StandardMaterial3D, chequered: bool
+	material: StandardMaterial3D, chequered: bool, colour := Color.WHITE
 ) -> void:
-	var count := _points.size()
-	if count < 2:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	if not _append_band(st, offset, depth, chequered, colour):
 		target.mesh = null
 		return
+	target.mesh = st.commit()
+	target.set_surface_override_material(0, material)
+
+
+## Add one band to a surface being built, so several can share a mesh.
+## Returns false if the course is too short to place it.
+func _append_band(
+	st: SurfaceTool, offset: float, depth: float, chequered: bool, colour: Color
+) -> bool:
+	var count := _points.size()
+	if count < 2:
+		return false
 
 	var first := clampi(int(offset / sample_step), 0, count - 2)
 	var rows: int = maxi(1, int(round(depth / sample_step)))
 	var last: int = mini(first + rows, count - 1)
 	if last <= first:
-		target.mesh = null
-		return
+		return false
 
 	var columns := finish_columns if chequered else 1
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in range(first, last):
 		var j := i + 1
 		var pa := _points[i] + Vector3.UP * finish_lift
@@ -305,15 +350,13 @@ func _paint_band(
 				var dark := ((i - first) + c) % 2 == 0
 				st.set_color(Color(0.05, 0.05, 0.06) if dark else Color(0.95, 0.95, 0.95))
 			else:
-				st.set_color(Color(0.95, 0.95, 0.95))
+				st.set_color(colour)
 			st.set_normal(Vector3.UP)
 			# Same clockwise-from-above winding as the road itself.
 			for v in [pa + ra * t0, pb + rb * t1, pa + ra * t1,
 					pa + ra * t0, pb + rb * t0, pb + rb * t1]:
 				st.add_vertex(v)
-
-	target.mesh = st.commit()
-	target.set_surface_override_material(0, material)
+	return true
 
 
 ## Skirt the raised parts of the road down to the ground, so a climb reads as
@@ -381,3 +424,7 @@ func _build_materials() -> void:
 	_paint = StandardMaterial3D.new()
 	_paint.vertex_color_use_as_albedo = true
 	_paint.roughness = 0.7
+
+	_marker = StandardMaterial3D.new()
+	_marker.vertex_color_use_as_albedo = true
+	_marker.roughness = 0.7

@@ -18,3 +18,5 @@ script = ExtResource("1_track")
 [node name="FinishLine" type="MeshInstance3D" parent="."]
 
 [node name="StartLine" type="MeshInstance3D" parent="."]
+
+[node name="Checkpoints" type="MeshInstance3D" parent="."]

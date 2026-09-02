@@ -56,7 +56,7 @@ transform = Transform3D(-0.0338788, 0, 0.999426, 0, 1, 0, -0.999426, 0, -0.03387
 [node name="Car2" parent="." unique_id=885679509 instance=ExtResource("2_car")]
 transform = Transform3D(-0.0338788, 0, 0.999426, 0, 1, 0, -0.999426, 0, -0.0338788, -6.11852, 0.2, -88.6053)
 input_prefix = "p2"
-body_color = Color(0.05, 0.25, 0.9, 1)
+body_color = Color(0, 0.3535028, 0.69993895, 1)
 
 [node name="ArrowP1" type="MeshInstance3D" parent="." unique_id=1997241987]
 script = ExtResource("4_arrow")
@@ -100,7 +100,7 @@ render_target_update_mode = 4
 [node name="Camera" type="Camera3D" parent="Split/BottomView/SubViewport" unique_id=60247963]
 script = ExtResource("3_cam")
 
-[node name="Hud" type="VBoxContainer" parent="."]
+[node name="Hud" type="VBoxContainer" parent="." unique_id=1203870661]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -109,17 +109,16 @@ grow_vertical = 2
 mouse_filter = 2
 theme_override_constants/separation = 4
 
-[node name="Top" type="MarginContainer" parent="Hud"]
+[node name="Top" type="MarginContainer" parent="Hud" unique_id=1724868903]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 theme_override_constants/margin_right = 28
 theme_override_constants/margin_bottom = 16
 
-[node name="Label" type="Label" parent="Hud/Top"]
+[node name="Label" type="Label" parent="Hud/Top" unique_id=811456760]
 layout_mode = 2
 size_flags_vertical = 8
-mouse_filter = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 10
@@ -127,17 +126,16 @@ theme_override_font_sizes/font_size = 46
 horizontal_alignment = 2
 vertical_alignment = 2
 
-[node name="Bottom" type="MarginContainer" parent="Hud"]
+[node name="Bottom" type="MarginContainer" parent="Hud" unique_id=2052892177]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 theme_override_constants/margin_right = 28
 theme_override_constants/margin_bottom = 16
 
-[node name="Label" type="Label" parent="Hud/Bottom"]
+[node name="Label" type="Label" parent="Hud/Bottom" unique_id=1202034009]
 layout_mode = 2
 size_flags_vertical = 8
-mouse_filter = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 10
@@ -145,7 +143,7 @@ theme_override_font_sizes/font_size = 46
 horizontal_alignment = 2
 vertical_alignment = 2
 
-[node name="Countdown" type="VBoxContainer" parent="."]
+[node name="Countdown" type="VBoxContainer" parent="." unique_id=99635084]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -154,15 +152,14 @@ grow_vertical = 2
 mouse_filter = 2
 theme_override_constants/separation = 4
 
-[node name="Top" type="MarginContainer" parent="Countdown"]
+[node name="Top" type="MarginContainer" parent="Countdown" unique_id=201327151]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 theme_override_constants/margin_bottom = 170
 
-[node name="Label" type="Label" parent="Countdown/Top"]
+[node name="Label" type="Label" parent="Countdown/Top" unique_id=294020423]
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 12
@@ -170,15 +167,14 @@ theme_override_font_sizes/font_size = 88
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Bottom" type="MarginContainer" parent="Countdown"]
+[node name="Bottom" type="MarginContainer" parent="Countdown" unique_id=1511479194]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 theme_override_constants/margin_bottom = 170
 
-[node name="Label" type="Label" parent="Countdown/Bottom"]
+[node name="Label" type="Label" parent="Countdown/Bottom" unique_id=2060257741]
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 12
@@ -186,7 +182,7 @@ theme_override_font_sizes/font_size = 88
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Result" type="VBoxContainer" parent="."]
+[node name="Result" type="VBoxContainer" parent="." unique_id=2080188356]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -195,15 +191,14 @@ grow_vertical = 2
 mouse_filter = 2
 theme_override_constants/separation = 4
 
-[node name="Top" type="MarginContainer" parent="Result"]
+[node name="Top" type="MarginContainer" parent="Result" unique_id=1646949524]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 theme_override_constants/margin_bottom = 130
 
-[node name="Label" type="Label" parent="Result/Top"]
+[node name="Label" type="Label" parent="Result/Top" unique_id=1136349559]
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.8)
 theme_override_constants/outline_size = 12
@@ -211,20 +206,17 @@ theme_override_font_sizes/font_size = 46
 horizontal_alignment = 1
 vertical_alignment = 1
 
-
-[node name="Bottom" type="MarginContainer" parent="Result"]
+[node name="Bottom" type="MarginContainer" parent="Result" unique_id=640514399]
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
 theme_override_constants/margin_bottom = 130
 
-[node name="Label" type="Label" parent="Result/Bottom"]
+[node name="Label" type="Label" parent="Result/Bottom" unique_id=922286908]
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.8)
 theme_override_constants/outline_size = 12
 theme_override_font_sizes/font_size = 46
 horizontal_alignment = 1
 vertical_alignment = 1
-

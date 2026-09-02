@@ -64,6 +64,11 @@ var _countdown_run := 0
 ## Seconds of racing on the current course, running only while the cars are
 ## actually free, so the countdown and the result screen are not counted.
 var _race_time := 0.0
+## Distance along the course each car is sent back to when it resets. It
+## starts at the grid and moves up as checkpoints are passed.
+var _respawn := PackedFloat32Array()
+## The next checkpoint each car has yet to reach.
+var _next_checkpoint := PackedInt32Array()
 
 
 func _ready() -> void:
@@ -93,6 +98,10 @@ func _physics_process(delta: float) -> void:
 	_race_time += delta
 	_show_clock(_format_time(_race_time))
 	for i in _cars.size():
+		if Input.is_action_just_pressed(_cars[i].input_prefix + "_reset"):
+			_reset_to_checkpoint(i)
+			continue
+		_bank_checkpoints(i)
 		if _has_finished(_cars[i]):
 			_finish_course(i)
 			return
@@ -123,7 +132,50 @@ func _has_finished(car: Car) -> bool:
 	# cannot drift apart.
 	if offset < _track.finish_offset():
 		return false
-	var centre := _to_world(curve.sample_baked(offset))
+	return _on_course(car, offset)
+
+
+## Move a car's respawn point up as it passes checkpoints. A car has to be on
+## the course to bank one, so a player cannot collect checkpoints by driving
+## across the scenery, and then reset forward onto them.
+func _bank_checkpoints(index: int) -> void:
+	var marks := _track.checkpoint_offsets()
+	var car := _cars[index]
+	var offset := _offset_of(car)
+	while _next_checkpoint[index] < marks.size() and offset >= marks[_next_checkpoint[index]]:
+		if not _on_course(car, offset):
+			return
+		_respawn[index] = marks[_next_checkpoint[index]]
+		_next_checkpoint[index] += 1
+
+
+## Put a car back on the course at its last checkpoint, facing the right way
+## and stopped. This is the way out of being stuck or falling off.
+func _reset_to_checkpoint(index: int) -> void:
+	var car := _cars[index]
+	var curve := _track.curve()
+	var at := _respawn[index]
+	var here := _to_world(curve.sample_baked(at))
+	var ahead := _to_world(curve.sample_baked(minf(at + 1.0, _track.length())))
+
+	var forward := ahead - here
+	forward.y = 0.0
+	if forward.length_squared() < 0.000001:
+		forward = -car.global_transform.basis.z
+	forward = forward.normalized()
+
+	car.reset_motion()
+	car.global_position = here + Vector3.UP * grid_clearance
+	car.look_at(car.global_position + forward, Vector3.UP)
+
+
+func _offset_of(car: Car) -> float:
+	return _track.curve().get_closest_offset(_to_track(car.global_position))
+
+
+## Whether a car is close enough to the centreline to count as on the course.
+func _on_course(car: Car, offset: float) -> bool:
+	var centre := _to_world(_track.curve().sample_baked(offset))
 	return car.global_position.distance_to(centre) < finish_corridor
 
 
@@ -252,6 +304,14 @@ func _place_on_grid() -> void:
 		forward = Vector3.FORWARD
 	forward = forward.normalized()
 	var across := forward.cross(Vector3.UP)
+
+	# Every course starts the players over: the grid itself is the first
+	# place a reset sends them.
+	_respawn = PackedFloat32Array()
+	_next_checkpoint = PackedInt32Array()
+	for i in _cars.size():
+		_respawn.append(at)
+		_next_checkpoint.append(0)
 
 	# Keep the grid on the road even if the course opens narrow.
 	var room: float = maxf(_track.half_width_at(at) - 1.6, 0.5)
