@@ -149,6 +149,14 @@ apart. A plain white band marks the start, at `Track.start_offset()`, with the
 grid placed `grid_setback` metres behind it; the start is deliberately not
 chequered so the two are never confused on an unfamiliar course.
 
+Crossing the line stops the clock, names the winner and holds both on screen
+for `result_seconds` (2 s) *before* the next course is built, so the players
+see the result over the course they just drove rather than over a track they
+have not seen yet.
+
+The clock runs only while the cars are actually free, so neither the countdown
+nor the result screen is counted in a player's time.
+
 A countdown fills the preview pause rather than adding to it: three, two, one,
 GO, with the cars released on GO. It runs for the first course as well as every
 later one, and appears in both halves of the screen. Each countdown carries a
@@ -174,5 +182,5 @@ same way, which makes it an overtaking aid rather than a free boost.
 - [x] **3** — split screen
 - [x] **4** — a hand-made track
 - [x] **5** — procedural track generation
-- [ ] **6** — countdown, checkpoints, finish, winner, timer
+- [x] **6** — countdown, finish line, winner, timer
 - [ ] **7** — polish: models, environment, audio, particles, UI, themes, boosts

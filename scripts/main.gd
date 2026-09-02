@@ -30,6 +30,8 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @onready var _counts: Array[Label] = [
 	$Countdown/Top/Label, $Countdown/Bottom/Label,
 ]
+@onready var _clocks: Array[Label] = [$Hud/Top/Label, $Hud/Bottom/Label]
+@onready var _results: Array[Label] = [$Result/Top/Label, $Result/Bottom/Label]
 
 @export_group("Starting grid")
 ## Sideways offset from the centreline, in metres.
@@ -48,6 +50,8 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @export var preview_seconds := 3.0
 ## How long "GO" stays up after the cars are released.
 @export var go_seconds := 0.7
+## How long the winner and their time stay up before the next course loads.
+@export var result_seconds := 2.0
 ## A car further than this from the centreline is not really on the course, so
 ## it cannot trip the finish line from somewhere out in the scenery.
 @export var finish_corridor := 25.0
@@ -57,6 +61,9 @@ var _racing := false
 ## Bumped for every countdown, so a timer left over from the previous one
 ## cannot wipe the text of the current one.
 var _countdown_run := 0
+## Seconds of racing on the current course, running only while the cars are
+## actually free, so the countdown and the result screen are not counted.
+var _race_time := 0.0
 
 
 func _ready() -> void:
@@ -80,12 +87,14 @@ func _ready() -> void:
 	_start_after_countdown()
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if not _racing:
 		return
-	for car in _cars:
-		if _has_finished(car):
-			_finish_course()
+	_race_time += delta
+	_show_clock(_format_time(_race_time))
+	for i in _cars.size():
+		if _has_finished(_cars[i]):
+			_finish_course(i)
 			return
 
 
@@ -127,13 +136,20 @@ func _new_course(course_seed: int) -> void:
 	_camera2.follow(_car2)
 
 
-## Swap in a fresh course, then hold the cars still long enough for the players
-## to read it before letting them go.
-func _finish_course() -> void:
+## Show who won and how long they took, then swap in a fresh course.
+##
+## The result is held on the finished course, before the new one is built, so
+## the players see where they ended up rather than the announcement flashing
+## over a track they have not driven yet.
+func _finish_course(winner: int) -> void:
 	_racing = false
 	for car in _cars:
 		car.frozen = true
 		car.reset_motion()
+
+	_show_result("PLAYER %d WINS\n%s" % [winner + 1, _format_time(_race_time)])
+	await get_tree().create_timer(result_seconds).timeout
+	_show_result("")
 
 	_new_course(randi())
 	_start_after_countdown()
@@ -156,6 +172,8 @@ func _start_after_countdown() -> void:
 		await get_tree().create_timer(each).timeout
 
 	_show_count("GO")
+	_race_time = 0.0
+	_show_clock(_format_time(0.0))
 	for car in _cars:
 		car.frozen = false
 	_racing = true
@@ -171,6 +189,26 @@ func _start_after_countdown() -> void:
 func _show_count(text: String) -> void:
 	for label in _counts:
 		label.text = text
+
+
+func _show_clock(text: String) -> void:
+	for label in _clocks:
+		label.text = text
+
+
+func _show_result(text: String) -> void:
+	for label in _results:
+		label.text = text
+
+
+## Minutes only once there are any, so a short course reads "42.16" rather
+## than "0:42.16".
+func _format_time(seconds: float) -> String:
+	var minutes := int(seconds) / 60
+	var rest := fmod(seconds, 60.0)
+	if minutes > 0:
+		return "%d:%05.2f" % [minutes, rest]
+	return "%.2f" % rest
 
 
 ## Line the cars up side by side on the start line, facing down the course.
