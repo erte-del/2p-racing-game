@@ -101,6 +101,35 @@ from `self_clearance`. Clearance only rejects courses that fold too tightly; it
 never makes the generator fold them, so lowering it alone barely changes the
 result.
 
+## Surroundings
+
+The land around the circuit comes from "Low Poly Scenery Hills and Lake.blend",
+exported by `tools/export_scenery.py`.
+
+That blend is an island diorama about 2.8 units across: hills rising out of a
+lake that covers its whole footprint, with no flat ground anywhere in it. It
+cannot be the ground *under* a course - scaled up to cover the map its relief
+is around 190 m, and a course, which is generated flat and lifted so its lowest
+point rests at zero, would run through hillsides and under the water. So it
+rings the play area instead, ten copies at about 900 m, well clear of the 480 m
+half-extent a course is held inside. The ring is laid out from a fixed seed, so
+the horizon stays put while courses come and go.
+
+Two things about the asset needed handling, both of which look like rendering
+bugs but are not:
+
+- Its materials drive Base Color from a ColorRamp fed by a Geometry node, which
+  glTF cannot express, so everything exported plain white. The exporter bakes
+  each ramp down to one flat colour, which suits flat-shaded low poly anyway.
+- Each island's lake is a single plate most of its width. Left above ground
+  level, ten of them ring the horizon and read as a dark band across the sky,
+  seen edge-on from beneath. The islands are sunk far enough to put the
+  waterline under the ground plane.
+
+The other packs in that folder were measured and left alone: the trees are
+33k-356k triangles apiece and the rocks 8k with 4096px PBR maps, all photoreal
+and at odds with the flat-shaded car and road.
+
 ## Rails
 
 A low barrier runs down both edges of the road and across both ends. It stands
