@@ -147,7 +147,8 @@ func _finish_course(winner: int) -> void:
 		car.frozen = true
 		car.reset_motion()
 
-	_show_result("PLAYER %d WINS\n%s" % [winner + 1, _format_time(_race_time)])
+	_show_result("%s WINS\n%s" % [
+		_colour_name(_cars[winner].body_color), _format_time(_race_time)])
 	await get_tree().create_timer(result_seconds).timeout
 	_show_result("")
 
@@ -199,6 +200,31 @@ func _show_clock(text: String) -> void:
 func _show_result(text: String) -> void:
 	for label in _results:
 		label.text = text
+
+
+## Name a car by its paint, so the announcement follows body_color instead of
+## hard-coding which player drives which colour.
+func _colour_name(colour: Color) -> String:
+	if colour.s < 0.25:
+		if colour.v > 0.6:
+			return "WHITE"
+		return "GREY" if colour.v > 0.25 else "BLACK"
+	var hue := colour.h * 360.0
+	if hue < 15.0 or hue >= 330.0:
+		return "RED"
+	if hue < 45.0:
+		return "ORANGE"
+	if hue < 70.0:
+		return "YELLOW"
+	if hue < 160.0:
+		return "GREEN"
+	if hue < 200.0:
+		return "CYAN"
+	if hue < 265.0:
+		return "BLUE"
+	if hue < 300.0:
+		return "PURPLE"
+	return "PINK"
 
 
 ## Minutes only once there are any, so a short course reads "42.16" rather

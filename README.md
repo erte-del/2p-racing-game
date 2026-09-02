@@ -149,13 +149,18 @@ apart. A plain white band marks the start, at `Track.start_offset()`, with the
 grid placed `grid_setback` metres behind it; the start is deliberately not
 chequered so the two are never confused on an unfamiliar course.
 
-Crossing the line stops the clock, names the winner and holds both on screen
-for `result_seconds` (2 s) *before* the next course is built, so the players
+Crossing the line stops the clock, names the winner by the colour of their car
+and holds both on screen for `result_seconds` (2 s) *before* the next course is
+built, so the players
 see the result over the course they just drove rather than over a track they
 have not seen yet.
 
-The clock runs only while the cars are actually free, so neither the countdown
-nor the result screen is counted in a player's time.
+The clock sits in the bottom right of each half and runs only while the cars
+are actually free, so neither the countdown nor the result screen is counted in
+a player's time.
+
+The winner's name comes from their `body_color` rather than from which player
+they are, so recolouring a car renames it too.
 
 A countdown fills the preview pause rather than adding to it: three, two, one,
 GO, with the cars released on GO. It runs for the first course as well as every
