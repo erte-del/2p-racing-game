@@ -133,9 +133,35 @@ seam lands high up where the terrain is steep enough to hide it. The islands
 are enlarged to compensate, which also makes them overlap into a continuous
 range rather than a row of separate lumps.
 
-The other packs in that folder were measured and left alone: the trees are
-33k-356k triangles apiece and the rocks 8k with 4096px PBR maps, all photoreal
-and at odds with the flat-shaded car and road.
+## Trees
+
+The wood on the grass comes from "Low Poly trees pack.blend", exported by
+`tools/export_trees.py`.
+
+Each tree in that pack is a collection of loose parts - a trunk plus a pile of
+leaf planes or spheres - so the exporter joins each of the five collections
+into one mesh, standing on the origin, and drops the pack's rocks, lights and
+camera. They come out at 350-1440 triangles each with flat colour materials,
+so unlike the scenery nothing has to be baked down for glTF.
+
+`Trees` plants 900 of them by rejection sampling: a point anywhere in a 600 m
+disc - stopping short of the hills, or trees would grow out of the hillsides -
+thrown away if it lands within `road_margin` of the road, on the embankment
+under a raised section, or within `min_spacing` of a tree already standing.
+The embankment allowance grows with the height of the road there, matching the
+track's own batter, so trees keep off built-up ground instead of standing part
+way up its slope.
+
+The wood is replanted for every course, because the road it has to keep clear
+of moves, but it is not random run to run: the seed is taken from the shape of
+the course itself, so the same course is always planted the same way.
+
+They are decoration and carry no collision. A car that leaves the road is
+turned back by the rails long before it reaches one, and 900 collision shapes
+would cost far more than that corner case is worth. Each kind of tree is drawn
+as one MultiMesh, which is what makes a wood this size affordable in two
+split-screen views; the placements are also kept in an array, since a
+MultiMesh cannot be read back under the headless renderer.
 
 ## Rails
 
