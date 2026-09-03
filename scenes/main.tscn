@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://scenes/track/track.tscn" id="5_track"]
 [ext_resource type="Script" path="res://scripts/surroundings.gd" id="6_surround"]
 [ext_resource type="Script" path="res://scripts/trees.gd" id="7_trees"]
+[ext_resource type="Script" path="res://scripts/day_night.gd" id="8_daynight"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
 
@@ -39,6 +40,9 @@ environment = SubResource("Env_res")
 [node name="Sun" type="DirectionalLight3D" parent="." unique_id=1641107349]
 transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 0, 20, 0)
 shadow_enabled = true
+
+[node name="DayNight" type="Node" parent="."]
+script = ExtResource("8_daynight")
 
 [node name="Track" parent="." unique_id=1379249976 instance=ExtResource("5_track")]
 transform = Transform3D(1.0021281, 0, 0, 0, 1.0021281, 0, 0, 0, 1.0021281, 0, 0, 0)

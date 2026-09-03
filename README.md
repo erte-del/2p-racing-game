@@ -175,6 +175,38 @@ as one MultiMesh, which is what makes a wood this size affordable in two
 split-screen views; the placements are also kept in an array, since a
 MultiMesh cannot be read back under the headless renderer.
 
+## Day and night
+
+The world runs a day/night cycle from the moment the game starts:
+three minutes of daylight, a sunset, three minutes of night, a sunrise, and
+round again. The holds are what those times name - "night lasts three minutes"
+means three minutes of actual night, with the fades on either side of it rather
+than eaten out of it. The clock is not reset when a new course is generated, so
+a session that runs through several courses still gets to night.
+
+`scripts/day_night.gd` drives three things together, because moving one alone
+reads as a bug: the sun, the sky, and the ambient light. Dimming only the sun
+leaves a bright blue sky at midnight; dimming only the sky leaves black grass
+under a white sun.
+
+Each fade runs through a middle keyframe rather than straight from day to
+night, which is what puts an orange sun on the horizon on the way past instead
+of simply turning the daylight down. The sun drops to the horizon over the
+first half of a fade and the moon climbs over the second, swung round the
+compass so it does not pop back up where the sun went down.
+
+Night is moonlight, not darkness - the players still have to drive. The sky at
+night is nearly black, so ambient taken from it is nearly nothing; the
+environment's sky contribution is dropped below full so the ambient *colour*
+fills in, and that blue is what the track is lit by. `night_amount()` reports
+where the cycle stands, for anything that should react to nightfall later.
+
+`tools/checks/day_night_shot.gd` renders the world at four points in the cycle:
+
+```bash
+Godot --path . --script tools/checks/day_night_shot.gd -- /tmp/shots
+```
+
 ## Rails
 
 A low barrier runs down both edges of the road and across both ends. It stands
