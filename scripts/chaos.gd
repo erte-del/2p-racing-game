@@ -55,6 +55,16 @@ const NARROW_HALF_WIDTH := Vector2(3.6, 5.6)
 const WIDTH_SPREAD := Vector2(1.5, 4.5)
 const CHECKPOINTS := Vector2i(3, 6)
 
+## How far a car flies off a ramp, as powers of the speed and gravity rolls.
+## Measured off real flights rather than worked out: the launch is capped, so
+## range does not follow the clean projectile square of speed.
+const FLIGHT_BY_SPEED := 1.4
+const FLIGHT_BY_GRAVITY := 0.75
+## The least of the tuned hole a roll may be asked to clear. Below this the
+## hole stops being longer than the car, and a hole a car can lie across is
+## one it drives over without ever leaving the ground.
+const MIN_JUMP_GAP := 0.5
+
 ## The day, sped up. Both holds and the fades are rolled separately, so one
 ## race runs a long afternoon and the next flickers between dusk and dawn -
 ## but the fades stay long enough that it reads as a sky and not a light
@@ -69,12 +79,21 @@ var _track: Track
 
 ## The tuned values every roll is made against.
 var _base_car := {}
+## The tuned hole, which every roll is measured against for the same reason
+## the cars are: scaling whatever the last course left behind would compound.
+var _base_gap := 0.0
+## The speed and gravity this roll gave the cars, which is what decides how
+## far they can throw themselves off a ramp.
+var _speed_roll := 1.0
+var _gravity_roll := 1.0
 
 
 func _init(cars: Array[Car], day_night: DayNight, track: Track) -> void:
 	_cars = cars
 	_day_night = day_night
 	_track = track
+	if _track != null:
+		_base_gap = _track.jump_gap
 	if not _cars.is_empty():
 		var car := _cars[0]
 		_base_car = {
@@ -106,6 +125,10 @@ func _roll_the_cars(rng: RandomNumberGenerator) -> void:
 	var braking: float = maxf(speed, BRAKING_FLOOR)
 	var gravity := _spread(rng, GRAVITY_SCALE)
 	var slipstream := _spread(rng, SLIPSTREAM_BONUS)
+	# Kept, because the course is rolled next and the hole in a jump has to be
+	# one these cars can clear.
+	_speed_roll = speed
+	_gravity_roll = gravity
 
 	for car in _cars:
 		car.max_speed = _base_car["max_speed"] * speed
@@ -134,6 +157,11 @@ func _roll_the_course(rng: RandomNumberGenerator) -> void:
 	_track.wide_half_width = (_track.narrow_half_width
 			+ _spread(rng, WIDTH_SPREAD))
 	_track.checkpoint_count = rng.randi_range(CHECKPOINTS.x, CHECKPOINTS.y)
+	# The hole a jump leaves is the one thing about a course that has to be
+	# measured against the cars rather than rolled freely. A world of slow,
+	# heavy cars cannot throw them as far, and a hole they cannot clear flat
+	# out is not a risk, it is a wall across the road.
+	_track.jump_gap = _base_gap * jump_gap_scale(_speed_roll, _gravity_roll)
 
 
 func _roll_the_sky(rng: RandomNumberGenerator) -> void:
@@ -146,6 +174,16 @@ func _roll_the_sky(rng: RandomNumberGenerator) -> void:
 	# middle of a sunset.
 	var cycle := day + night + 2.0 * fade
 	_day_night.retime(day, night, fade, rng.randf_range(0.0, cycle))
+
+
+## How much of the tuned hole cars rolled this way can be asked to clear.
+##
+## Never more than the tuned one: a faster world could clear a longer hole,
+## but the road to come down on is a fixed length, and a jump that got wider
+## every time chaos rolled a quick car would eventually outrun its landing.
+static func jump_gap_scale(speed: float, gravity: float) -> float:
+	var reach := pow(speed, FLIGHT_BY_SPEED) / pow(gravity, FLIGHT_BY_GRAVITY)
+	return clampf(reach, MIN_JUMP_GAP, 1.0)
 
 
 ## The ranges are written as vectors so each one reads as its two ends on a

@@ -70,6 +70,27 @@ signal regenerated
 ## own length.
 @export var jump_keep_out := 12.0
 
+@export_group("Jumps")
+## A ramp, a hole where there is no road, and a long run to come down on.
+## Jumps go after a level straight of at least `jump_run_up`, which is the run
+## up, and there are at most `max_jumps` to a course.
+@export var jumps_enabled := true
+@export var jump_run_up := 45.0
+@export var max_jumps := 3
+## Metres of ramp and how high it lifts the road, and how the rise is spread
+## along it - above one curves the foot into the road and leaves the steepest
+## part at the lip, which is where the angle does the work.
+@export var ramp_length := 15.0
+@export var ramp_rise := 5.0
+@export var ramp_curve := 1.5
+## The hole, and the road to come down on after it. The hole has to be short
+## enough that a car flat out clears it and longer than the car, which is
+## 4.87 m: a hole a car can lie across is one it drives over without ever
+## leaving the ground. Chaos shortens it for a world where the cars are slow
+## or heavy, and the check drives a car at every roll to make sure.
+@export var jump_gap := 17.0
+@export var landing_length := 90.0
+
 @export_group("Barriers")
 ## Rows of barriers stood across part of the road on the long straights. They
 ## never block all of it: a row is narrowed until the gap it leaves is wide
@@ -222,6 +243,14 @@ func generate(track_seed: int) -> void:
 		"clearance": self_clearance,
 		"narrow_half_width": narrow_half_width,
 		"wide_half_width": wide_half_width,
+		"jump_chance": 0.45 if jumps_enabled else 0.0,
+		"jump_run_up": jump_run_up,
+		"max_jumps": max_jumps,
+		"ramp_length": ramp_length,
+		"ramp_rise": ramp_rise,
+		"ramp_curve": ramp_curve,
+		"jump_gap": jump_gap,
+		"landing_length": landing_length,
 	}
 
 	var layout: TrackLayout = null

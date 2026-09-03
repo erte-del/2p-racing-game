@@ -694,13 +694,23 @@ same jump was cleared at 19.5 m/s and 38.8 m/s and impassable at 25. The ramp
 comes up out of the road as a curve (`ramp_curve`, 1.5), leaving the steepest
 part at the lip where the angle actually does any work.
 
-The hole is pinned from both sides. It has to be short enough that a car at the
-slowest speed the game can roll still sails over it, since falling in costs a
-respawn and a jump nobody can clear is not a risk but a wall. And it has to be
-a good deal longer than the car, which is 4.87 m: a hole a car can lie across
-is one it drives over without ever leaving the ground. 10 m sits between those.
+The hole is 17 m, and it is the one thing about a course measured against the
+cars rather than rolled freely. A hole a car cannot clear flat out is not a
+risk, it is a wall across the road - and chaos rolls worlds where the cars are
+slow and heavy and cannot throw themselves nearly as far. So `Chaos` shortens
+the hole for the world it just rolled, by how far cars of that speed under that
+gravity actually fly. It only ever shortens it: a quicker world could clear a
+longer hole, but the road to come down on is a fixed length, and a hole that
+grew every time chaos rolled a fast car would outrun its own landing. The floor
+is half the tuned hole, below which it stops being longer than the car - and a
+hole a car can lie across is one it drives over without ever leaving the ground.
 
-The landing is long - 76 m - because the range of a jump is decided by the speed
+How far a car flies is taken as powers of the speed and gravity rolls
+(`FLIGHT_BY_SPEED`, `FLIGHT_BY_GRAVITY`), fitted to real flights rather than
+worked out: the launch is capped, so range does not follow the clean projectile
+square of speed.
+
+The landing is long - 90 m - because the range of a jump is decided by the speed
 it is taken at. The same ramp puts a car down 15 m past the lip at the slowest
 the game rolls and 79 m past it at the fastest, and the road has to reach the
 far end of that.
@@ -716,17 +726,20 @@ checkpoint.
 `tools/checks/jump_flight.gd` drives a car off a real ramp at every corner of
 what chaos can roll - speed from 0.78 to 1.7 of tuned, gravity from 0.65 to
 1.4, and both at once - and asks the world what it came down on rather than
-working it out from the curve:
+working it out from the curve. Each roll is given the hole that roll would
+actually be built, since testing every one of them against the tuned hole would
+be testing a course the game never lays down:
 
 ```
 Godot --path . --headless --script tools/checks/jump_flight.gd
 ```
 
-Shortest flight 14.6 m against a 10 m hole, longest 79.1 m against 86 m of road
-to come down on, and no case that crosses without leaving the ground. It then
-asks the opposite question, because a jump every car clears whatever it does is
-scenery rather than a risk: a car crawling at 8.8 m/s comes down 5.6 m short and
-ends up on the grass.
+At tuned speed and gravity that is a 17.5 m hole cleared by 10 m; at the
+slowest, heaviest roll chaos can produce it is a 10 m hole cleared by 4.6 m.
+The longest flight is 79.1 m against 107.5 m of road to come down on, and no
+roll crosses without leaving the ground. It then asks the opposite question,
+because a jump every car clears whatever it does is scenery rather than a risk:
+a car crawling at 8.8 m/s comes down 5.6 m short and ends up on the grass.
 
 `tools/checks/jump_shot.gd` looks at one - the top car back on the run up where
 the choice to commit is made, the bottom one held in the air over the hole,

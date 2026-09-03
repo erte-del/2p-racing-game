@@ -33,54 +33,64 @@ func _init() -> void:
 	var tuned_speed := car.max_speed
 	var tuned_gravity := car.gravity
 
-	var course := _a_course_with_a_jump(track)
-	if course < 0:
-		print("  no course in the first 60 had a jump on it")
-		quit(1)
-		return
-	var jump := _the_jump(track)
-	var lip: float = jump.start_offset + track.layout().ramp_length
-	# Measured off the road itself rather than taken from the tunable: what a
-	# car has to clear is the missing cross-sections, and those land on the
-	# sampling grid whatever the number says.
-	var hole := _measure_the_hole(track, jump)
-	print("course %d: ramp %.0f-%.0f m rising %.1f m, %.1f m of hole, landing to %.0f m"
-		% [course, jump.start_offset, lip, track.layout().ramp_rise,
-			hole, jump.end_offset])
+	var tuned_gap: float = track.jump_gap
+	print("tuned hole %.1f m, ramp %.0f m rising %.1f m, landing %.0f m"
+		% [tuned_gap, track.ramp_length, track.ramp_rise, track.landing_length])
+	print("")
 
 	var faults := 0
 	var shortest := INF
 	var longest := 0.0
+	var roof := 0.0
 	for gravity in GRAVITIES:
 		for speed in SPEEDS:
 			car.max_speed = tuned_speed * SPEEDS[speed]
 			car.gravity = tuned_gravity * GRAVITIES[gravity]
+			# The hole this roll would actually be given. Chaos shortens it
+			# for a world of slow or heavy cars, so testing every roll against
+			# the tuned hole would be testing a course the game never builds.
+			# A boost is not a roll - it is something a player picks up inside
+			# one - so it does not shorten anything.
+			var roll: float = minf(SPEEDS[speed], 1.7)
+			track.jump_gap = tuned_gap * Chaos.jump_gap_scale(
+				roll if speed != "with a boost" else 1.0, GRAVITIES[gravity])
+			var course := _a_course_with_a_jump(track)
+			if course < 0:
+				print("  no course in the first 60 had a jump on it")
+				faults += 1
+				continue
+			var jump := _the_jump(track)
+			var hole := _measure_the_hole(track, jump)
+
 			var flight: Array = await _fly(main, track, car, jump)
 			var flown: float = flight[0]
 			var landed_on: String = flight[1]
 			var flew: bool = flight[2]
-			shortest = minf(shortest, flown)
+			shortest = minf(shortest, flown - hole)
 			longest = maxf(longest, flown)
+			roof = maxf(roof, hole + track.landing_length)
 			var wrong := ""
 			if not flew:
 				wrong = "   NEVER LEFT THE GROUND"
 			elif landed_on != "road":
 				wrong = "   FELL IN"
-			print("  %-14s %-14s off at %5.1f m/s, flew %5.1f m, down on the %s%s"
-				% [gravity + " gravity", speed, car.max_speed, flown, landed_on,
-					wrong])
+			print("  %-14s %-14s %5.1f m/s over a %4.1f m hole, flew %5.1f m, down on the %s%s"
+				% [gravity + " gravity", speed, car.max_speed, hole, flown,
+					landed_on, wrong])
 			if wrong != "":
 				faults += 1
+	track.jump_gap = tuned_gap
+	var jump := _the_jump(track) if _a_course_with_a_jump(track) >= 0 else null
+	var hole := _measure_the_hole(track, jump) if jump != null else tuned_gap
 
 	# The two ends the landing has to cover. A car that comes up short falls
 	# in; one that outflies the landing comes down on whatever the course does
 	# next, which on the far side of a jump is a corner.
-	var landing: float = hole + track.layout().landing_length
-	print("shortest flight %.1f m against a %.1f m hole"
-		% [shortest, hole])
+	print("")
+	print("the tightest roll cleared its own hole by %.1f m" % shortest)
 	print("longest flight %.1f m against %.1f m of road to come down on"
-		% [longest, landing])
-	if longest > landing:
+		% [longest, roof])
+	if longest > roof:
 		print("  a car flat out flies past the end of the landing")
 		faults += 1
 
