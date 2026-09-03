@@ -21,17 +21,19 @@ func _init() -> void:
 
 	# Far enough apart that the camera has swung well round, and that the title
 	# should be leaning the other way.
-	for shot in [["a", 0.65], ["b", 22.0], ["night", 22.0]]:
-		if shot[0] == "night":
-			var day_night: Node = world.get_node("DayNight")
-			day_night._time = 260.0
-			day_night._apply(day_night._nightness_at(260.0))
+	# The backdrop's own clock, which in attract mode runs a 25 second phase.
+	var day_night: Node = world.get_node("DayNight")
+	for shot in [["a", 0.65, 0.0], ["b", 22.0, 0.0],
+			["evening", 22.0, 37.5], ["night", 22.0, 60.0]]:
+		day_night._time = shot[2]
+		day_night._apply(day_night._nightness_at(shot[2]))
 		menu._elapsed = shot[1]
 		await process_frame
 		await process_frame
 		var to_centre: Vector3 = camera.global_position - world.grid_centre()
-		print("t=%5.2f  tilt %+.2f deg  bob %+.2f px  camera %.1f m out, bearing %+.0f deg"
-			% [shot[1], rad_to_deg(title.rotation), title.position.y,
+		print("t=%5.2f  nightness %.2f  tilt %+.2f deg  bob %+.2f px  camera %.1f m out, bearing %+.0f deg"
+			% [shot[1], day_night.night_amount(),
+				rad_to_deg(title.rotation), title.position.y,
 				Vector2(to_centre.x, to_centre.z).length(),
 				rad_to_deg(atan2(to_centre.x, to_centre.z))])
 		root.get_texture().get_image().save_png("%s/menu_%s.png" % [out, shot[0]])

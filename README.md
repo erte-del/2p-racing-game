@@ -28,8 +28,13 @@ Behind the title is not a picture but the game itself: a real instance of
 day/night cycle, and the two cars parked on the grid. The camera turns slowly
 about the point midway between them, a full circuit taking a minute and a half,
 which reads as drifting rather than as a turntable. Being the real scene means
-the menu can never go stale - and a player who sits on it long enough watches
-the sun go down and the headlights come on.
+the menu can never go stale - and a player who sits on it watches the sun go
+down and the headlights come on.
+
+The cycle is wound right in for the menu: `attract_phase_seconds` (25 s) gives
+day, evening, night, morning, round again in a hundred seconds, where the race
+runs six minutes to a cycle. Nobody sits through three minutes of daylight
+waiting to see whether a title screen does anything.
 
 Attract mode does not merely hide the race. The split screen is switched off
 rather than made invisible, because a SubViewport set to update always goes on

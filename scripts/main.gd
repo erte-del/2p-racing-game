@@ -50,6 +50,10 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 ## The world is built and the cars are placed, but nothing is raced: no
 ## countdown, no clock, no split screen, and no HUD over a title.
 @export var attract_mode := false
+## How long each part of the day lasts while the menu is up: day, then the
+## fade, then night, then the fade back. The playing cycle is six minutes,
+## which nobody is going to sit through on a title screen.
+@export var attract_phase_seconds := 25.0
 
 @export_group("Headlights")
 ## How far into nightfall the headlights start to come on, and where they reach
@@ -126,6 +130,9 @@ func _ready() -> void:
 ## goes on rendering behind a hidden container, and rendering the course twice
 ## more for nobody would cost as much as the menu itself.
 func _dress_for_the_title_screen() -> void:
+	_day_night.day_seconds = attract_phase_seconds
+	_day_night.transition_seconds = attract_phase_seconds
+	_day_night.night_seconds = attract_phase_seconds
 	for car in _cars:
 		car.frozen = true
 	for overlay in [$Split, $Hud, $Progress, $Countdown, $Result]:
