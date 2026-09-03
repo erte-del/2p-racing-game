@@ -209,6 +209,24 @@ static func build(
 	return features
 
 
+## Take a plan that was written down rather than planned.
+##
+## The generator passes are skipped entirely; what a track file says is on the
+## road is what is on it. `faults()` still applies, so an authored course is
+## checked for a way past every barrier and for that way being reachable from
+## the last, exactly as a generated one is - the difference is that a
+## generated course would have been rejected and rerolled, and an authored one
+## is told what is wrong with it.
+static func adopt(
+	written: Array[Placement], tuning: Dictionary = {}
+) -> TrackFeatures:
+	var features := TrackFeatures.new()
+	for key in tuning:
+		features.set(key, tuning[key])
+	features.placements = written
+	return features
+
+
 ## Every placement of one kind, for building and for debugging.
 func of_kind(kind: int) -> Array[Placement]:
 	var out: Array[Placement] = []

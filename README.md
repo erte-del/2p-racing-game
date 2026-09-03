@@ -787,6 +787,70 @@ Godot --path . --headless --script tools/checks/tilt_trace.gd
 Level road reads 0.0 degrees, the ramp +24.6, the fall -29.8, and a 2.9 degree
 climb reads +3.3.
 
+## Laid-out tracks
+
+Alongside the endless course there are tracks written down by hand. A track
+file is a GDScript file that describes itself by building itself:
+
+```gdscript
+extends TrackDefinition
+
+func describe() -> void:
+	track_name = "First Light"
+	straight(70.0)
+	corner(55.0, 46.0)      # degrees, radius; positive turns right
+	straight(30.0)
+	pad(0.0)                # a boost pad, in the middle of the road
+	straight(85.0)
+```
+
+There is no offset argument anywhere in it. Furniture goes down at the
+distance the road has reached, so a track file reads as a description of
+driving the track rather than as a table of numbers with distances in the
+first column. Splitting a piece to make room costs nothing: two straights in a
+row sample exactly as one straight of their combined length.
+
+What comes out is the same `Piece` chain the generator produces and the same
+`Placement` list the planner produces. `TrackLayout.adopt()` and
+`TrackFeatures.adopt()` take them, and everything downstream - the road mesh,
+the curve, the offsets, the rails, the embankment, the checks - neither knows
+nor cares that a track was written down instead of rolled. The three numbers a
+track file is not allowed to choose are the sampling step and the ramp, hole
+and landing of a jump: `Track` sets those before calling `describe()`, so
+every jump in the game is the same jump and a player who has cleared one knows
+what the next one asks.
+
+Nothing rejects a hand-made track. A generated course is one of thousands and
+a bad one is thrown away for the next; a hand-made one is the only one there
+is, and refusing to build it would leave whoever wrote it with a blank screen
+and no idea why. `TrackLayout.problems()` says what a generated course would
+have been rerolled for - passing too close to itself, running off the ground,
+not enough straight for the grid or the flag - and `TrackFeatures.faults()`
+still holds authored barriers to the same two rules as generated ones: there
+is a way past every row, and it can be reached from the way past the row
+before it. Both of those caught real mistakes in the first track.
+
+`tools/checks/track_check.gd` builds a track and says what is wrong with it:
+
+```
+Godot --path . --headless --script tools/checks/track_check.gd -- res://tracks/01_first_light.gd
+```
+
+`tools/checks/track_map.gd` draws it from above, which is the answer to "is
+that hairpin where I think it is" - the question authoring a track is mostly
+made of:
+
+```
+Godot --path . --script tools/checks/track_map.gd -- /tmp/shots
+```
+
+And `tools/drive_track.gd` drives one, in the game as it stands - two cars and
+a split screen, until solo mode exists:
+
+```
+Godot --path . --script tools/drive_track.gd
+```
+
 ## Phases
 
 - [x] **0** — repo, Godot project, `.gitignore`

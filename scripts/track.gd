@@ -70,6 +70,12 @@ signal regenerated
 ## own length.
 @export var jump_keep_out := 12.0
 
+@export_group("Laid out")
+## A track written down rather than rolled. When this is set, generate()
+## builds it and ignores the seed it was given: everything about the shape of
+## the course comes from the file instead.
+@export_file("*.gd") var track_file := ""
+
 @export_group("Jumps")
 ## A ramp, a hole where there is no road, and a long run to come down on.
 ## Jumps go after a level straight of at least `jump_run_up`, which is the run
@@ -157,6 +163,8 @@ signal regenerated
 
 var _layout: TrackLayout
 var _features: TrackFeatures
+## The track this was laid out from, if it was laid out rather than rolled.
+var _definition: TrackDefinition
 ## Cross-sections of the finished road.
 var _points: PackedVector3Array
 var _rights: PackedVector3Array
@@ -200,6 +208,11 @@ func features() -> TrackFeatures:
 	return _features
 
 
+## The track this was laid out from, or null if it was rolled from a seed.
+func definition() -> TrackDefinition:
+	return _definition
+
+
 ## Half-width of the road at a distance along the course.
 func half_width_at(offset: float) -> float:
 	if _half_widths.is_empty():
@@ -228,11 +241,44 @@ func piece_summary() -> String:
 ## Lay out a fresh course. The seed is advanced until one is found that neither
 ## crosses itself nor runs off the ground, so a bad roll costs a retry rather
 ## than producing a broken track.
-func generate(track_seed: int) -> void:
+## Build a track that was laid out by hand.
+##
+## The definition is handed the numbers it is not allowed to choose - how
+## finely the road is sampled, and how long a jump is - and then asked to
+## describe itself. What comes back is the same Piece chain and the same
+## Placement list the generator and the planner produce, so everything below
+## this point is the road being built, exactly as it is for a rolled course.
+func lay_out(definition: TrackDefinition) -> void:
 	if _asphalt == null:
 		_build_materials()
 
-	var tuning := {
+	definition.step = sample_step
+	definition.ramp_length = ramp_length
+	definition.jump_gap = jump_gap
+	definition.landing_length = landing_length
+	definition.describe()
+	_definition = definition
+
+	_layout = TrackLayout.adopt(definition.pieces, _layout_tuning())
+	_adopt(_layout)
+	_build_curve()
+	_build_road()
+	_build_embankment()
+	_build_finish_line()
+	_build_start_line()
+	_build_checkpoints()
+	_build_rails()
+	_features = TrackFeatures.adopt(definition.placements, {
+		"clear_lane": clear_lane,
+		"dodge_radius": dodge_radius,
+	})
+	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
+	regenerated.emit()
+
+
+## Everything about the shape of a course that is not the course itself.
+func _layout_tuning() -> Dictionary:
+	return {
 		"step": sample_step,
 		"min_length": min_course_length,
 		"max_length": max_course_length,
@@ -253,6 +299,20 @@ func generate(track_seed: int) -> void:
 		"landing_length": landing_length,
 	}
 
+
+func generate(track_seed: int) -> void:
+	if not track_file.is_empty():
+		var written := load(track_file) as GDScript
+		if written == null:
+			push_error("Track: %s is not a track" % track_file)
+			return
+		lay_out(written.new())
+		return
+
+	if _asphalt == null:
+		_build_materials()
+
+	var tuning := _layout_tuning()
 	var layout: TrackLayout = null
 	var used_seed := track_seed
 	for attempt in max_attempts:
@@ -265,6 +325,7 @@ func generate(track_seed: int) -> void:
 		return
 
 	_layout = layout
+	_definition = null
 	_adopt(layout)
 	_build_curve()
 	_build_road()

@@ -148,6 +148,45 @@ static func build(track_seed: int, tuning: Dictionary = {}) -> TrackLayout:
 	return layout
 
 
+## Take a course that was written down rather than rolled.
+##
+## Nothing is rejected here. A generated course is one of thousands and a bad
+## one is thrown away for the next; a hand-made course is the only one there
+## is, and refusing to build it would leave whoever wrote it with a blank
+## screen and no idea why. `problems()` says what is wrong with it instead.
+static func adopt(
+	written: Array[Piece], tuning: Dictionary = {}
+) -> TrackLayout:
+	var layout := TrackLayout.new()
+	for key in tuning:
+		layout.set(key, tuning[key])
+	layout.pieces = written
+	layout._sample()
+	layout._centre()
+	layout._smooth_widths()
+	return layout
+
+
+## What is wrong with this course, for whoever is laying one out by hand. The
+## same two things the generator rejects a seed for, said out loud instead.
+func problems() -> PackedStringArray:
+	var found := PackedStringArray()
+	if pieces.is_empty():
+		found.append("the course has no pieces in it")
+		return found
+	if _crosses_itself():
+		found.append("the course passes within %.0f m of itself" % clearance)
+	if not _fits():
+		found.append("the course does not fit inside %.0f m of ground" % extent)
+	if pieces[0].kind != STRAIGHT or pieces[0].length < apron:
+		found.append("the course opens with %.0f m of straight; the grid needs %.0f"
+			% [pieces[0].length, apron])
+	if pieces[-1].kind != STRAIGHT or pieces[-1].length < apron:
+		found.append("the course ends with %.0f m of straight; the finish needs %.0f"
+			% [pieces[-1].length, apron])
+	return found
+
+
 ## Distance from the start line to the finish line.
 func length() -> float:
 	return maxf(float(points.size() - 1), 0.0) * step
