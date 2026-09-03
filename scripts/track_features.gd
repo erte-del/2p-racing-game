@@ -87,6 +87,9 @@ var pad_lane_limit := 0.6
 ## free boost for being reset is not a reward anyone earned.
 var keep_out := PackedFloat32Array()
 var keep_out_radius := 20.0
+## Stretches of the course that are spoken for before the planner starts - the
+## jumps. Nothing is built on one.
+var reserved: Array[Vector2] = []
 
 ## --- obstacles ---
 ##
@@ -284,9 +287,9 @@ func _planned_clear(layout: TrackLayout, at: float) -> float:
 	return clear_lane * plan_clearance / maxf(layout.half_width_at(at), 0.001)
 
 
-## True if this stretch of course belongs to a fork.
+## True if this stretch of course is spoken for - by a fork, or by a jump.
 func _is_claimed(from: float, to: float) -> bool:
-	for span in _claimed:
+	for span in _claimed + reserved:
 		if from < span.y and span.x < to:
 			return true
 	return false
@@ -535,6 +538,11 @@ func _fork_room(piece: TrackLayout.Piece, radius: float) -> Vector2:
 		var band := Vector2(mark - radius, mark + radius)
 		if band.y > from and band.x < to:
 			bands.append(band)
+	bands.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x)
+
+	for span in reserved:
+		if span.y > from and span.x < to:
+			bands.append(span)
 	bands.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x)
 
 	var best := Vector2.ZERO

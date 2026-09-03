@@ -647,6 +647,95 @@ of road:
 Godot --path . --script tools/checks/barrier_shot.gd -- /tmp/shots
 ```
 
+## Jumps
+
+A jump is a fourth kind of track piece alongside straights, corners and
+climbs, not a prop laid on the road: a ramp, a hole where there is no road at
+all, and a long flat run to come down on. It is height neutral - the ramp
+lifts the road and the landing puts it back - so a jump never moves the course
+up or down and the height budget a climb is checked against is untouched.
+
+Jumps go *after* a straight rather than in place of one, and only after a level
+straight of at least `jump_run_up` (45 m). The straight is the run up: a car
+reaches the ramp with the speed it chose to carry rather than whatever it
+happened to have coming out of the corner behind it, and taking off from a
+grade would throw the car at an angle nothing else on the course accounts for.
+At most `max_jumps` (3) to a course.
+
+`TrackLayout` now records `road_present` for every cross-section, and `Track`
+skips the asphalt, the kerbs, the rails and the embankment wherever it is
+false. The centreline itself carries on across the hole, on the line the road
+would take if it were there, so progress, places and the rival arrow are all
+unaffected by a car being in mid air. The ramp and the hole are snapped to the
+sampling grid before anything is built from them: a hole of six and a half
+metres sampled every two and a half comes out as ten metres of missing road,
+which is a very different jump from the one the numbers describe.
+
+Three things about the car had to change, and each was found by driving one at
+a real ramp rather than by reasoning about it.
+
+**A car on the ground has no vertical speed of its own** - it follows the road,
+because `move_and_slide` slides it along the surface. That is right everywhere
+except where the road runs out, and a car that leaves a ramp travelling flat
+does not jump, it falls off the end. So the climb the road is giving it is
+measured while it is still on the ground and handed to it as it goes.
+
+**That climb has to be remembered, not read off the last step.** The car is a
+single long box, so as it crests a lip the front of it loses the road while the
+back is still on the ramp, and for a tenth of a second it settles rather than
+climbs. Taking the climb from the last step alone reads that settling as the
+launch and throws the car at the ground - which is exactly what it did. It is
+kept as a peak that fades at `climb_memory` instead.
+
+**The ramp cannot meet the road at its full angle.** A wedge makes a crease,
+and a car driving at one catches its front edge on it: at some speeds it
+climbed a little way and then jammed there and stopped dead, which is how the
+same jump was cleared at 19.5 m/s and 38.8 m/s and impassable at 25. The ramp
+comes up out of the road as a curve (`ramp_curve`, 1.5), leaving the steepest
+part at the lip where the angle actually does any work.
+
+The hole is pinned from both sides. It has to be short enough that a car at the
+slowest speed the game can roll still sails over it, since falling in costs a
+respawn and a jump nobody can clear is not a risk but a wall. And it has to be
+a good deal longer than the car, which is 4.87 m: a hole a car can lie across
+is one it drives over without ever leaving the ground. 7.5 m sits between those.
+
+The landing is long - 70 m - because the range of a jump is decided by the speed
+it is taken at. The same ramp puts a car down 11 m past the lip at the slowest
+the game rolls and 67 m past it at the fastest, and the road has to reach the
+far end of that.
+
+Nothing else is built on a jump. The pads and barriers keep off the stretch a
+jump covers, plus `jump_keep_out` (12 m) either side, and a checkpoint that
+would land on one is moved to whichever end of it is nearer - a car put back on
+the road at a ramp would go over the edge with no run up, and one put back in
+the hole would drop straight through. Falling in is recovered the way falling
+off has always been recovered: the reset that puts a car back at its last
+checkpoint.
+
+`tools/checks/jump_flight.gd` drives a car off a real ramp at every corner of
+what chaos can roll - speed from 0.78 to 1.7 of tuned, gravity from 0.65 to
+1.4, and both at once - and asks the world what it came down on rather than
+working it out from the curve:
+
+```
+Godot --path . --headless --script tools/checks/jump_flight.gd
+```
+
+Shortest flight 10.8 m against a 7.5 m hole, longest 67.0 m against 77.5 m of
+road to come down on, and no case that crosses without leaving the ground. It
+then asks the opposite question, because a jump every car clears whatever it
+does is scenery rather than a risk: a car crawling at 8.8 m/s never leaves the
+ground and ends up on the grass.
+
+`tools/checks/jump_shot.gd` looks at one - the top car back on the run up where
+the choice to commit is made, the bottom one held in the air over the hole,
+which is the only way to see what is under a car in mid jump:
+
+```
+Godot --path . --script tools/checks/jump_shot.gd -- /tmp/shots
+```
+
 ## Phases
 
 - [x] **0** — repo, Godot project, `.gitignore`

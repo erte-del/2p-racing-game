@@ -66,6 +66,9 @@ signal regenerated
 @export var min_pad_spacing := 60.0
 ## How far a pad keeps from the grid, the finish line and every checkpoint.
 @export var pad_keep_out := 20.0
+## How far anything built on the road keeps from a jump, on top of the jump's
+## own length.
+@export var jump_keep_out := 12.0
 
 @export_group("Barriers")
 ## Rows of barriers stood across part of the road on the long straights. They
@@ -137,6 +140,9 @@ var _features: TrackFeatures
 var _points: PackedVector3Array
 var _rights: PackedVector3Array
 var _half_widths: PackedFloat32Array
+## Whether there is road at each cross-section. False across the hole in a
+## jump, where the asphalt, the kerbs, the rails and the embankment all stop.
+var _road_present: PackedByteArray
 
 var _asphalt: StandardMaterial3D
 var _kerb: StandardMaterial3D
@@ -271,6 +277,7 @@ func _build_furniture(features_seed: int) -> void:
 		"fork_enabled": fork_enabled,
 		"fork_min_straight": fork_min_straight,
 		"fork_divider": Vector2(fork_divider_min, fork_divider_max),
+		"reserved": jump_spans(),
 	})
 	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
 
@@ -282,6 +289,7 @@ func _adopt(layout: TrackLayout) -> void:
 	for p in layout.points:
 		_points.append(p + Vector3.UP * road_height)
 	_half_widths = layout.half_widths
+	_road_present = layout.road_present
 
 	var count := _points.size()
 	_rights = PackedVector3Array()
@@ -324,6 +332,12 @@ func _build_road() -> void:
 	for i in count - 1:
 		var j := i + 1
 		var run_next := run + sample_step
+		# The run along the course still advances across a hole, so the road
+		# on the far side of a jump carries on with the texture the road
+		# before it ended on rather than starting again from nothing.
+		if not _has_road(i, j):
+			run = run_next
+			continue
 
 		var pi := _points[i]
 		var pj := _points[j]
@@ -368,6 +382,15 @@ func _strip(
 		st.add_vertex(corner[0])
 
 
+## Whether there is road between two cross-sections. Both ends have to have
+## it: a quad from the lip of a ramp to the first sample of thin air would
+## bridge the hole the jump is made of.
+func _has_road(i: int, j: int) -> bool:
+	if _road_present.size() != _points.size():
+		return true
+	return _road_present[i] != 0 and _road_present[j] != 0
+
+
 ## Where the race ends, as a distance along the course.
 func finish_offset() -> float:
 	return maxf(length() - finish_setback, 0.0)
@@ -384,8 +407,39 @@ func checkpoint_offsets() -> PackedFloat32Array:
 	var out := PackedFloat32Array()
 	var span := finish_offset() - start_offset()
 	for i in checkpoint_count:
-		out.append(start_offset() + span * float(i + 1) / float(checkpoint_count + 1))
+		var at := start_offset() + span * float(i + 1) / float(checkpoint_count + 1)
+		out.append(_off_the_jumps(at))
 	return out
+
+
+## The stretches of course a jump takes up, with room either side, as spans of
+## offset. Nothing else is built on one: a pad in mid air pays nobody, and a
+## barrier standing on a ramp is a wall at the one place a car has to be flat
+## out.
+func jump_spans() -> Array[Vector2]:
+	var spans: Array[Vector2] = []
+	if _layout == null:
+		return spans
+	for piece in _layout.pieces:
+		if piece.kind == TrackLayout.JUMP:
+			spans.append(Vector2(
+				piece.start_offset - jump_keep_out,
+				piece.end_offset + jump_keep_out))
+	return spans
+
+
+## Move an offset clear of any jump, to whichever end of it is nearer.
+##
+## A respawn is the one thing that cannot simply be left off a jump: they are
+## spread evenly along the course by count, so where they land is not a
+## choice. Putting a car back on the road at a ramp would send it over the
+## edge with no run up, and putting one back in the hole would drop it
+## straight through.
+func _off_the_jumps(at: float) -> float:
+	for span in jump_spans():
+		if at > span.x and at < span.y:
+			return span.x if at - span.x < span.y - at else span.y
+	return at
 
 
 ## Paint a chequered band across the road at the finish, so the players can
@@ -487,6 +541,8 @@ func _build_rails() -> void:
 	for side: float in [-1.0, 1.0]:
 		for i in count - 1:
 			var j := i + 1
+			if not _has_road(i, j):
+				continue
 			var outer_i := _half_widths[i] + kerb_width
 			var outer_j := _half_widths[j] + kerb_width
 			var ri := _rights[i] * side
@@ -545,6 +601,8 @@ func _build_embankment() -> void:
 
 	for i in count - 1:
 		var j := i + 1
+		if not _has_road(i, j):
+			continue
 		# Only where the road actually stands above the ground.
 		if _points[i].y < 0.15 and _points[j].y < 0.15:
 			continue

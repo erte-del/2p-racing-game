@@ -43,6 +43,24 @@ const OBSTACLE_GROUP := &"obstacle"
 @export var tight_turn_radius := 6.5
 @export var fast_turn_radius := 16.0
 @export var gravity := 24.0            ## m/s^2, tuned for arcade feel
+## How much of the climb a car was making when it ran out of road it carries
+## into the air. One is what the ramp actually gave it; anything less reads as
+## the car being dragged back down over the lip rather than thrown off it.
+@export_range(0.0, 1.5) var launch := 1.0
+## The fastest a lip may throw a car upwards, in m/s. A ramp taken at chaos
+## speed can work out to a great deal more than the ramp looks like it should
+## be worth, and a car pitched that far up comes down long after the road it
+## was aimed at.
+@export var max_launch := 12.0
+## How quickly the climb a car is carrying is forgotten, in m/s per second.
+##
+## The car is a single long box, so as it crests a lip the front of it loses
+## the road while the back is still on the ramp, and for a tenth of a second
+## it settles rather than climbs. Taking the climb from the last step alone
+## would read that settling as the launch and throw the car at the ground.
+## What it left the ramp with is the climb the ramp was giving it a moment
+## before, which is what this remembers.
+@export var climb_memory := 6.0
 
 @export_group("Slipstream")
 ## Tucking in behind the other car gives a top-speed boost, so a trailing
@@ -146,6 +164,10 @@ var _boost := 0.0
 var _boost_hold := 0.0
 ## Seconds left before another obstacle can cost anything.
 var _hit_recovery := 0.0
+## How fast the car was climbing on the last step it had road under it, and
+## the height it was at, which is what that is worked out from.
+var _climb := 0.0
+var _last_height := 0.0
 ## Visual-only wheel state.
 var _wheel_steer := 0.0
 var _wheel_roll := 0.0
@@ -164,6 +186,12 @@ var _wheel_rest: Array[Basis] = []
 
 
 func _ready() -> void:
+	# No snapping to the floor. Snapping exists to keep a body glued to the
+	# ground over a crest, which is exactly what a ramp must not do: with it
+	# on, a car runs off the lip of a jump and is dragged down over the edge
+	# still reporting itself as on the road, and never launches at all.
+	floor_snap_length = 0.0
+
 	_accelerate = StringName(input_prefix + "_accelerate")
 	_brake = StringName(input_prefix + "_brake")
 	_steer_left = StringName(input_prefix + "_steer_left")
@@ -312,6 +340,8 @@ func reset_motion() -> void:
 	_boost = 0.0
 	_boost_hold = 0.0
 	_hit_recovery = 0.0
+	_climb = 0.0
+	_last_height = global_position.y
 	velocity = Vector3.ZERO
 
 
@@ -446,12 +476,35 @@ func turn_radius_at(speed: float) -> float:
 
 
 ## Move along the car's facing, keeping it pinned to the ground.
+##
+## A car on the ground has no vertical speed of its own: it follows whatever
+## the road does, because move_and_slide slides it along the surface. That is
+## right everywhere except the moment the road runs out, where it would leave
+## a ramp travelling flat and simply fall off the end of it. So the climb the
+## road was giving it is measured while it is still on the ground and handed
+## to it as it goes, which is what turns a ramp into a launch.
 func _drive(delta: float) -> void:
 	var forward := -global_transform.basis.z
 	velocity.x = forward.x * _speed
 	velocity.z = forward.z * _speed
-	velocity.y = 0.0 if is_on_floor() else velocity.y - gravity * delta
+	var grounded := is_on_floor()
+	if grounded:
+		velocity.y = 0.0
+	else:
+		velocity.y -= gravity * delta
 	move_and_slide()
+
+	if is_on_floor():
+		# Measured rather than worked out from the slope: this is the height
+		# the car actually gained, so it is right on a ramp, on a crest and on
+		# the eased-off climbs alike. Kept as a fading peak rather than as
+		# whatever the last step did, for the reason climb_memory gives.
+		var measured := (global_position.y - _last_height) / maxf(delta, 0.0001)
+		_climb = maxf(measured, _climb - climb_memory * delta)
+	elif grounded:
+		# The step it left the ground on.
+		velocity.y = clampf(_climb * launch, -max_launch, max_launch)
+	_last_height = global_position.y
 	_take_the_hits()
 
 

@@ -17,6 +17,10 @@ extends RefCounted
 const STRAIGHT := 0
 const CORNER := 1
 const CLIMB := 2
+## A ramp, a hole in the road, and a long flat run to come down on. The piece
+## is height neutral: it lifts the road to the lip and the landing puts it
+## back where it started, so a jump never moves the course up or down.
+const JUMP := 3
 
 
 ## One piece of track, described from its entry socket to its exit socket.
@@ -65,6 +69,39 @@ var narrow_radius := 22.0
 ## Corners at or above this radius get the full width.
 var wide_radius := 55.0
 var max_climb := 5.0             ## metres of rise on a single climb piece
+
+# --- jumps --------------------------------------------------------------
+
+## Metres of ramp, and how high it lifts the road. Between them these set the
+## angle a car leaves at: 4 m over 10 m is about 22 degrees. Shallower reads
+## better but does not work - a car is a single long box, and coming off a
+## gentle ramp it settles onto its own back end and drops off the lip instead
+## of being thrown from it.
+var ramp_length := 14.0
+var ramp_rise := 5.0
+## How the rise is spread along the ramp. One is a straight wedge; above one
+## curves the foot into the road and leaves the steepest part at the lip,
+## which is where the angle actually does any work.
+var ramp_curve := 1.5
+## The hole. Two things pin this from either side. It has to be short enough
+## that a car at the slowest speed the game can roll still sails over it,
+## since falling in costs a respawn and a jump nobody can clear is not a risk
+## but a wall. And it has to be a good deal longer than the car, which is
+## 4.87 m: a hole a car can lie across is one it drives over without ever
+## leaving the ground.
+var jump_gap := 6.5
+## Flat road to come down on. Long, because the range of a jump is decided by
+## the speed it is taken at: the same ramp puts a car down 11 m past the lip
+## at the slowest the game rolls and 61 m past it at the fastest, so the
+## landing has to reach the far end of that.
+var landing_length := 70.0
+## The straight a jump needs in front of it, so a car arrives at the ramp with
+## speed it chose rather than speed it happened to have.
+var jump_run_up := 45.0
+## The chance a long enough straight is followed by a jump.
+var jump_chance := 0.45
+## How many jumps a course may have.
+var max_jumps := 3
 ## How far above or below its starting height the course may wander. The
 ## whole course is lifted so its lowest point rests on the ground, so this
 ## also sets how high the tallest embankment ends up.
@@ -79,6 +116,10 @@ var extent := 480.0              ## the course must fit inside this half-size
 
 var points := PackedVector3Array()
 var half_widths := PackedFloat32Array()
+## Whether there is road at each sample. False across the hole in a jump,
+## where the mesh, the kerbs and the rails all stop and a car that came up
+## short has nothing under it.
+var road_present := PackedByteArray()
 var pieces: Array[Piece] = []
 
 
@@ -88,6 +129,13 @@ static func build(track_seed: int, tuning: Dictionary = {}) -> TrackLayout:
 	var layout := TrackLayout.new()
 	for key in tuning:
 		layout.set(key, tuning[key])
+
+	# The ramp and the hole are snapped to the sampling grid before anything
+	# is built from them. A hole of six and a half metres sampled every two
+	# and a half comes out as ten metres of missing road, which is a very
+	# different jump from the one the numbers describe.
+	layout.ramp_length = round(layout.ramp_length / layout.step) * layout.step
+	layout.jump_gap = round(layout.jump_gap / layout.step) * layout.step
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = track_seed
@@ -120,6 +168,7 @@ func _choose_pieces(rng: RandomNumberGenerator) -> void:
 	pieces = [_quantise(Piece.new(STRAIGHT, apron, wide_half_width))]
 	var built := apron
 	var height := 0.0
+	var jumps := 0
 	# Alternating most corners left and right keeps the course travelling
 	# somewhere rather than spiralling in on itself, which is the main way a
 	# free-form chain fails the self-crossing check.
@@ -158,7 +207,34 @@ func _choose_pieces(rng: RandomNumberGenerator) -> void:
 		pieces.append(straight)
 		built += straight.length
 
+		# A jump goes after a straight rather than in place of one, so the
+		# straight is the run up: a car reaches the ramp with the speed it
+		# chose to carry rather than whatever it happened to have coming out
+		# of the corner behind it. A level straight only - taking off from a
+		# grade would throw the car at an angle nothing else on the course
+		# accounts for.
+		if (jumps < max_jumps and straight.kind == STRAIGHT
+				and straight.length >= jump_run_up
+				and built < target - apron - _jump_length()
+				and rng.randf() < jump_chance):
+			pieces.append(_make_jump())
+			built += _jump_length()
+			jumps += 1
+
 	pieces.append(_quantise(Piece.new(STRAIGHT, apron, wide_half_width)))
+
+
+## The ramp, the hole and the landing, as one piece.
+func _make_jump() -> Piece:
+	var piece := Piece.new(JUMP, _jump_length(), wide_half_width)
+	# Height neutral, so the course carries on at the height it arrived at and
+	# the height budget a climb is checked against is untouched.
+	piece.rise = 0.0
+	return _quantise(piece)
+
+
+func _jump_length() -> float:
+	return ramp_length + jump_gap + landing_length
 
 
 func _make_corner(turn: float, radius: float) -> Piece:
@@ -192,8 +268,14 @@ func _sample() -> void:
 	points = PackedVector3Array()
 	half_widths = PackedFloat32Array()
 
+	road_present = PackedByteArray()
+
 	var position := Vector3.ZERO
 	var yaw := 0.0
+	## The height the road sits at either side of the piece being walked. Only
+	## a climb moves it; a jump lifts the road and puts it back, so its own
+	## shape is worked out against this rather than added to it.
+	var base := 0.0
 
 	var travelled := 0.0
 
@@ -207,18 +289,59 @@ func _sample() -> void:
 		piece.end_offset = travelled
 		var turn_per_step := piece.turn / float(steps)
 		for i in steps:
+			var along := float(i) / float(steps)
+			position.y = base + _profile(piece, along)
 			points.append(position)
 			half_widths.append(piece.half_width)
-			var from := smoothstep(0.0, 1.0, float(i) / float(steps))
-			var to := smoothstep(0.0, 1.0, float(i + 1) / float(steps))
+			road_present.append(1 if _road_at(piece, along) else 0)
 			var heading := Vector3.FORWARD.rotated(Vector3.UP, yaw)
-			position += heading * step + Vector3.UP * (piece.rise * (to - from))
+			position += heading * step
 			# Positive turn is a right-hand turn, which is a negative rotation
 			# about the up axis in Godot's right-handed space.
 			yaw -= turn_per_step
+		base += piece.rise
 	# Close off the final piece so the road reaches the finish line.
+	position.y = base
 	points.append(position)
 	half_widths.append(pieces[-1].half_width if not pieces.is_empty() else wide_half_width)
+	road_present.append(1)
+
+
+## How high above the road either side of it a piece stands, a fraction of the
+## way along it.
+##
+## A climb is eased in and out so the grade starts and ends flat, which is what
+## stops a visible crease where it meets a level piece. A jump is the opposite
+## and is deliberately not eased: the lip is meant to be an edge, and easing it
+## would round off the one part of it that does the work.
+func _profile(piece: Piece, along: float) -> float:
+	if piece.kind == JUMP:
+		var at := along * piece.length
+		if at < ramp_length:
+			# Eased at the foot and steepest at the lip. A ramp that meets the
+			# road at its full angle is a crease, and a car driving at one is
+			# a long flat box catching its front edge on it: it climbs a
+			# little way and then jams there and stops dead. Coming up out of
+			# the road instead gives it nothing to catch on, and putting the
+			# steepest part at the top is what a ramp should be doing anyway.
+			return ramp_rise * pow(at / ramp_length, ramp_curve)
+		if at < ramp_length + jump_gap:
+			# The line the road would take if it were there, which is roughly
+			# what a car crossing the hole is doing anyway.
+			return ramp_rise * (1.0 - (at - ramp_length) / jump_gap)
+		return 0.0
+	return piece.rise * smoothstep(0.0, 1.0, along)
+
+
+## Whether there is road at a fraction of the way along a piece.
+func _road_at(piece: Piece, along: float) -> bool:
+	if piece.kind != JUMP:
+		return true
+	var at := along * piece.length
+	# The lip itself is road: it is the last cross-section the car has under
+	# it, and without it the road stops a whole sample short of the top of the
+	# ramp and the jump is taken from partway up.
+	return at <= ramp_length + 0.001 or at >= ramp_length + jump_gap - 0.001
 
 
 ## Shift the whole course so it sits centred on the world origin and never
