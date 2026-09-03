@@ -1,8 +1,8 @@
 class_name Menu
 extends Control
 
-## The title screen: the name of the game and a button to start it, over the
-## game itself.
+## The title screen: the name of the game, a button to start it and a button
+## to change the settings, over the game itself.
 ##
 ## The backdrop is a real instance of the race scene in attract mode - the same
 ## generated course, scenery and day/night cycle the players are about to
@@ -41,6 +41,8 @@ extends Control
 
 @onready var _title: Label = $TitleSlot/Title
 @onready var _play: Button = $Play
+@onready var _settings_button: Button = $Settings
+@onready var _settings_screen: SettingsMenu = $SettingsScreen
 @onready var _world: Node3D = $World
 @onready var _orbit: Camera3D = $Orbit
 
@@ -49,6 +51,8 @@ var _elapsed := 0.0
 
 func _ready() -> void:
 	_play.pressed.connect(_on_play_pressed)
+	_settings_button.pressed.connect(_on_settings_pressed)
+	_settings_screen.closed.connect(_on_settings_closed)
 	# So the keyboard alone can start the game - both players are on one
 	# keyboard, and neither has been asked to find the mouse yet.
 	_play.grab_focus()
@@ -82,3 +86,15 @@ func _turn_the_backdrop() -> void:
 
 func _on_play_pressed() -> void:
 	get_tree().change_scene_to_file(race_scene)
+
+
+## The settings lie over the title screen rather than replacing it, so the
+## backdrop keeps turning and the title keeps rocking behind them.
+func _on_settings_pressed() -> void:
+	_settings_screen.open()
+
+
+func _on_settings_closed() -> void:
+	# Coming back to a screen with nothing focused would leave the keyboard
+	# dead, so the button that opened the settings takes focus again.
+	_settings_button.grab_focus()

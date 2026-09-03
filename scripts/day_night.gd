@@ -16,6 +16,10 @@ extends Node
 ## The clock is wall clock time from the moment the game starts, and it is
 ## deliberately not reset when a new course is generated - a session that runs
 ## through several courses should still get to night.
+##
+## The players can pin the sky to day or to night in the settings. The clock
+## goes on running underneath even while it is pinned, so letting the cycle go
+## again picks up where it would have been rather than restarting the morning.
 
 ## Seconds of full daylight before the sun starts to go down.
 @export var day_seconds := 180.0
@@ -68,6 +72,7 @@ const SKY_CONTRIBUTION := [1.0, 1.0, 0.35]
 const AMBIENT_ENERGY := [1.0, 1.0, 1.2]
 const MOONLIGHT := Color(0.16, 0.20, 0.34)
 
+var _settings: Node
 var _sun: DirectionalLight3D
 var _sky: ProceduralSkyMaterial
 var _environment: Environment
@@ -77,6 +82,7 @@ var _nightness := 0.0
 
 
 func _ready() -> void:
+	_settings = get_node_or_null(^"/root/GameSettings")
 	_sun = get_node_or_null(sun_path) as DirectionalLight3D
 	var world := get_node_or_null(environment_path) as WorldEnvironment
 	_environment = world.environment if world else null
@@ -94,7 +100,9 @@ func _ready() -> void:
 
 	_environment.ambient_light_color = MOONLIGHT
 	_time = start_offset
-	_apply(_nightness_at(_time))
+	# Straight to wherever the settings say, with no dawn to sit through: this
+	# is the world being built, not the sky changing.
+	_apply(_target_nightness())
 
 
 ## How far through the change to night the world is: 0 full day, 1 full night.
@@ -104,9 +112,25 @@ func night_amount() -> float:
 	return _nightness
 
 
+## The sky is walked towards where it should be rather than snapped there, at
+## exactly the speed of a sunset. While the cycle is running that walk always
+## keeps up, so it changes nothing; when the players pin the sky, or let it go
+## again, they get the same sunset they would have got anyway instead of a cut.
 func _process(delta: float) -> void:
 	_time += delta
-	_apply(_nightness_at(_time))
+	var step := delta / maxf(transition_seconds, 0.001)
+	_apply(move_toward(_nightness, _target_nightness(), step))
+
+
+## Where the sky is being asked to sit: the clock, unless the players have
+## pinned it.
+func _target_nightness() -> float:
+	if _settings:
+		if _settings.time_of_day == _settings.ALWAYS_DAY:
+			return 0.0
+		if _settings.time_of_day == _settings.ALWAYS_NIGHT:
+			return 1.0
+	return _nightness_at(_time)
 
 
 ## Where the cycle stands at a given time. Smoothstepped so the fades ease in
