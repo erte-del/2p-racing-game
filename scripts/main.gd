@@ -27,6 +27,7 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @onready var _arrow1: RivalArrow = $ArrowP1
 @onready var _arrow2: RivalArrow = $ArrowP2
 @onready var _track: Track = $Track
+@onready var _day_night: DayNight = $DayNight
 @onready var _counts: Array[Label] = [
 	$Countdown/Top/Label, $Countdown/Bottom/Label,
 ]
@@ -43,6 +44,13 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @export var grid_setback := 4.0
 ## Ride height above the road surface at the spawn point.
 @export var grid_clearance := 0.05
+
+@export_group("Headlights")
+## How far into nightfall the headlights start to come on, and where they reach
+## full. Both are points on the day/night cycle, 0 day and 1 night, so the cars
+## light up during the sunset rather than snapping on at full dark.
+@export var lights_on_at := 0.25
+@export var lights_full_at := 0.6
 
 @export_group("Race")
 ## Seed for the first course. Zero picks a random one each run.
@@ -100,6 +108,15 @@ func _ready() -> void:
 
 	# The first course gets the same countdown as every later one.
 	_start_after_countdown()
+
+
+## The headlights follow the sky, not the race, so this runs whether or not
+## the cars are moving - they should be on while a night course is still
+## counting down.
+func _process(_delta: float) -> void:
+	var level := smoothstep(lights_on_at, lights_full_at, _day_night.night_amount())
+	for car in _cars:
+		car.set_headlights(level)
 
 
 func _physics_process(delta: float) -> void:

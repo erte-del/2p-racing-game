@@ -207,6 +207,36 @@ where the cycle stands, for anything that should react to nightfall later.
 Godot --path . --script tools/checks/day_night_shot.gd -- /tmp/shots
 ```
 
+## Headlights
+
+Each car carries two spot lights either side of its nose, and they come on by
+themselves as the light goes. They are tied to the sky rather than to the race,
+so they are already lit while a night course is counting down, and they fade up
+across the sunset instead of snapping on at full dark - `lights_on_at` and
+`lights_full_at` on the main scene are the two points of the cycle they ramp
+between.
+
+The car is told a *level*, not the time of day. It has no business knowing what
+the sky is doing, and a level can just as well come from a tunnel or from a
+player pressing a button later.
+
+Two things light up together, because either alone looks wrong: the beams on
+the road, and the lamp panels on the car's face. Those panels are a material in
+the model rather than geometry of their own - the model authors them
+permanently emissive, which is only right once they are switched on, so the
+car's copy of that material starts at zero emission and is turned up with the
+beams. Their position, x +/-0.602 and 0.683 above the ground, 2.179 ahead of
+the wheelbase centre, is measured off the model's own lamp quads.
+
+The beams cast no shadows. Two cars with two beams each, in two split-screen
+views, is eight shadow-casting spot lights for something that is meant to be
+decoration.
+
+`tools/checks/headlight_shot.gd` looks at a car head on, by day and at night.
+It also renders night with the lamps forced off, which is not redundant: the
+painted white start band looks exactly like a headlight pool, and turning the
+lamps off is the only way to tell which is which.
+
 ## Rails
 
 A low barrier runs down both edges of the road and across both ends. It stands

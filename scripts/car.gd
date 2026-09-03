@@ -13,6 +13,9 @@ extends CharacterBody3D
 const PAINT_MATERIAL := "Paint"
 ## The model's glass exports as opaque, which walls the first person view in.
 const GLASS_MATERIAL := "Glass"
+## The headlight panels. Authored permanently emissive, which is only right
+## once they are switched on.
+const LAMP_MATERIAL := "Lamp"
 
 ## Which set of input actions to read, e.g. "p1" -> p1_accelerate, p1_brake,
 ## p1_steer_left, p1_steer_right.
@@ -61,10 +64,32 @@ const GLASS_MATERIAL := "Glass"
 ## A steering wheel turns much further than the road wheels do.
 @export var wheel_turn_ratio := 3.0
 
+@export_group("Headlights")
+## Where the right headlight sits, in the car's own space; the left one is
+## mirrored. Measured off the model: the two Lamp quads sit at x +/-0.602,
+## 0.683 above the ground, 2.179 ahead of the wheelbase centre.
+@export var headlight_offset := Vector3(0.602, 0.683, -2.179)
+## Degrees the beams are tipped down, so they light the road rather than the
+## horizon.
+@export var headlight_dip := 5.0
+## Half-angle of the beam, in degrees.
+@export var headlight_angle := 26.0
+## How far the beam carries, in metres.
+@export var headlight_range := 55.0
+## Brightness at full night.
+@export var headlight_energy := 4.5
+@export var headlight_color := Color(1.0, 0.96, 0.86)
+## How brightly the lamp panels themselves glow when lit.
+@export var lamp_glow := 3.5
+
 @export_group("Wheels")
 @export var wheel_radius := 0.355      ## metres, wheel centre height in-game
 @export var max_wheel_steer := 0.5     ## rad the front wheels visually turn
 @export var wheel_steer_speed := 4.0   ## how fast the wheels visually turn
+
+## The beams, and the material of the lamp panels they shine out of.
+var _headlights: Array[SpotLight3D] = []
+var _lamp_material: StandardMaterial3D
 
 ## The model's own steering wheel, turned along with the front wheels.
 var _steering_wheel: Node3D
@@ -109,6 +134,7 @@ func _ready() -> void:
 		_wheel_rest.append(wheel.transform.basis)
 
 	_prepare_materials()
+	_build_headlights()
 	_steering_wheel = find_child("SteeringWheel", true, false) as Node3D
 	if _steering_wheel:
 		_wheel_rest_basis = _steering_wheel.transform.basis
@@ -120,6 +146,45 @@ func _ready() -> void:
 	floor_snap_length = 0.6
 
 
+## Switch the headlights on, off, or part way. 0 is off, 1 is full night.
+##
+## The car is told a level rather than the time of day: it has no business
+## knowing what the sky is doing, and a level can just as well come from a
+## tunnel or from a player pressing a button later.
+func set_headlights(level: float) -> void:
+	level = clampf(level, 0.0, 1.0)
+	for light in _headlights:
+		light.light_energy = headlight_energy * level
+		# A light at zero energy still costs something to render, so the beams
+		# are switched off outright rather than merely turned down.
+		light.visible = level > 0.01
+	if _lamp_material:
+		_lamp_material.emission_energy_multiplier = lamp_glow * level
+
+
+## A beam either side of the nose. They are built here rather than placed in
+## the scene so the offsets sit next to the measurement they came from, and so
+## both cars cannot drift apart.
+##
+## No shadows: two cars, two beams each, in two split-screen views is eight
+## shadow-casting spot lights for something that is meant to be decoration.
+func _build_headlights() -> void:
+	for side in [-1.0, 1.0]:
+		var light := SpotLight3D.new()
+		light.position = Vector3(
+			headlight_offset.x * side, headlight_offset.y, headlight_offset.z)
+		light.rotation = Vector3(deg_to_rad(-headlight_dip), 0.0, 0.0)
+		light.spot_angle = headlight_angle
+		light.spot_range = headlight_range
+		light.spot_attenuation = 0.9
+		light.spot_angle_attenuation = 0.6
+		light.light_color = headlight_color
+		light.shadow_enabled = false
+		light.visible = false
+		add_child(light)
+		_headlights.append(light)
+
+
 ## Where the driver's eye sits, in world space.
 func eye_transform() -> Transform3D:
 	return Transform3D(global_transform.basis, global_transform * eye_point)
@@ -128,10 +193,11 @@ func eye_transform() -> Transform3D:
 ## Give this car its own copy of the materials it needs changed.
 ##
 ## The imported materials are shared between both car instances, so editing
-## one in place would change the other. Two need changing: the paint, which
-## carries the player's colour, and the glass, which the model exports fully
-## opaque and which therefore walls the driver in. Everything else is left as
-## authored, including the double-sided faces - this car has a real interior,
+## one in place would change the other. Three need changing: the paint, which
+## carries the player's colour; the glass, which the model exports fully opaque
+## and which therefore walls the driver in; and the lamp panels, which are
+## authored permanently emissive and have to start off. Everything else is left
+## as authored, including the double-sided faces - this car has a real interior,
 ## so the shell reading solid from within is what encloses the cockpit.
 func _prepare_materials() -> void:
 	var copies: Dictionary = {}
@@ -142,12 +208,17 @@ func _prepare_materials() -> void:
 			if source == null:
 				continue
 			var key := source.resource_name
-			if key != PAINT_MATERIAL and key != GLASS_MATERIAL:
+			if key != PAINT_MATERIAL and key != GLASS_MATERIAL \
+					and key != LAMP_MATERIAL:
 				continue
 			if not copies.has(key):
 				var copy := source.duplicate() as StandardMaterial3D
 				if key == PAINT_MATERIAL:
 					copy.albedo_color = body_color
+				elif key == LAMP_MATERIAL:
+					# Authored permanently lit; off until switched on.
+					copy.emission_energy_multiplier = 0.0
+					_lamp_material = copy
 				else:
 					copy.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 					copy.albedo_color.a = glass_opacity
@@ -158,6 +229,9 @@ func _prepare_materials() -> void:
 			mesh_instance.set_surface_override_material(surface, copies[key])
 	if not copies.has(PAINT_MATERIAL):
 		push_warning("Car: no '%s' material found to paint" % PAINT_MATERIAL)
+	if _lamp_material == null:
+		push_warning("Car: no '%s' material, so the headlights cannot light up"
+				% LAMP_MATERIAL)
 
 
 ## Found by name rather than by path: the glTF importer decides how deeply it
