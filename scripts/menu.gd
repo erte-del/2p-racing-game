@@ -4,6 +4,11 @@ extends Control
 ## The title screen: the name of the game, a button to start it and a button
 ## to change the settings, over the game itself.
 ##
+## Play does not drop straight into a race. It asks which mode first: the
+## endless course the game has always been, or laid-out tracks, which are not
+## built yet - that button is there and deliberately dead, so the choice the
+## game is heading towards is visible rather than a surprise later.
+##
 ## The backdrop is a real instance of the race scene in attract mode - the same
 ## generated course, scenery and day/night cycle the players are about to
 ## drive, with two cars parked on the grid - turning slowly under the title.
@@ -43,6 +48,9 @@ extends Control
 @onready var _play: Button = $Play
 @onready var _settings_button: Button = $Settings
 @onready var _settings_screen: SettingsMenu = $SettingsScreen
+@onready var _mode_choice: Control = $ModeChoice
+@onready var _infinite_button: Button = $ModeChoice/Page/Panel/Margin/Box/Infinite
+@onready var _mode_back: Button = $ModeChoice/Page/Panel/Margin/Box/Back
 @onready var _world: Node3D = $World
 @onready var _orbit: Camera3D = $Orbit
 
@@ -53,6 +61,8 @@ func _ready() -> void:
 	_play.pressed.connect(_on_play_pressed)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	_settings_screen.closed.connect(_on_settings_closed)
+	_infinite_button.pressed.connect(_on_infinite_pressed)
+	_mode_back.pressed.connect(_close_mode_choice)
 	# So the keyboard alone can start the game - both players are on one
 	# keyboard, and neither has been asked to find the mouse yet.
 	_play.grab_focus()
@@ -84,8 +94,31 @@ func _turn_the_backdrop() -> void:
 	_orbit.look_at(centre + Vector3.UP * look_height, Vector3.UP)
 
 
+## Play opens the mode choice over the title rather than starting a race, so
+## the backdrop keeps turning behind it the way the settings do.
 func _on_play_pressed() -> void:
+	_mode_choice.show()
+	_infinite_button.grab_focus()
+
+
+func _on_infinite_pressed() -> void:
 	get_tree().change_scene_to_file(race_scene)
+
+
+func _close_mode_choice() -> void:
+	_mode_choice.hide()
+	_play.grab_focus()
+
+
+## Escape backs out of the mode choice. The settings screen handles its own,
+## and it lies over this one, so it gets first refusal on the key.
+func _input(event: InputEvent) -> void:
+	if not _mode_choice.visible or _settings_screen.visible:
+		return
+	if not event.is_action_pressed("ui_cancel"):
+		return
+	get_viewport().set_input_as_handled()
+	_close_mode_choice()
 
 
 ## The settings lie over the title screen rather than replacing it, so the

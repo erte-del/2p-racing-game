@@ -78,5 +78,80 @@ grow_horizontal = 2
 text = "SETTINGS"
 theme_override_font_sizes/font_size = 28
 
+[node name="ModeChoice" type="Control" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="ColorRect" parent="ModeChoice"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.62)
+
+[node name="Page" type="CenterContainer" parent="ModeChoice"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="ModeChoice/Page"]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="ModeChoice/Page/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 30
+
+[node name="Box" type="VBoxContainer" parent="ModeChoice/Page/Panel/Margin"]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="Heading" type="Label" parent="ModeChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "CHOOSE A MODE"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 44
+
+[node name="Infinite" type="Button" parent="ModeChoice/Page/Panel/Margin/Box"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+text = "INFINITE"
+theme_override_font_sizes/font_size = 32
+
+[node name="InfiniteNote" type="Label" parent="ModeChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "New track every race."
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 18
+
+[node name="Tracks" type="Button" parent="ModeChoice/Page/Panel/Margin/Box"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+disabled = true
+text = "TRACKS"
+theme_override_font_sizes/font_size = 32
+
+[node name="TracksNote" type="Label" parent="ModeChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "Laid-out circuits to learn and lap. Not built yet."
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 18
+
+[node name="Back" type="Button" parent="ModeChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "BACK"
+
 [node name="SettingsScreen" parent="." instance=ExtResource("4_settings")]
 visible = false
