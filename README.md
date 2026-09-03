@@ -698,11 +698,11 @@ The hole is pinned from both sides. It has to be short enough that a car at the
 slowest speed the game can roll still sails over it, since falling in costs a
 respawn and a jump nobody can clear is not a risk but a wall. And it has to be
 a good deal longer than the car, which is 4.87 m: a hole a car can lie across
-is one it drives over without ever leaving the ground. 7.5 m sits between those.
+is one it drives over without ever leaving the ground. 10 m sits between those.
 
-The landing is long - 70 m - because the range of a jump is decided by the speed
-it is taken at. The same ramp puts a car down 11 m past the lip at the slowest
-the game rolls and 67 m past it at the fastest, and the road has to reach the
+The landing is long - 76 m - because the range of a jump is decided by the speed
+it is taken at. The same ramp puts a car down 15 m past the lip at the slowest
+the game rolls and 79 m past it at the fastest, and the road has to reach the
 far end of that.
 
 Nothing else is built on a jump. The pads and barriers keep off the stretch a
@@ -722,11 +722,11 @@ working it out from the curve:
 Godot --path . --headless --script tools/checks/jump_flight.gd
 ```
 
-Shortest flight 10.8 m against a 7.5 m hole, longest 67.0 m against 77.5 m of
-road to come down on, and no case that crosses without leaving the ground. It
-then asks the opposite question, because a jump every car clears whatever it
-does is scenery rather than a risk: a car crawling at 8.8 m/s never leaves the
-ground and ends up on the grass.
+Shortest flight 14.6 m against a 10 m hole, longest 79.1 m against 86 m of road
+to come down on, and no case that crosses without leaving the ground. It then
+asks the opposite question, because a jump every car clears whatever it does is
+scenery rather than a risk: a car crawling at 8.8 m/s comes down 5.6 m short and
+ends up on the grass.
 
 `tools/checks/jump_shot.gd` looks at one - the top car back on the run up where
 the choice to commit is made, the bottom one held in the air over the hole,
@@ -735,6 +735,44 @@ which is the only way to see what is under a car in mid jump:
 ```
 Godot --path . --script tools/checks/jump_shot.gd -- /tmp/shots
 ```
+
+## Tilt
+
+The car pitches to follow the road: nose up a climb and a ramp, nose down over
+a crest and through the falling half of a jump. What tips is the shell, not the
+body. The body is a `CharacterBody3D` that is only ever yawed, and its box is
+what the car actually drives on - pitching that would change what the car can
+climb, how it sits on a kerb and where its nose catches, all for something that
+is only ever looked at. So the model, the headlights and the driver's eye all
+hang off a `Body` pivot that tips underneath an upright collision box.
+
+On the ground the angle comes from the surface the car is standing on, so it
+reads the road it is on rather than the road it has been over. In the air it
+comes from where the car is going, which is what puts the nose up off a ramp
+and down again on the way to the landing. It is eased rather than set, because
+the ground under a car changes in steps - one triangle to the next, and all at
+once on landing - and a shell that followed that exactly would snap about.
+
+Writing this turned up an older bug. `look_at` aims *whatever it is given*, so
+putting a car on the grid or back on the course at a checkpoint pitched the
+whole body whenever the point it was aimed at was not level with it - which on
+a climb, and now on a ramp, it is not. A body left leaning drives itself into
+the ground: the car takes its heading from its own -Z, so a nose-down car puts
+part of its speed into the floor and quietly runs slow. The body is now levelled
+every physics step, which is also what makes the jump numbers above right; they
+were measured before against a car that had been leaning the whole way.
+
+`tools/checks/tilt_trace.gd` drives a car over a jump, which has every case in
+it in order - level road, a ramp, the nose coming up off the lip, the nose
+dropping through the top of the flight, and the road again on landing - and
+then over a plain climb:
+
+```
+Godot --path . --headless --script tools/checks/tilt_trace.gd
+```
+
+Level road reads 0.0 degrees, the ramp +24.6, the fall -29.8, and a 2.9 degree
+climb reads +3.3.
 
 ## Phases
 

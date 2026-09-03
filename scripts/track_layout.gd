@@ -89,12 +89,12 @@ var ramp_curve := 1.5
 ## but a wall. And it has to be a good deal longer than the car, which is
 ## 4.87 m: a hole a car can lie across is one it drives over without ever
 ## leaving the ground.
-var jump_gap := 6.5
+var jump_gap := 10.0
 ## Flat road to come down on. Long, because the range of a jump is decided by
 ## the speed it is taken at: the same ramp puts a car down 11 m past the lip
 ## at the slowest the game rolls and 61 m past it at the fastest, so the
 ## landing has to reach the far end of that.
-var landing_length := 70.0
+var landing_length := 76.0
 ## The straight a jump needs in front of it, so a car arrives at the ramp with
 ## speed it chose rather than speed it happened to have.
 var jump_run_up := 45.0

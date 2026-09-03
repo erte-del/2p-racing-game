@@ -13,4 +13,6 @@ script = ExtResource("1_car")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.725, 0)
 shape = SubResource("BoxShape3D_body")
 
-[node name="Model" parent="." instance=ExtResource("2_model")]
+[node name="Body" type="Node3D" parent="."]
+
+[node name="Model" parent="Body" instance=ExtResource("2_model")]

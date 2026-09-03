@@ -108,6 +108,18 @@ const OBSTACLE_GROUP := &"obstacle"
 ## slipstream is worth 22%, so it shows plainly without ever looking like one.
 @export var overspeed_reference := 0.5
 
+@export_group("Body")
+## The shell tips to follow the road; the collision box does not. The box is
+## what the car drives on, and pitching that would change what the car can
+## climb, how it sits on a kerb and where its nose catches - all for something
+## that is only ever looked at.
+##
+## How far it may tip, in degrees, and how quickly it follows. The limit is
+## there for the odd bad surface normal - a car reading one triangle of a kerb
+## should not stand on its nose.
+@export var max_pitch := 32.0
+@export var pitch_ease := 9.0
+
 @export_group("Cockpit")
 ## Where the driver's eye sits, in the car's own space. The car is right hand
 ## drive, so this sits over on the +X side behind the wheel.
@@ -168,6 +180,12 @@ var _hit_recovery := 0.0
 ## the height it was at, which is what that is worked out from.
 var _climb := 0.0
 var _last_height := 0.0
+## Everything that is looked at rather than driven on: the shell, its lights
+## and the driver's eye. It tips to follow the road while the body it hangs
+## off stays upright.
+var _body: Node3D
+## How far the shell is tipped, in radians, nose up positive.
+var _pitch := 0.0
 ## Visual-only wheel state.
 var _wheel_steer := 0.0
 var _wheel_roll := 0.0
@@ -186,6 +204,7 @@ var _wheel_rest: Array[Basis] = []
 
 
 func _ready() -> void:
+	_body = $Body
 	# No snapping to the floor. Snapping exists to keep a body glued to the
 	# ground over a crest, which is exactly what a ramp must not do: with it
 	# on, a car runs off the lip of a jump and is dragged down over the edge
@@ -250,13 +269,16 @@ func _build_headlights() -> void:
 		light.light_color = headlight_color
 		light.shadow_enabled = false
 		light.visible = false
-		add_child(light)
+		# On the shell, not on the body: headlights that stayed level while
+		# the car pitched would light the sky on a ramp and the road at their
+		# feet on the way down.
+		_body.add_child(light)
 		_headlights.append(light)
 
 
 ## Where the driver's eye sits, in world space.
 func eye_transform() -> Transform3D:
-	return Transform3D(global_transform.basis, global_transform * eye_point)
+	return Transform3D(_body.global_transform.basis, _body.global_transform * eye_point)
 
 
 ## Give this car its own copy of the materials it needs changed.
@@ -317,6 +339,13 @@ func _collect_wheels(names: Array[String]) -> Array[Node3D]:
 
 
 func _physics_process(delta: float) -> void:
+	# The body is only ever yawed; the shell is what tips. Anything that aims
+	# a car with look_at - putting one on the grid, or back on the course at a
+	# checkpoint - pitches the whole body when the point it is aimed at is not
+	# level with it, which on a climb or a ramp it is not. A body left leaning
+	# drives itself into the ground.
+	rotation.x = 0.0
+	rotation.z = 0.0
 	if frozen:
 		velocity = Vector3.ZERO
 		return
@@ -330,6 +359,7 @@ func _physics_process(delta: float) -> void:
 	_apply_throttle(throttle, delta)
 	_apply_steering(steer, delta)
 	_drive(delta)
+	_tilt(delta)
 	_animate_wheels(steer, delta)
 
 
@@ -342,6 +372,9 @@ func reset_motion() -> void:
 	_hit_recovery = 0.0
 	_climb = 0.0
 	_last_height = global_position.y
+	_pitch = 0.0
+	if _body != null:
+		_body.rotation.x = 0.0
 	velocity = Vector3.ZERO
 
 
@@ -535,6 +568,33 @@ func _take_the_hits() -> void:
 		_boost = 0.0
 		_boost_hold = 0.0
 		return
+
+
+## Tip the shell to follow the road, and in the air to follow the flight.
+##
+## On the ground the angle comes from the surface the car is standing on, so a
+## car reads the road it is actually on rather than the road it has been over.
+## In the air it comes from where the car is going, which is what puts the nose
+## up off a ramp and down again on the way to the landing.
+##
+## Eased rather than set, because the ground under a car changes in steps - one
+## triangle to the next, and all at once on landing - and a shell that followed
+## that exactly would snap about.
+func _tilt(delta: float) -> void:
+	var target := 0.0
+	if is_on_floor():
+		var forward := -global_transform.basis.z
+		# Nose up when the surface leans away from the way the car faces.
+		target = asin(clampf(-forward.dot(get_floor_normal()), -1.0, 1.0))
+	else:
+		# Held off the horizontal speed rather than divided by it, so a car
+		# that has almost stopped does not read as pointing straight down.
+		var flat := Vector2(velocity.x, velocity.z).length()
+		target = atan2(velocity.y, maxf(flat, 4.0))
+	var limit := deg_to_rad(max_pitch)
+	target = clampf(target, -limit, limit)
+	_pitch = lerpf(_pitch, target, 1.0 - exp(-pitch_ease * delta))
+	_body.rotation.x = _pitch
 
 
 ## Purely cosmetic: turn the front wheels and roll all four.
