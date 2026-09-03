@@ -16,6 +16,23 @@ scripts/          GDScript
 tools/            Blender export scripts (not shipped in the game)
 ```
 
+## Menu
+
+`scenes/menu.tscn` is the game's main scene now, so it is what opens on launch:
+the title and a Play button that swaps in `main.tscn`. The button takes
+keyboard focus on its own, so Enter or Space starts the race - both players are
+already on one keyboard and neither should have to reach for the mouse.
+
+The title never sits perfectly still. It rocks a couple of degrees either side
+of upright and bobs a few pixels, which is what keeps a screen that is doing
+nothing from looking frozen. The two motions run on deliberately unrelated
+periods: on the same beat they read as one mechanical wobble, drifting apart
+they read as idling.
+
+The label rides inside a slot that the layout positions, so its own resting
+position is always zero. Bobbing it from a position captured at startup would
+drift, and would be wrong again the moment the window was resized.
+
 ## Controls
 
 | Action     | Player 1 (red) | Player 2 (blue) |
