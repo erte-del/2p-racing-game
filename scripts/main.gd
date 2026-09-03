@@ -45,6 +45,12 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 ## Ride height above the road surface at the spawn point.
 @export var grid_clearance := 0.05
 
+@export_group("Title screen")
+## Set when this scene is being used as the moving backdrop behind the menu.
+## The world is built and the cars are placed, but nothing is raced: no
+## countdown, no clock, no split screen, and no HUD over a title.
+@export var attract_mode := false
+
 @export_group("Headlights")
 ## How far into nightfall the headlights start to come on, and where they reach
 ## full. Both are points on the day/night cycle, 0 day and 1 night, so the cars
@@ -106,8 +112,37 @@ func _ready() -> void:
 	_camera1.cull_mask = ALL_LAYERS & ~_bit(LAYER_P2_ONLY)
 	_camera2.cull_mask = ALL_LAYERS & ~_bit(LAYER_P1_ONLY)
 
+	if attract_mode:
+		_dress_for_the_title_screen()
+		return
+
 	# The first course gets the same countdown as every later one.
 	_start_after_countdown()
+
+
+## Strip the race off the scene, leaving only the world and two parked cars.
+##
+## The split screen is not merely hidden: a SubViewport set to update always
+## goes on rendering behind a hidden container, and rendering the course twice
+## more for nobody would cost as much as the menu itself.
+func _dress_for_the_title_screen() -> void:
+	for car in _cars:
+		car.frozen = true
+	for overlay in [$Split, $Hud, $Progress, $Countdown, $Result]:
+		overlay.hide()
+	for camera in [_camera1, _camera2]:
+		camera.get_parent().render_target_update_mode = SubViewport.UPDATE_DISABLED
+		camera.current = false
+	# Hiding the arrows is not enough: each one decides for itself every frame
+	# whether it should be visible, and would simply turn itself back on.
+	for arrow in [_arrow1, _arrow2]:
+		arrow.set_physics_process(false)
+		arrow.hide()
+
+
+## The point the title screen turns about: midway between the parked cars.
+func grid_centre() -> Vector3:
+	return (_car1.global_position + _car2.global_position) * 0.5
 
 
 ## The headlights follow the sky, not the race, so this runs whether or not
@@ -120,6 +155,8 @@ func _process(_delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if attract_mode:
+		return
 	# The view can be swapped at any time, including while the cars are held
 	# for the countdown, so this sits ahead of the racing check.
 	_poll_view_toggles()

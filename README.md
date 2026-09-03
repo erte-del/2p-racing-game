@@ -23,6 +23,25 @@ the title and a Play button that swaps in `main.tscn`. The button takes
 keyboard focus on its own, so Enter or Space starts the race - both players are
 already on one keyboard and neither should have to reach for the mouse.
 
+Behind the title is not a picture but the game itself: a real instance of
+`main.tscn` in **attract mode**, with its own generated course, scenery and
+day/night cycle, and the two cars parked on the grid. The camera turns slowly
+about the point midway between them, a full circuit taking a minute and a half,
+which reads as drifting rather than as a turntable. Being the real scene means
+the menu can never go stale - and a player who sits on it long enough watches
+the sun go down and the headlights come on.
+
+Attract mode does not merely hide the race. The split screen is switched off
+rather than made invisible, because a SubViewport set to update always goes on
+rendering behind a hidden container, and drawing the course twice more for
+nobody would cost as much as the menu itself. The rival arrows have their
+processing stopped rather than being hidden, because each decides for itself
+every frame whether it should be visible and would simply turn itself back on.
+
+A light shade sits between the world and the text. The backdrop is meant to
+show through, but a white title over a bright noon sky is a coin toss, and the
+shade settles it without hiding anything.
+
 The title never sits perfectly still. It rocks a couple of degrees either side
 of upright and bobs a few pixels, which is what keeps a screen that is doing
 nothing from looking frozen. The two motions run on deliberately unrelated
