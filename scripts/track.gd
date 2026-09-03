@@ -54,6 +54,56 @@ signal regenerated
 @export var checkpoint_depth := 2.5
 @export var checkpoint_color := Color(0.95, 0.72, 0.12)
 
+@export_group("Boost pads")
+## Pads are laid on the long straights, clear of the corners at either end and
+## clear of the grid, the finish and the respawns.
+@export var boost_pads_enabled := true
+## The shortest straight that can hold a pad.
+@export var min_pad_straight := 40.0
+## The chance an eligible straight is used, and the metres between one pad and
+## the next. Both are what keep a course from turning into a chain of pads.
+@export_range(0.0, 1.0) var pad_chance := 0.72
+@export var min_pad_spacing := 60.0
+## How far a pad keeps from the grid, the finish line and every checkpoint.
+@export var pad_keep_out := 20.0
+
+@export_group("Barriers")
+## Rows of barriers stood across part of the road on the long straights. They
+## never block all of it: a row is narrowed until the gap it leaves is wide
+## enough to drive through, and the next row is set far enough on that a car
+## can cross from one gap to the other.
+@export var obstacles_enabled := true
+## The shortest straight that can hold a row, and the chance an eligible one
+## is used.
+@export var min_obstacle_straight := 62.0
+@export_range(0.0, 1.0) var obstacle_chance := 0.5
+## Metres between rows on separate straights, and the most one straight may
+## hold if it has the room.
+@export var min_obstacle_spacing := 70.0
+@export var max_obstacle_rows := 3
+## The gap that must always be left open across the road, in metres, and the
+## turning circle assumed when working out whether a row can be dodged. The
+## car is 2.06 m wide and washes out to a 16 m circle at speed, so these are
+## the car's own numbers; change the car and these follow.
+@export var clear_lane := 3.4
+@export var dodge_radius := 16.0
+## The chance a row takes the same part of the road as the one before it.
+## Rows holding the same side can follow closely; rows swapping sides need
+## most of a straight between them, so this is most of what decides how many
+## barriers a course carries.
+@export_range(0.0, 1.0) var same_side_chance := 0.55
+
+@export_group("The fork")
+## One stretch of every course where the road is split down the middle: a pad
+## and a run of barriers on one side, nothing at all on the other. Take the
+## boost and thread the barriers, or give up the boost and have clear road.
+@export var fork_enabled := true
+## The shortest straight that can hold one, and the shortest and longest the
+## divider itself may be.
+@export var fork_min_straight := 57.0
+@export var fork_divider_min := 20.0
+@export var fork_divider_max := 70.0
+
 @export_group("Shape")
 @export var min_course_length := 620.0
 @export var max_course_length := 1050.0
@@ -79,8 +129,10 @@ signal regenerated
 @onready var _checkpoints: MeshInstance3D = $Checkpoints
 @onready var _rails: MeshInstance3D = $Rails
 @onready var _rail_shape: CollisionShape3D = $RailBody/Shape
+@onready var _furniture: TrackFurniture = $Furniture
 
 var _layout: TrackLayout
+var _features: TrackFeatures
 ## Cross-sections of the finished road.
 var _points: PackedVector3Array
 var _rights: PackedVector3Array
@@ -110,6 +162,17 @@ func length() -> float:
 	return _layout.length() if _layout else 0.0
 
 
+## The pieces this course was chained from, and the furniture laid on it.
+## Read by the checks in tools/, and by anything that wants to reason about
+## the course rather than just drive on it.
+func layout() -> TrackLayout:
+	return _layout
+
+
+func features() -> TrackFeatures:
+	return _features
+
+
 ## Half-width of the road at a distance along the course.
 func half_width_at(offset: float) -> float:
 	if _half_widths.is_empty():
@@ -130,8 +193,9 @@ func piece_summary() -> String:
 			TrackLayout.CORNER: corners += 1
 			TrackLayout.CLIMB: climbs += 1
 			_: straights += 1
-	return "%d pieces (%d straights, %d corners, %d climbs), %.0f m" % [
-		_layout.pieces.size(), straights, corners, climbs, length()]
+	return "%d pieces (%d straights, %d corners, %d climbs), %.0f m, %s" % [
+		_layout.pieces.size(), straights, corners, climbs, length(),
+		_features.summary() if _features else "no furniture"]
 
 
 ## Lay out a fresh course. The seed is advanced until one is found that neither
@@ -155,8 +219,10 @@ func generate(track_seed: int) -> void:
 	}
 
 	var layout: TrackLayout = null
+	var used_seed := track_seed
 	for attempt in max_attempts:
-		layout = TrackLayout.build(track_seed + attempt, tuning)
+		used_seed = track_seed + attempt
+		layout = TrackLayout.build(used_seed, tuning)
 		if layout != null:
 			break
 	if layout == null:
@@ -172,7 +238,41 @@ func generate(track_seed: int) -> void:
 	_build_start_line()
 	_build_checkpoints()
 	_build_rails()
+	# Last, because the furniture is placed against the finished course: it
+	# needs the length, and it keeps clear of the start, the finish and the
+	# checkpoints, none of which are known until the road exists.
+	_build_furniture(used_seed)
 	regenerated.emit()
+
+
+## Plan the furniture for this course and put it on the road.
+##
+## The plan is seeded from the same seed the course was, so a given course
+## always comes with the same pads on it - a seed describes a whole race,
+## not just its shape.
+func _build_furniture(features_seed: int) -> void:
+	var keep_out := PackedFloat32Array([start_offset(), finish_offset()])
+	keep_out.append_array(checkpoint_offsets())
+	_features = TrackFeatures.build(_layout, features_seed, {
+		"pads_enabled": boost_pads_enabled,
+		"min_pad_straight": min_pad_straight,
+		"pad_chance": pad_chance,
+		"min_pad_spacing": min_pad_spacing,
+		"keep_out": keep_out,
+		"keep_out_radius": pad_keep_out,
+		"obstacles_enabled": obstacles_enabled,
+		"min_obstacle_straight": min_obstacle_straight,
+		"obstacle_chance": obstacle_chance,
+		"min_obstacle_spacing": min_obstacle_spacing,
+		"max_obstacle_rows": max_obstacle_rows,
+		"clear_lane": clear_lane,
+		"dodge_radius": dodge_radius,
+		"same_side_chance": same_side_chance,
+		"fork_enabled": fork_enabled,
+		"fork_min_straight": fork_min_straight,
+		"fork_divider": Vector2(fork_divider_min, fork_divider_max),
+	})
+	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
 
 
 # --- reading the layout -------------------------------------------------

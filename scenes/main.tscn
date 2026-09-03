@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://3dilv775c7av" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/car/car.tscn" id="2_car"]
 [ext_resource type="Script" uid="uid://bgixbbwu47xnr" path="res://scripts/chase_camera.gd" id="3_cam"]
+[ext_resource type="Script" path="res://scripts/speed_lines.gd" id="9_lines"]
 [ext_resource type="Script" uid="uid://bb8h05not4sca" path="res://scripts/rival_arrow.gd" id="4_arrow"]
 [ext_resource type="PackedScene" path="res://scenes/track/track.tscn" id="5_track"]
 [ext_resource type="Script" path="res://scripts/surroundings.gd" id="6_surround"]
@@ -98,6 +99,15 @@ render_target_update_mode = 4
 [node name="Camera" type="Camera3D" parent="Split/TopView/SubViewport" unique_id=1538202260]
 script = ExtResource("3_cam")
 
+[node name="Lines" type="Control" parent="Split/TopView/SubViewport"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("9_lines")
+
 [node name="BottomView" type="SubViewportContainer" parent="Split" unique_id=1477111754]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -111,6 +121,15 @@ render_target_update_mode = 4
 
 [node name="Camera" type="Camera3D" parent="Split/BottomView/SubViewport" unique_id=60247963]
 script = ExtResource("3_cam")
+
+[node name="Lines" type="Control" parent="Split/BottomView/SubViewport"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("9_lines")
 
 [node name="Hud" type="VBoxContainer" parent="."]
 anchors_preset = 15

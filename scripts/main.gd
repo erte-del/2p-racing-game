@@ -24,6 +24,8 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @onready var _car2: Car = $Car2
 @onready var _camera1: ChaseCamera = $Split/TopView/SubViewport/Camera
 @onready var _camera2: ChaseCamera = $Split/BottomView/SubViewport/Camera
+@onready var _lines1: SpeedLines = $Split/TopView/SubViewport/Lines
+@onready var _lines2: SpeedLines = $Split/BottomView/SubViewport/Lines
 @onready var _arrow1: RivalArrow = $ArrowP1
 @onready var _arrow2: RivalArrow = $ArrowP2
 @onready var _track: Track = $Track
@@ -118,6 +120,11 @@ func _ready() -> void:
 		_chaos_rng.randomize()
 
 	_new_course(starting_seed if starting_seed != 0 else randi())
+
+	# Each player watches their own speed: the streaks show whenever a car is
+	# past its own max speed, whatever put it there.
+	_lines1.watch(_car1)
+	_lines2.watch(_car2)
 
 	# Each player sees an arrow in the *other* car's colour.
 	_arrow1.setup(_car1, _car2, _car2.body_color, LAYER_P1_ONLY, _camera1)

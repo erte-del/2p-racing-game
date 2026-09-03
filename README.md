@@ -387,6 +387,266 @@ Tucking in behind the other car raises top speed by up to `slipstream_bonus`
 behind: the rival must be ahead within a cone and both must be travelling the
 same way, which makes it an overtaking aid rather than a free boost.
 
+## Boost
+
+`Car.boost(strength, seconds)` hands a car a temporary lift in top speed -
+`boost_bonus` (55%) held for `boost_hold` (1.4 s), then bled away at
+`boost_fade` (0.35 per second). Both arguments default to that tuning, so
+whatever hands out a boost can simply call `boost()`.
+
+It works the same way the slipstream does: nothing sets the car's speed, the
+boost only raises the ceiling the throttle is working towards. That is what
+makes the boost outlive its own timer - as it fades the car is left above its
+own top speed and coasts back down to it, still carrying the surge into
+whatever comes next. Holding the throttle while over the ceiling sheds the
+overspeed at the coasting rate, so keeping your foot in can never slow the car
+faster than lifting off would.
+
+Boosts do not stack. A second one takes whichever bonus is larger and restarts
+the hold, because a generated course will sometimes lay down a run of pads and
+adding them together would leave a car nobody can drive. Steering is left out
+of it too: the turning circle is worked out against `max_speed`, so a boosted
+car does not wash any wider than one flat out on its own. Being fast enough to
+miss the corner is the risk a pad should carry; being unable to steer is not.
+
+`tools/checks/boost_trace.gd` runs two cars flat out from the tuned top speed,
+gives one a boost, and prints the gap:
+
+```
+Godot --path . --headless --script tools/checks/boost_trace.gd
+```
+
+On the tuned numbers the boosted car peaks at 38.8 m/s, spends 3.7 s above its
+own top speed, and finishes 27 m up the road - about six car lengths, on a
+course of 620-1050 m.
+
+## Speed rush
+
+Anything that makes a car quicker than it has any right to be shows the same
+way: the camera eases back and widens, and white streaks sweep out past the
+edges of that player's half of the screen. A boost pad, a slipstream and a run
+down a hill all read as one thing, so a player never has to learn a second
+signal for a second kind of speed.
+
+`Car.overspeed()` is the whole of it - one number from 0 to 1 for how far past
+its own `max_speed` a car is, full at `overspeed_reference` (50%) over. A pad
+is worth 55%, so it very nearly fills the gauge; a slipstream is worth 22%, so
+it shows plainly without ever looking like one. The ceiling counts as well as
+the speed itself, so the rush lands the instant a pad is crossed rather than a
+second later once the car has caught up with its new top speed, and it is
+scaled by how fast the car is actually going, which stops a car crawling along
+in someone else's wake from putting on a light show.
+
+`ChaseCamera` adds `rush_distance` (1.5 m) and `rush_fov` (7 degrees) at full
+rush, eased in over `rush_ease`. Small on purpose: it should be felt as the car
+pulling away from the camera, not noticed as the camera moving. The cockpit
+view only gets the wider angle, since there is nowhere for a camera bolted to
+the driver to pull back to. The resting field of view is read once at `_ready`
+rather than off `fov`, or swapping in a course would bake the rush into it and
+the view would creep wider every race.
+
+`SpeedLines` is a `Control` inside each player's SubViewport, so the streaks
+are clipped to that half of the screen and cannot bleed across the split. The
+streaks sweep outward from the middle of the frame over an ellipse the shape of
+the view - a circle would leave the sides bare and crowd the top and bottom -
+starting well outside the middle, where the car and the road ahead are. Their
+angles are one per equal slice of the circle rather than rolled freely, because
+free angles clump and the bald patches read as the effect being broken.
+
+`tools/checks/rush_shot.gd` parks two cars side by side on the same stretch of
+road and gives only the top one anything, so the bottom half of every picture
+is the control:
+
+```
+Godot --path . --script tools/checks/rush_shot.gd -- /tmp/shots
+```
+
+## Boost pads
+
+A course is planned in two passes. `TrackLayout` chains the pieces and samples
+the centreline; `TrackFeatures` then reads that finished chain and decides what
+furniture goes on it. The planner builds no nodes and no meshes, so a plan can
+be checked before any geometry is paid for, the same way a layout is. Every
+piece now records the offsets it starts and ends at, which is what lets the
+planner put a pad somewhere chosen rather than somewhere random - they are the
+same offsets the curve, the finish line and the checkpoints are measured in.
+
+Placements are an offset along the course plus a lateral position across it.
+Lateral is normalised, -1 at the left edge of the road and +1 at the right,
+never metres: the road narrows through the corners and chaos mode rerolls both
+widths for every race, so a pad pinned at "2.4 m right" would sit on the kerb
+on a narrow roll and in the middle of the road on a wide one.
+
+Pads go on straights only, at least `min_pad_straight` (40 m) long, at most
+`pad_chance` (0.72) of them, `min_pad_spacing` (60 m) apart, and `pad_margin`
+(12 m) clear of the corner at either end - a pad on a corner exit fires before
+the car is pointing anywhere useful, and one on the entry sends it in far too
+hot to have had a choice about it. They also keep `pad_keep_out` (20 m) from
+the grid, the finish and every checkpoint, because a free boost for being
+respawned is not a reward anyone earned. Each pad sits in the left, middle or
+right lane. Nothing is being avoided yet, so for now that only decides how far
+off the racing line a pad is - but pads are lane furniture from the start,
+because what eventually hangs off one is a hazard in that lane and clear road
+in the other.
+
+`TrackFurniture` builds the plan: a dark slab with glowing chevrons pointing
+the way, and an `Area3D` over it that calls `Car.boost()`. It is the only part
+of the track that makes nodes per course rather than rewriting a mesh in place,
+so it clears itself out on every build - the endless loop lays a fresh course
+after every race, and pads left over from the last one would pile up on the
+new one. The pad is cut into its own grid rather than drawn on the road's
+samples, which are 2.5 m apart, coarser than a whole chevron and no use for
+drawing an arrow. The chevrons are emissive so a pad still reads as a pad at
+midnight; the course runs through a whole day and night, and paint that only
+showed up in sunlight would leave half the races with furniture nobody can see.
+
+The furniture is seeded from the same seed the course is, so a given seed
+describes a whole race and not just its shape.
+
+`tools/checks/pad_layout.gd` lays out a hundred courses and checks every pad on
+them - none over the kerb, none on a corner or at the end of a straight, none
+on the grid or a respawn, none stacked on the one before - then parks a car on
+a pad to confirm it pays, and one alongside to confirm it does not:
+
+```
+Godot --path . --headless --script tools/checks/pad_layout.gd
+```
+
+`tools/checks/pad_shot.gd` looks at a pad from the car's own view, by day and
+at night:
+
+```
+Godot --path . --script tools/checks/pad_shot.gd -- /tmp/shots
+```
+
+## Barriers
+
+Rows of striped barriers stood across part of the road, on the same straights
+the pads go on and planned by the same `TrackFeatures` pass. A row never blocks
+all of the road. Two things have to hold, and neither is visible from looking
+at a single row:
+
+- **There is always a way past.** A row is narrowed until the gap it leaves is
+  at least `clear_lane` (3.4 m) - the car is 2.06 m wide, so that is it plus
+  room either side to aim with. A row is never dropped for being too wide, it
+  is cut back, because a narrower barrier somewhere interesting beats no
+  barrier.
+- **The way past one row can be reached from the way past the row before it.**
+  Two rows blocking opposite sides are each perfectly passable alone and are a
+  dead end together, if they sit close enough that no car could cross the road
+  between them. A car crossing from one gap to the next turns in and back out
+  again, which over a run of L metres at radius R shifts it about L²/4R
+  sideways; turned around, the run needed for a shift of d is √(4Rd). Rows are
+  spaced by that, times `dodge_margin` (1.4), because a player also has to see
+  the row and decide before any of the turning starts.
+
+`dodge_radius` (16 m) and `clear_lane` are the car's own numbers - its widest
+turning circle and its width plus room. Change the car and these follow.
+
+Rows are built to pass those rules rather than rolled and rejected: where a row
+may stand is not known until it is known what it blocks, so each one is placed,
+narrowed to fit the road where it ended up, and only then pushed downstream far
+enough that the gap through it leads to the gap through the last one. Which
+part of the road a row takes is rolled - in from the left edge, in from the
+right, or down the middle with a way past on either side.
+
+`TrackFeatures.faults()` then checks the finished plan against the same two
+rules, so a mistake in the construction shows up as a fault rather than as a
+course nobody can finish.
+
+Hitting one costs speed. `move_and_slide` stops the car going through a
+barrier, but will not take its speed away on its own, so a car held against one
+would sit there at full throttle reading as fast while going nowhere.
+`Car.obstacle_scrub` (72%) is charged against how square the hit was - from
+everything for driving straight into one to almost nothing for a glancing blow
+- and it ends the boost outright, because carrying a pad through the hazard it
+was offered against would leave nothing to weigh up. `obstacle_recovery`
+(0.4 s) is how long before another hit can cost anything: a car held against a
+barrier touches it every frame, and charging for each of those takes a single
+mistake to a dead stop before the player has a frame to steer out of it. Only
+bodies in the `obstacle` group cost anything, so the rails at the edge of the
+road still cost nothing - a car scraping down one is already being pushed back
+where it belongs, and taking its speed as well would punish it twice for a
+mistake it is in the middle of recovering from.
+
+`tools/checks/barrier_layout.gd` lays out a hundred courses and checks every
+barrier on them, then hands the validator two plans that break the rules on
+purpose - a validator that has never rejected anything is not obviously
+working - and finally runs a car at a barrier and through the gap beside it:
+
+```
+Godot --path . --headless --script tools/checks/barrier_layout.gd
+```
+
+On the tuned numbers that is 6.3 barriers a course, none with fewer than one,
+no way past narrower than the 3.4 m rule, and no faults. Driving square into
+one takes 25 m/s to 7 and wipes the boost; taking the gap beside it costs
+nothing at all.
+
+How many barriers a course carries is mostly decided by `same_side_chance`
+(0.55) rather than by any count. Two rows holding the same side of the road
+leave the same way past, so they can follow one another closely; two that swap
+sides need most of a straight between them. Rows are laid down blocking the
+same side as the one before them more often than not, and that is what lets a
+straight carry a run of barriers instead of a pair.
+
+A row is wound the way the road is - what Godot takes as the front of a face
+is the opposite of the right hand rule on its corners - so the face a car
+arrives at is the one turned towards it. Wound the other way every panel shows
+the player its back, which lights as though the sun were behind it.
+
+## The fork
+
+Every course has one stretch where the road is split down the middle by a
+divider: a boost pad and a run of barriers on one side of it, nothing at all on
+the other. Take the boost and thread the barriers, or give up the boost and
+have clear road. That choice is the point of the pads and the barriers both, so
+a course that happened not to offer one would be missing the feature rather
+than simply being quiet - the planner lays the fork down first and gives it the
+best stretch of road on the course, and the loose pads and barriers fill in
+around what it claims.
+
+The divider is what makes it a choice rather than a scattering. Without one a
+player who took the pad could drift across to the empty part of the road and
+keep the boost for nothing; with it, taking the pad commits the car to the lane
+the hazards are in for as long as the divider runs.
+
+The pad sits *inside* the fast lane rather than in front of the fork. The split
+and the reward then arrive together, so a player sees what is on offer and what
+it costs in the same moment - and a fork needs only as much road as its
+divider, instead of a pad's length and a gap on top. That is what lets one fit
+on a course with no really long straight anywhere on it: with the pad out in
+front, two courses in five had nowhere to put a fork at all.
+
+A straight is not thrown away for having a checkpoint on it either. A fork is a
+good deal shorter than the straights it goes on, so it is fitted into whichever
+part of one is clear of the grid, the finish and the respawns; and on a course
+where every long straight has a respawn planted in the middle of it, the fork
+is built closer to one than it would like rather than not at all. Between them
+those two changes took forks from 60 courses in a hundred to all of them.
+
+Barriers down the fast lane alternate between the divider and the outer kerb,
+so the lane is a slalom rather than a corridor, and each is set as far past the
+last as crossing between the ways through them actually asks for - the same
+arithmetic the loose rows use, applied inside a lane instead of across the whole
+road. `TrackFeatures.faults()` checks the fast lane on its own as well as the
+course as a whole: the divider means a car in the lane cannot cross out of it,
+so a lane that closes up is a dead end even though the road around it is
+perfectly driveable.
+
+A divider is striped down its length rather than across its width, because a
+wall 40 m long and a metre wide striped the way a row is comes out as one red
+half and one white half and reads as a painted line.
+
+`tools/checks/barrier_shot.gd` looks at a fork from the cars' own view, by day
+and at night, with the top car in the fast lane and the bottom one in the clear
+lane - the two halves of the picture are the two ways through the same stretch
+of road:
+
+```
+Godot --path . --script tools/checks/barrier_shot.gd -- /tmp/shots
+```
+
 ## Phases
 
 - [x] **0** — repo, Godot project, `.gitignore`

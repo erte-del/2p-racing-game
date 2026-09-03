@@ -27,6 +27,13 @@ class Piece:
 	var radius: float      ## corner radius in metres, 0 for straights
 	var rise: float        ## metres of height gained across the piece
 	var half_width: float
+	## Where the piece begins and ends, as a distance along the finished
+	## course. Filled in by _sample(). These are what let anything placed on
+	## the course - a boost pad, a hazard - go somewhere chosen rather than
+	## somewhere random: they are measured in the same offsets as the curve,
+	## the finish line and the checkpoints.
+	var start_offset: float
+	var end_offset: float
 
 	func _init(p_kind: int, p_length: float, p_half_width: float) -> void:
 		kind = p_kind
@@ -35,6 +42,8 @@ class Piece:
 		turn = 0.0
 		radius = 0.0
 		rise = 0.0
+		start_offset = 0.0
+		end_offset = 0.0
 
 
 # --- tunables, set by Track ---------------------------------------------
@@ -186,8 +195,16 @@ func _sample() -> void:
 	var position := Vector3.ZERO
 	var yaw := 0.0
 
+	var travelled := 0.0
+
 	for piece in pieces:
 		var steps: int = maxi(1, int(round(piece.length / step)))
+		# Every piece is quantised to a whole number of samples, so walking
+		# the steps and adding up the lengths give the same answer and these
+		# offsets land exactly on a sample.
+		piece.start_offset = travelled
+		travelled += float(steps) * step
+		piece.end_offset = travelled
 		var turn_per_step := piece.turn / float(steps)
 		for i in steps:
 			points.append(position)
