@@ -128,7 +128,35 @@ layout_mode = 2
 text = "INFINITE"
 theme_override_font_sizes/font_size = 32
 
-[node name="InfiniteNote" type="Label" parent="ModeChoice/Page/Panel/Margin/Box"]
+[node name="FlavourSlot" type="Control" parent="ModeChoice/Page/Panel/Margin/Box"]
+visible = false
+custom_minimum_size = Vector2(0, 0)
+layout_mode = 2
+clip_contents = true
+mouse_filter = 2
+
+[node name="Inner" type="VBoxContainer" parent="ModeChoice/Page/Panel/Margin/Box/FlavourSlot"]
+layout_mode = 1
+offset_right = 420.0
+theme_override_constants/separation = 12
+
+[node name="Row" type="HBoxContainer" parent="ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Normal" type="Button" parent="ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "NORMAL"
+theme_override_font_sizes/font_size = 22
+
+[node name="Chaos" type="Button" parent="ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "CHAOS"
+theme_override_font_sizes/font_size = 22
+
+[node name="Note" type="Label" parent="ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner"]
 layout_mode = 2
 text = "New track every race."
 horizontal_alignment = 1

@@ -5,9 +5,19 @@ extends Control
 ## to change the settings, over the game itself.
 ##
 ## Play does not drop straight into a race. It asks which mode first: the
-## endless course the game has always been, or laid-out tracks, which are not
-## built yet - that button is there and deliberately dead, so the choice the
-## game is heading towards is visible rather than a surprise later.
+## endless course the game has always been, or laid-out tracks. Tracks is
+## there and deliberately dead: the shape the game is heading towards is
+## better shown as a button that is not ready yet than sprung on the players
+## later.
+##
+## The mode page opens showing only the two modes. Infinite does not start a
+## race either: it opens out, sliding the choice between a normal race and a
+## chaotic one down from under itself, and it is that second click that
+## starts the game. Asking one question at a time keeps the page down to what
+## the players are actually deciding at that moment.
+##
+## What chaos actually does lives in `Chaos`; all that is settled here is
+## which of the two the players picked.
 ##
 ## The backdrop is a real instance of the race scene in attract mode - the same
 ## generated course, scenery and day/night cycle the players are about to
@@ -44,6 +54,12 @@ extends Control
 ## as one mechanical wobble, while two that drift apart read as idling.
 @export var bounce_period := 1.7
 
+@export_group("Mode choice")
+## How long the flavour buttons take to roll out from under infinite. Long
+## enough to read as movement, short enough that a player who knows what they
+## want is not waiting on it.
+@export var slide_seconds := 0.22
+
 @onready var _title: Label = $TitleSlot/Title
 @onready var _play: Button = $Play
 @onready var _settings_button: Button = $Settings
@@ -51,10 +67,15 @@ extends Control
 @onready var _mode_choice: Control = $ModeChoice
 @onready var _infinite_button: Button = $ModeChoice/Page/Panel/Margin/Box/Infinite
 @onready var _mode_back: Button = $ModeChoice/Page/Panel/Margin/Box/Back
+@onready var _flavour_slot: Control = $ModeChoice/Page/Panel/Margin/Box/FlavourSlot
+@onready var _flavour_inner: Control = $ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner
+@onready var _normal_button: Button = $ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner/Row/Normal
+@onready var _chaos_button: Button = $ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner/Row/Chaos
 @onready var _world: Node3D = $World
 @onready var _orbit: Camera3D = $Orbit
 
 var _elapsed := 0.0
+var _flavour_tween: Tween
 
 
 func _ready() -> void:
@@ -63,6 +84,10 @@ func _ready() -> void:
 	_settings_screen.closed.connect(_on_settings_closed)
 	_infinite_button.pressed.connect(_on_infinite_pressed)
 	_mode_back.pressed.connect(_close_mode_choice)
+	_normal_button.pressed.connect(_start_infinite.bind(false))
+	_chaos_button.pressed.connect(_start_infinite.bind(true))
+	# The slot is a plain Control, so nothing lays its contents out but this.
+	_flavour_slot.resized.connect(_fit_flavour)
 	# So the keyboard alone can start the game - both players are on one
 	# keyboard, and neither has been asked to find the mouse yet.
 	_play.grab_focus()
@@ -97,16 +122,90 @@ func _turn_the_backdrop() -> void:
 ## Play opens the mode choice over the title rather than starting a race, so
 ## the backdrop keeps turning behind it the way the settings do.
 func _on_play_pressed() -> void:
+	# Always opens closed, however it was left last time.
+	_shut_flavour()
 	_mode_choice.show()
 	_infinite_button.grab_focus()
 
 
+## Infinite is a door rather than a start: it opens out into the choice
+## between a normal race and a chaotic one, and closes again if pressed a
+## second time.
 func _on_infinite_pressed() -> void:
+	if _flavour_slot.visible:
+		_slide_flavour(false)
+		_infinite_button.grab_focus()
+	else:
+		_slide_flavour(true)
+		_normal_button.grab_focus()
+
+
+func _start_infinite(chaos: bool) -> void:
+	GameSettings.chaos = chaos
+	# Settled at the start of the race rather than on every press, so opening
+	# and closing the choice is not a file write per click.
+	GameSettings.save_settings()
 	get_tree().change_scene_to_file(race_scene)
+
+
+## Hold the flavour buttons to the width of the page.
+##
+## They hang inside a plain Control rather than a container, because a
+## container would insist on being tall enough for them and so could never
+## collapse. The cost of that is having to set their width here: left to its
+## own anchors the row sizes itself to nothing in particular, spreads the two
+## buttons across it, and hangs them out over both edges of the panel.
+func _fit_flavour() -> void:
+	_flavour_inner.size.x = _flavour_slot.size.x
+
+
+## Roll the flavour buttons out from under the infinite button, or back under
+## it, pushing everything below them down as they come.
+##
+## The slot is what the layout sees, so growing its minimum height is what
+## moves the rest of the page; the buttons themselves ride up inside it and
+## are clipped, which is what makes them slide rather than simply appear. The
+## height is asked of the contents rather than written down here, so it stays
+## right if the wording or the font ever changes.
+func _slide_flavour(open: bool) -> void:
+	if _flavour_tween:
+		_flavour_tween.kill()
+	_fit_flavour()
+	var height: float = _flavour_inner.get_combined_minimum_size().y
+	if open:
+		_flavour_slot.show()
+		_flavour_slot.custom_minimum_size.y = 0.0
+		_flavour_inner.position.y = -height
+		_flavour_slot.modulate.a = 0.0
+
+	_flavour_tween = create_tween()
+	_flavour_tween.set_parallel(true)
+	_flavour_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_flavour_tween.tween_property(_flavour_slot, "custom_minimum_size:y",
+		height if open else 0.0, slide_seconds)
+	_flavour_tween.tween_property(_flavour_inner, "position:y",
+		0.0 if open else -height, slide_seconds)
+	_flavour_tween.tween_property(_flavour_slot, "modulate:a",
+		1.0 if open else 0.0, slide_seconds)
+	if not open:
+		# Hidden rather than merely flat, or the gap the layout leaves either
+		# side of the slot stays behind as a hole in the page.
+		_flavour_tween.chain().tween_callback(_flavour_slot.hide)
+
+
+## Shut the choice with no animation, for opening the page on it rather than
+## closing it in front of the players.
+func _shut_flavour() -> void:
+	if _flavour_tween:
+		_flavour_tween.kill()
+	_flavour_slot.hide()
+	_flavour_slot.custom_minimum_size.y = 0.0
+	_flavour_slot.modulate.a = 0.0
 
 
 func _close_mode_choice() -> void:
 	_mode_choice.hide()
+	_shut_flavour()
 	_play.grab_focus()
 
 
@@ -118,7 +217,12 @@ func _input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	get_viewport().set_input_as_handled()
-	_close_mode_choice()
+	# One step at a time: off the flavour choice, then off the page.
+	if _flavour_slot.visible:
+		_slide_flavour(false)
+		_infinite_button.grab_focus()
+	else:
+		_close_mode_choice()
 
 
 ## The settings lie over the title screen rather than replacing it, so the

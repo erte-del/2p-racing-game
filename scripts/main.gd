@@ -97,12 +97,25 @@ var _respawn := PackedFloat32Array()
 var _next_checkpoint := PackedInt32Array()
 ## Who is currently ahead, or -1 while the cars are level.
 var _leader := -1
+## Set only when the players chose chaos, and only outside attract mode. Every
+## course is rolled through it before it is generated.
+var _chaos: Chaos
+## Its own generator, so a chaos roll cannot shift the sequence the courses
+## come out of and make the same seed build a different track.
+var _chaos_rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
 	_cars = [_car1, _car2]
 	_car1.rival = _car2
 	_car2.rival = _car1
+
+	# Chaos rolls the cars, the course and the sky, so it has to be in place
+	# before the first course is built. The title screen backdrop never rolls:
+	# it is showing the game, not playing it.
+	if not attract_mode and GameSettings.chaos:
+		_chaos = Chaos.new(_cars, _day_night, _track)
+		_chaos_rng.randomize()
 
 	_new_course(starting_seed if starting_seed != 0 else randi())
 
@@ -265,6 +278,8 @@ func _on_course(car: Car, offset: float) -> bool:
 
 ## Lay out a new course and put the cars on the line.
 func _new_course(course_seed: int) -> void:
+	if _chaos:
+		_chaos.reroll(_chaos_rng)
 	_track.generate(course_seed)
 	_place_on_grid()
 	# Snap both cameras, or they fly across the world to the new grid.

@@ -105,6 +105,22 @@ func _ready() -> void:
 	_apply(_target_nightness())
 
 
+## Re-time the cycle and put the clock somewhere in it, in one step.
+##
+## The durations are plain exports, but the clock is only read off `start_offset`
+## as the world is built, so anything wanting to move the day *after* that -
+## chaos mode rolling a new sky for every course - has to come through here or
+## it changes the length of a day without changing what time it is.
+func retime(day: float, night: float, fade: float, at: float) -> void:
+	day_seconds = maxf(day, 0.0)
+	night_seconds = maxf(night, 0.0)
+	transition_seconds = maxf(fade, 0.001)
+	_time = at
+	# Snapped rather than walked: this is a different sky, not this one
+	# changing.
+	_apply(_target_nightness())
+
+
 ## How far through the change to night the world is: 0 full day, 1 full night.
 ## Anything that wants to react to nightfall later - headlights, say - can ask
 ## rather than keeping a second clock of its own.

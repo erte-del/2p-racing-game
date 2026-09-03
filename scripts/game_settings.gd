@@ -35,6 +35,16 @@ var volume := 0.8:
 		_apply_volume()
 		changed.emit()
 
+## Whether infinite mode races under chaos rules: the cars, the shape of the
+## course and the clock all rerolled for every race. What that actually
+## changes lives in `Chaos` - this is only the choice the players made.
+var chaos := false:
+	set(value):
+		if value == chaos:
+			return
+		chaos = value
+		changed.emit()
+
 ## One of NORMAL, ALWAYS_DAY, ALWAYS_NIGHT.
 var time_of_day := NORMAL:
 	set(value):
@@ -56,6 +66,7 @@ func save_settings() -> void:
 	var file := ConfigFile.new()
 	file.set_value("audio", "volume", volume)
 	file.set_value("world", "time_of_day", time_of_day)
+	file.set_value("race", "chaos", chaos)
 	file.save(SAVE_PATH)
 
 
@@ -65,6 +76,7 @@ func load_settings() -> void:
 		return
 	volume = float(file.get_value("audio", "volume", volume))
 	time_of_day = int(file.get_value("world", "time_of_day", time_of_day))
+	chaos = bool(file.get_value("race", "chaos", chaos))
 
 
 ## Silence is its own state: fading a bus to -80 dB is still audible on some
