@@ -15,7 +15,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Bottleneck"
 	blurb = "The narrowest road in the game, with barriers on it."
-	medals(65.0, 74.0, 84.0)
+	medals(54.0, 62.0, 70.0)
 
 	straight(70.0)
 

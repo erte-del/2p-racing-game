@@ -31,7 +31,7 @@ const OBSTACLE_GROUP := &"obstacle"
 @export var body_color := Color(0.9063, 0.0, 0.0224)
 
 @export_group("Driving")
-@export var max_speed := 25.0          ## m/s going forward
+@export var max_speed := 30.0          ## m/s going forward
 @export var max_reverse_speed := 8.0   ## m/s going backwards
 @export var acceleration := 12.0       ## m/s^2 under throttle
 @export var braking := 24.0            ## m/s^2 under brake

@@ -19,7 +19,7 @@ extends RefCounted
 ## compound: a session would drift faster and faster until nothing was
 ## driveable.
 
-## How far the cars' top speed may stray from the tuned 25 m/s. The floor is
+## How far the cars' top speed may stray from the tuned 30 m/s. The floor is
 ## slow enough to feel heavy without dragging the race out; the ceiling is
 ## genuinely quick, and is the point at which the corners start to matter.
 const SPEED_SCALE := Vector2(0.78, 1.7)

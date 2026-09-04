@@ -12,7 +12,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Pinch"
 	blurb = "The road is not short of corners. It is short of room."
-	medals(52.0, 58.0, 65.0)
+	medals(43.0, 48.0, 54.0)
 
 	straight(70.0)
 

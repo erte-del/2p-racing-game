@@ -14,7 +14,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Needle"
 	blurb = "The gap is the size it always was. The road is not."
-	medals(67.0, 74.0, 83.0)
+	medals(56.0, 62.0, 69.0)
 
 	straight(70.0)
 

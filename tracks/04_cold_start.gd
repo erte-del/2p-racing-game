@@ -12,7 +12,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Cold Start"
 	blurb = "Three corners the throttle cannot argue with."
-	medals(45.0, 51.0, 57.0)
+	medals(38.0, 42.0, 48.0)
 
 	straight(70.0)
 

@@ -16,7 +16,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Last Light"
 	blurb = "Everything the road knows how to do, with the rests taken out."
-	medals(108.0, 120.0, 134.0)
+	medals(90.0, 100.0, 112.0)
 
 	# The grid, and the only stretch of this track that asks for nothing.
 	straight(70.0)

@@ -12,7 +12,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Long Haul"
 	blurb = "Nothing new, and a very long way to keep getting it right."
-	medals(65.0, 72.0, 80.0)
+	medals(54.0, 60.0, 67.0)
 
 	straight(70.0)
 

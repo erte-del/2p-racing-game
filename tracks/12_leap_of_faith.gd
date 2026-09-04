@@ -13,7 +13,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Leap of Faith"
 	blurb = "Three ramps. What matters is where you come down."
-	medals(61.0, 68.0, 76.0)
+	medals(51.0, 57.0, 63.0)
 
 	straight(70.0)
 

@@ -12,7 +12,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Switchback"
 	blurb = "Four hairpins, and not much road between them."
-	medals(53.0, 59.0, 66.0)
+	medals(44.0, 49.0, 55.0)
 
 	straight(70.0)
 

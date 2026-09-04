@@ -184,8 +184,16 @@ func _check_the_endless_course(previous: Node) -> int:
 	for i in 10:
 		await Engine.get_main_loop().physics_frame
 	var car: Car = wild.get_node("Car")
-	print("under chaos the one car tops out at %.1f m/s" % car.max_speed)
-	if is_equal_approx(car.max_speed, 25.0):
+	# What the car is tuned to, read off the scene rather than written down
+	# here. A number in a check is a number that goes stale the first time the
+	# car is retuned, and this one would go stale quietly: it would stop
+	# meaning "chaos changed something" and start meaning nothing at all.
+	var stock: Car = load("res://scenes/car/car.tscn").instantiate()
+	var tuned_speed: float = stock.max_speed
+	stock.queue_free()
+	print("under chaos the one car tops out at %.1f m/s against %.1f tuned"
+		% [car.max_speed, tuned_speed])
+	if is_equal_approx(car.max_speed, tuned_speed):
 		print("  chaos rolled nothing at all")
 		faults += 1
 	settings.chaos = false

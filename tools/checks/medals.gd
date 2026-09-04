@@ -18,14 +18,18 @@ func _init() -> void:
 		print("  the first track offers no medals")
 		faults += 1
 
+	# Written against the targets rather than against the numbers they happen
+	# to hold, so retuning the car - which moves every target on every track -
+	# does not turn this into a check that tests the wrong boundaries and
+	# passes anyway.
 	for trial: Array in [
-		[38.0, Medal.GOLD], [39.99, Medal.GOLD],
-		# On the target is not under it. A medal for exactly forty seconds
+		[targets.x - 2.0, Medal.GOLD], [targets.x - 0.01, Medal.GOLD],
+		# On the target is not under it. A medal for exactly the target time
 		# would make the number on the screen a lie in one direction or the
 		# other, and under is the one a player can act on.
-		[40.0, Medal.SILVER], [44.99, Medal.SILVER],
-		[45.0, Medal.BRONZE], [49.99, Medal.BRONZE],
-		[50.0, Medal.NONE], [61.0, Medal.NONE],
+		[targets.x, Medal.SILVER], [targets.y - 0.01, Medal.SILVER],
+		[targets.y, Medal.BRONZE], [targets.z - 0.01, Medal.BRONZE],
+		[targets.z, Medal.NONE], [targets.z + 11.0, Medal.NONE],
 		[-1.0, Medal.NONE],
 	]:
 		var got: int = Medal.earned(trial[0], targets)
@@ -33,21 +37,24 @@ func _init() -> void:
 			print("  %.2f earned %s, not %s"
 				% [trial[0], _name(got), _name(int(trial[1]))])
 			faults += 1
-	print("40.00 is %s and 39.99 is %s, so a target is a time to get under"
-		% [_name(Medal.earned(40.0, targets)), _name(Medal.earned(39.99, targets))])
+	print("%.2f is %s and %.2f is %s, so a target is a time to get under"
+		% [targets.x, _name(Medal.earned(targets.x, targets)),
+			targets.x - 0.01, _name(Medal.earned(targets.x - 0.01, targets))])
 
 	# What a player is driving at next.
 	for trial: Array in [
-		[47.0, Medal.SILVER, 2.0], [42.0, Medal.GOLD, 2.0],
-		[38.0, Medal.NONE, 0.0], [55.0, Medal.BRONZE, 5.0],
+		[targets.y + 2.0, Medal.SILVER, 2.0], [targets.x + 2.0, Medal.GOLD, 2.0],
+		[targets.x - 2.0, Medal.NONE, 0.0], [targets.z + 5.0, Medal.BRONZE, 5.0],
 	]:
 		var up: Array = Medal.next_up(trial[0], targets)
 		if up[0] != trial[1] or not is_equal_approx(up[1], trial[2]):
 			print("  from %.2f the next up came out as %s by %.2f, not %s by %.2f"
 				% [trial[0], _name(int(up[0])), up[1], _name(int(trial[1])), trial[2]])
 			faults += 1
-	print("from 47.00 the next up is %s, %.2f away"
-		% [_name(int(Medal.next_up(47.0, targets)[0])), Medal.next_up(47.0, targets)[1]])
+	var chasing := targets.y + 2.0
+	print("from %.2f the next up is %s, %.2f away"
+		% [chasing, _name(int(Medal.next_up(chasing, targets)[0])),
+			Medal.next_up(chasing, targets)[1]])
 
 	# A track that offers only some of them is walked past, not stalled on.
 	var sparse := Vector3(30.0, 0.0, 50.0)

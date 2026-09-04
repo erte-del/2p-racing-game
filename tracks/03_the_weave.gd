@@ -12,7 +12,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "The Weave"
 	blurb = "Corner into corner, and no room to sort it out."
-	medals(45.0, 50.0, 55.0)
+	medals(38.0, 42.0, 46.0)
 
 	straight(70.0)
 

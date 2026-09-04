@@ -13,7 +13,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Relentless"
 	blurb = "Sixteen corners. Four straights. Draw your own conclusions."
-	medals(64.0, 72.0, 82.0)
+	medals(53.0, 60.0, 68.0)
 
 	straight(70.0)
 

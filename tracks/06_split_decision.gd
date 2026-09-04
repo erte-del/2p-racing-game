@@ -12,7 +12,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Split Decision"
 	blurb = "Take the boost, or take the room. Twice, and the second one bites."
-	medals(52.0, 58.0, 64.0)
+	medals(43.0, 48.0, 53.0)
 
 	straight(70.0)
 

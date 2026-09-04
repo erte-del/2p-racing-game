@@ -416,8 +416,8 @@ gives one a boost, and prints the gap:
 Godot --path . --headless --script tools/checks/boost_trace.gd
 ```
 
-On the tuned numbers the boosted car peaks at 38.8 m/s, spends 3.7 s above its
-own top speed, and finishes 27 m up the road - about six car lengths, on a
+On the tuned numbers the boosted car peaks at 46.5 m/s, spends 4.1 s above its
+own top speed, and finishes 34.4 m up the road - about seven car lengths, on a
 course of 620-1050 m.
 
 ## Speed rush
@@ -580,7 +580,7 @@ Godot --path . --headless --script tools/checks/barrier_layout.gd
 
 On the tuned numbers that is 6.3 barriers a course, none with fewer than one,
 no way past narrower than the 3.4 m rule, and no faults. Driving square into
-one takes 25 m/s to 7 and wipes the boost; taking the gap beside it costs
+one takes 30 m/s to 8.4 and wipes the boost; taking the gap beside it costs
 nothing at all.
 
 How many barriers a course carries is mostly decided by `same_side_chance`
@@ -734,12 +734,17 @@ be testing a course the game never lays down:
 Godot --path . --headless --script tools/checks/jump_flight.gd
 ```
 
-At tuned speed and gravity that is a 17.5 m hole cleared by 10 m; at the
-slowest, heaviest roll chaos can produce it is a 10 m hole cleared by 4.6 m.
-The longest flight is 79.1 m against 107.5 m of road to come down on, and no
+At tuned speed and gravity that is a 17.5 m hole cleared by 19.4 m; at the
+slowest, heaviest roll chaos can produce it is a 10 m hole cleared by 9.4 m.
+The longest flight is 95.0 m against 107.5 m of road to come down on, and no
 roll crosses without leaving the ground. It then asks the opposite question,
 because a jump every car clears whatever it does is scenery rather than a risk:
-a car crawling at 8.8 m/s comes down 5.6 m short and ends up on the grass.
+a car crawling at 10.5 m/s comes down 7.5 m short and ends up on the grass.
+
+That longest flight is what sets the ceiling on the cars' top speed. The
+landing is 90 m of road and the ramp puts a chaos-fast boosted car 95 m past
+the lip; there is 107.5 m to come down on, so a further retune upwards lands
+the fastest roll on the grass rather than the road.
 
 `tools/checks/jump_shot.gd` looks at one - the top car back on the run up where
 the choice to commit is made, the bottom one held in the air over the hole,
@@ -928,12 +933,14 @@ Godot --path . --headless --fixed-fps 60 --script tools/checks/mode_routing.gd
 Play opens the mode page, and Tracks now opens out of it into a grid of
 twenty. Each cell is the track's name over an overhead shot of the road it is.
 
-The grid is as long as the game intends to be, not as long as it currently is.
-A slot with nothing in it is still shown, framed and unpressable, because
-nineteen doors that do not open yet say what the game is going to be - a short
-grid that grew every few weeks would say nothing at all. An empty slot gets its
-own dark outlined face rather than the theme's disabled grey, which fades a
-button into the page until it reads as a hole rather than as a track to come.
+All twenty are there now. The grid was built before they were, and a slot with
+nothing in it was still shown - framed and unpressable - because nineteen doors
+that did not open yet said what the game was going to be, where a short grid
+that grew every few weeks would have said nothing at all. That behaviour is
+still in `TrackRoster.exists()` and still worth keeping: it is what a
+twenty-first track would be added into. An empty slot gets its own dark
+outlined face rather than the theme's disabled grey, which fades a button into
+the page until it reads as a hole rather than as a track to come.
 
 The cells are built in code from `TrackRoster` rather than written into the
 scene: twenty of them is a great deal of scene, and every one would have to be
@@ -1082,14 +1089,14 @@ Godot --path . --headless --script tools/checks/track_times.gd
 Every track sets what a lap of it is worth - gold, silver and bronze in
 seconds - in its own file, next to its corners. What counts as a good lap is a
 fact about the road rather than a number that could be worked out from one: a
-wide open kilometre and a kilometre of hairpins are not the same forty seconds.
-First Light asks for 40, 45 and 50.
+wide open kilometre and a kilometre of hairpins are not the same thirty-three
+seconds. First Light asks for 33, 38 and 42.
 
 ```gdscript
-medals(40.0, 45.0, 50.0)
+medals(33.0, 38.0, 42.0)
 ```
 
-A target is a time to get under, not a time to match. 39.99 is gold and 40.00
+A target is a time to get under, not a time to match. 32.99 is gold and 33.00
 is silver, because a medal for exactly the number on the screen would make that
 number a lie in one direction or the other, and under is the one a player can
 act on.
@@ -1124,10 +1131,29 @@ some of the medals, and what to tell a player chasing the next one.
 Godot --path . --headless --script tools/checks/medals.gd
 ```
 
+### Where the numbers come from
+
+A target has to be a fact about the road, which means driving it.
+`tools/lap_times.gd` points the same crude driver `solo_run` uses at all twenty
+tracks in turn and times each one:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/lap_times.gd
+```
+
+The lap it drives is a bad one - flat out, aimed fourteen metres ahead on the
+centreline, giving back speed wherever that point is not straight in front of
+it - and on the harder tracks it does not finish at all, because driving the
+centreline into a slalom is driving into a barrier. What makes it useful is
+that it is the same bad lap everywhere: on First Light it comes home in 34.63,
+against the 33 the track asks for gold. Gold is a little under the best the
+road allows, silver and bronze are spaced further apart the harder the track
+gets, and the whole ladder is set from that one ratio.
+
 ## Adding a track
 
-Everything a track needs is in place, so adding the next nineteen is three
-steps and no code:
+Everything a track needs is in place, so adding a twenty-first is three steps
+and no code:
 
 1. Write `tracks/NN_name.gd` extending `TrackDefinition`, set its `medals()`,
    and check it with `tools/checks/track_check.gd` and

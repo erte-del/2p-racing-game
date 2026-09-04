@@ -13,7 +13,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Long Way Round"
 	blurb = "Open sweepers, taken flat if you dare."
-	medals(43.0, 48.0, 53.0)
+	medals(36.0, 40.0, 44.0)
 
 	# The grid.
 	straight(70.0)

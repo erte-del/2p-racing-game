@@ -13,11 +13,15 @@ extends Node
 
 const SAVE_PATH := "user://times.cfg"
 
-## Bumped by hand when something outside the track files changes the road they
-## are all built from: the sampling step, the size of a jump, how much speed a
-## pad is worth. A track file untouched by that is still a different track to
-## drive, and its times are worth as little as if it had been rewritten.
-const GEOMETRY := 1
+## Bumped by hand when something outside the track files changes what a lap of
+## them is worth: the sampling step, the size of a jump, how much speed a pad
+## is worth, how fast the car goes. A track file untouched by that is still a
+## different track to drive, and its times are worth as little as if it had
+## been rewritten.
+##
+## Two: the cars were retuned from 25 m/s to 30, so every time set before it
+## was set by a slower car and none of them stand.
+const GEOMETRY := 2
 
 ## Emitted when a time is beaten, so a screen showing one can follow it.
 signal beaten(track: String, seconds: float)

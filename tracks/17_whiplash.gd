@@ -13,7 +13,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Whiplash"
 	blurb = "Nothing new on it. You just cannot see any of it coming."
-	medals(74.0, 83.0, 94.0)
+	medals(62.0, 69.0, 78.0)
 
 	straight(70.0)
 

@@ -14,7 +14,7 @@ func describe() -> void:
 	blurb = "Open road, one of everything, nothing hidden."
 	# Forty is a clean lap that took the pad and cleared the jump; fifty is
 	# getting round without falling in anything.
-	medals(40.0, 45.0, 50.0)
+	medals(33.0, 38.0, 42.0)
 
 	# The grid, and enough road to reach it in a straight line.
 	straight(70.0)
