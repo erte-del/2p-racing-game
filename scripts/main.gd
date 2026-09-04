@@ -119,6 +119,12 @@ func _ready() -> void:
 		_chaos = Chaos.new(_cars, _day_night, _track)
 		_chaos_rng.randomize()
 
+	# A laid-out track if one was picked on the way in, and the endless course
+	# otherwise. Never in attract mode: the title backdrop rolls its own
+	# courses, and freezing it on whichever track was last played would make
+	# the one screen that is always moving always the same.
+	if not attract_mode:
+		_track.track_file = GameSettings.track_file
 	_new_course(starting_seed if starting_seed != 0 else randi())
 
 	# Each player watches their own speed: the streaks show whenever a car is

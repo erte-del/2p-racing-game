@@ -5,10 +5,7 @@ extends Control
 ## to change the settings, over the game itself.
 ##
 ## Play does not drop straight into a race. It asks which mode first: the
-## endless course the game has always been, or laid-out tracks. Tracks is
-## there and deliberately dead: the shape the game is heading towards is
-## better shown as a button that is not ready yet than sprung on the players
-## later.
+## endless course the game has always been, or one of the laid-out tracks.
 ##
 ## The mode page opens showing only the two modes. Infinite does not start a
 ## race either: it opens out, sliding the choice between a normal race and a
@@ -54,6 +51,11 @@ extends Control
 ## as one mechanical wobble, while two that drift apart read as idling.
 @export var bounce_period := 1.7
 
+@export_group("Track choice")
+## How big the overhead shot on a track button is, in pixels. Five of them
+## across is what decides how wide the page comes out.
+@export var track_button_size := 152.0
+
 @export_group("Mode choice")
 ## How long the flavour buttons take to roll out from under infinite. Long
 ## enough to read as movement, short enough that a player who knows what they
@@ -71,6 +73,10 @@ extends Control
 @onready var _flavour_inner: Control = $ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner
 @onready var _normal_button: Button = $ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner/Row/Normal
 @onready var _chaos_button: Button = $ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner/Row/Chaos
+@onready var _tracks_button: Button = $ModeChoice/Page/Panel/Margin/Box/Tracks
+@onready var _track_choice: Control = $TrackChoice
+@onready var _track_grid: GridContainer = $TrackChoice/Page/Panel/Margin/Box/Scroll/Grid
+@onready var _track_back: Button = $TrackChoice/Page/Panel/Margin/Box/Back
 @onready var _world: Node3D = $World
 @onready var _orbit: Camera3D = $Orbit
 
@@ -86,6 +92,9 @@ func _ready() -> void:
 	_mode_back.pressed.connect(_close_mode_choice)
 	_normal_button.pressed.connect(_start_infinite.bind(false))
 	_chaos_button.pressed.connect(_start_infinite.bind(true))
+	_tracks_button.pressed.connect(_on_tracks_pressed)
+	_track_back.pressed.connect(_close_track_choice)
+	_fill_the_track_grid()
 	# The slot is a plain Control, so nothing lays its contents out but this.
 	_flavour_slot.resized.connect(_fit_flavour)
 	# So the keyboard alone can start the game - both players are on one
@@ -141,11 +150,110 @@ func _on_infinite_pressed() -> void:
 
 
 func _start_infinite(chaos: bool) -> void:
+	# Cleared, or an infinite race started after a track had been played would
+	# run that track over and over.
+	GameSettings.track_file = ""
 	GameSettings.chaos = chaos
 	# Settled at the start of the race rather than on every press, so opening
 	# and closing the choice is not a file write per click.
 	GameSettings.save_settings()
 	get_tree().change_scene_to_file(race_scene)
+
+
+# --- choosing a track ---------------------------------------------------
+
+## One cell per track the game intends to have, not per track it has.
+##
+## A slot with nothing in it is still shown, greyed and unpressable, because
+## nineteen doors that do not open yet say what the game is going to be. A
+## short grid that grew every few weeks would say nothing at all.
+##
+## Built here rather than in the scene: twenty cells is a great deal of scene
+## to write down, and every one of them would have to be edited again the day
+## a track was added.
+func _fill_the_track_grid() -> void:
+	for index in TrackRoster.COUNT:
+		var cell := VBoxContainer.new()
+		cell.add_theme_constant_override("separation", 4)
+
+		var label := Label.new()
+		label.text = TrackRoster.track_name(index).to_upper()
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		# Clipped rather than allowed to set the width of its column: one long
+		# name would otherwise stretch the whole grid out around it.
+		label.autowrap_mode = TextServer.AUTOWRAP_OFF
+		label.clip_text = true
+		label.custom_minimum_size.x = track_button_size
+		label.add_theme_font_size_override("font_size", 18)
+		if not TrackRoster.exists(index):
+			label.add_theme_color_override("font_color", Color(0.55, 0.58, 0.66))
+		cell.add_child(label)
+
+		var button := Button.new()
+		button.custom_minimum_size = Vector2(track_button_size, track_button_size)
+		button.expand_icon = true
+		button.icon = TrackRoster.thumbnail(index)
+		button.disabled = not TrackRoster.exists(index)
+		if button.disabled:
+			# The theme greys a disabled button until it disappears into the
+			# page, which reads as a hole rather than as a track still to
+			# come. An empty slot gets its own frame instead: dark, outlined,
+			# and plainly a place where something goes.
+			button.add_theme_stylebox_override("disabled", _empty_slot())
+		button.tooltip_text = TrackRoster.track_name(index)
+		if not button.disabled:
+			button.pressed.connect(_start_track.bind(TrackRoster.file(index)))
+		cell.add_child(button)
+
+		_track_grid.add_child(cell)
+
+
+## The face of a track that does not exist yet.
+func _empty_slot() -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.075, 0.098, 0.157, 0.9)
+	box.border_color = Color(0.898, 0.929, 1.0, 0.16)
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(6)
+	return box
+
+
+func _on_tracks_pressed() -> void:
+	# The mode page steps aside rather than lying underneath. Both are full
+	# panels, and one showing through the other reads as a bug however faint
+	# it is - unlike the settings, which lie over a title screen with nothing
+	# on it but a name.
+	_mode_choice.hide()
+	_track_choice.show()
+	_focus_first_track()
+
+
+## The first track that can actually be pressed. With one track made, that is
+## the only one; with twenty it is still where a player wants to start.
+func _focus_first_track() -> void:
+	for cell in _track_grid.get_children():
+		for child in cell.get_children():
+			var button := child as Button
+			if button != null and not button.disabled:
+				button.grab_focus()
+				return
+	_track_back.grab_focus()
+
+
+func _start_track(path: String) -> void:
+	GameSettings.track_file = path
+	# A track is a road to learn and a time to beat, so it is always run under
+	# the same rules. Chaos rerolls the cars for every race, and a time set by
+	# a car nobody will be given again is not a time.
+	GameSettings.chaos = false
+	GameSettings.save_settings()
+	get_tree().change_scene_to_file(race_scene)
+
+
+func _close_track_choice() -> void:
+	_track_choice.hide()
+	_mode_choice.show()
+	_tracks_button.grab_focus()
 
 
 ## Hold the flavour buttons to the width of the page.
@@ -209,19 +317,24 @@ func _close_mode_choice() -> void:
 	_play.grab_focus()
 
 
-## Escape backs out of the mode choice. The settings screen handles its own,
-## and it lies over this one, so it gets first refusal on the key.
+## Escape backs out of whichever page is open. The settings screen handles its
+## own, and it lies over these, so it gets first refusal on the key.
 func _input(event: InputEvent) -> void:
-	if not _mode_choice.visible or _settings_screen.visible:
+	if _settings_screen.visible:
 		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
-	get_viewport().set_input_as_handled()
-	# One step at a time: off the flavour choice, then off the page.
-	if _flavour_slot.visible:
+	# One page at a time, outermost first: off the track grid, then off the
+	# flavour choice, then off the mode page.
+	if _track_choice.visible:
+		get_viewport().set_input_as_handled()
+		_close_track_choice()
+	elif _flavour_slot.visible:
+		get_viewport().set_input_as_handled()
 		_slide_flavour(false)
 		_infinite_button.grab_focus()
-	else:
+	elif _mode_choice.visible:
+		get_viewport().set_input_as_handled()
 		_close_mode_choice()
 
 

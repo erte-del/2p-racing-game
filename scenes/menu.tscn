@@ -166,18 +166,76 @@ theme_override_font_sizes/font_size = 18
 [node name="Tracks" type="Button" parent="ModeChoice/Page/Panel/Margin/Box"]
 custom_minimum_size = Vector2(0, 64)
 layout_mode = 2
-disabled = true
 text = "TRACKS"
 theme_override_font_sizes/font_size = 32
 
 [node name="TracksNote" type="Label" parent="ModeChoice/Page/Panel/Margin/Box"]
 layout_mode = 2
-text = "Laid-out circuits to learn and lap. Not built yet."
+text = "The same road every time. Learn it, then beat it."
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
 theme_override_font_sizes/font_size = 18
 
 [node name="Back" type="Button" parent="ModeChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "BACK"
+
+[node name="TrackChoice" type="Control" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="ColorRect" parent="TrackChoice"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.62)
+
+[node name="Page" type="CenterContainer" parent="TrackChoice"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="TrackChoice/Page"]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="TrackChoice/Page/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 34
+theme_override_constants/margin_top = 26
+theme_override_constants/margin_right = 34
+theme_override_constants/margin_bottom = 26
+
+[node name="Box" type="VBoxContainer" parent="TrackChoice/Page/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Heading" type="Label" parent="TrackChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "CHOOSE A TRACK"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 44
+
+[node name="Scroll" type="ScrollContainer" parent="TrackChoice/Page/Panel/Margin/Box"]
+custom_minimum_size = Vector2(0, 376)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="Grid" type="GridContainer" parent="TrackChoice/Page/Panel/Margin/Box/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 14
+theme_override_constants/v_separation = 14
+columns = 5
+
+[node name="Back" type="Button" parent="TrackChoice/Page/Panel/Margin/Box"]
 layout_mode = 2
 text = "BACK"
 

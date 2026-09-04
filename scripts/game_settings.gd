@@ -45,6 +45,13 @@ var chaos := false:
 		chaos = value
 		changed.emit()
 
+## The laid-out track a race is about to be run on, or an empty string for
+## the endless course. Not written to disk: it is what was picked on the way
+## into this race rather than a preference, and a game that opened straight
+## back onto the last track someone tried would be answering a question
+## nobody asked.
+var track_file := ""
+
 ## One of NORMAL, ALWAYS_DAY, ALWAYS_NIGHT.
 var time_of_day := NORMAL:
 	set(value):

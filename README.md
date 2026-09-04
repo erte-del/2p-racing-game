@@ -851,6 +851,55 @@ a split screen, until solo mode exists:
 Godot --path . --script tools/drive_track.gd
 ```
 
+## Choosing a track
+
+Play opens the mode page, and Tracks now opens out of it into a grid of
+twenty. Each cell is the track's name over an overhead shot of the road it is.
+
+The grid is as long as the game intends to be, not as long as it currently is.
+A slot with nothing in it is still shown, framed and unpressable, because
+nineteen doors that do not open yet say what the game is going to be - a short
+grid that grew every few weeks would say nothing at all. An empty slot gets its
+own dark outlined face rather than the theme's disabled grey, which fades a
+button into the page until it reads as a hole rather than as a track to come.
+
+The cells are built in code from `TrackRoster` rather than written into the
+scene: twenty of them is a great deal of scene, and every one would have to be
+edited again the day a track was added. A track's name is read off the track
+itself by building its description, which costs a few array appends and no
+geometry - a name written down in two places drifts, and the one on the button
+would be the one nobody notices is wrong.
+
+The overhead shots are checked in rather than drawn at load. A menu that built
+twenty tracks to show twenty pictures of them would take a second to open, and
+the pictures do not change between runs. `tools/track_thumbnails.gd` draws them,
+and wants running after laying out a track or changing the shape of one:
+
+```
+Godot --path . --script tools/track_thumbnails.gd
+```
+
+Scenery is left out of them. At the size they are shown, trees and hills come
+out as noise across the one thing the picture is for, which is the shape of the
+road.
+
+The track that was picked travels to the race in `GameSettings.track_file`, the
+same way the chaos choice does, and is not written to disk: it is what was
+picked on the way into this race rather than a preference, and a game that
+opened straight back onto the last track someone tried would be answering a
+question nobody asked. Infinite clears it. Tracks also turns chaos off - a
+track is a road to learn and a time to beat, and a time set by a car nobody
+will be given again is not a time.
+
+`tools/checks/track_select.gd` presses the buttons and sees where they go,
+which is three places for a track to be chosen and then quietly not raced: the
+grid built in code, the setting carried across a scene change, and a Track that
+has to divert from a seed to a file.
+
+```
+Godot --path . --headless --script tools/checks/track_select.gd
+```
+
 ## Phases
 
 - [x] **0** — repo, Godot project, `.gitignore`
