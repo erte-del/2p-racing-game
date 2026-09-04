@@ -12,11 +12,18 @@ extends Control
 ## another, or the same one again, and making them walk back in through two
 ## pages to do it is asking them to say something they have already said.
 ##
-## The mode page opens showing only the two modes. Infinite does not start a
-## race either: it opens out, sliding the choice between a normal race and a
-## chaotic one down from under itself, and it is that second click that
-## starts the game. Asking one question at a time keeps the page down to what
-## the players are actually deciding at that moment.
+## The mode page opens showing only the two modes, each with a line under it
+## saying what it is. Infinite does not start a race either: it opens out,
+## sliding the choice between a normal race and a chaotic one down from under
+## itself, and it is that second click that starts the game. Asking one
+## question at a time keeps the page down to what the players are actually
+## deciding at that moment.
+##
+## What rolls out is the two buttons and nothing else. The line under Infinite
+## stays where it is and is pushed down by them, the same as everything below
+## it: it describes the mode rather than the choice, so it is as true before
+## the buttons are there as after, and a page where half the words appear on a
+## click reads as a page that was hiding something.
 ##
 ## What chaos actually does lives in `Chaos`; all that is settled here is
 ## which of the two the players picked.

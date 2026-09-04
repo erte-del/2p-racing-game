@@ -1,11 +1,12 @@
 extends SceneTree
 
-# Look at the track select screen.
+# Look at the pages between the title and a race.
 #   Godot --path . --script tools/checks/track_select_shot.gd -- <out_dir>
 #
-# Twenty cells built in code is the sort of thing that is right in the numbers
-# and wrong on the screen: a name too long for its column, a grid wider than
-# the window, a greyed button that reads as broken rather than as coming.
+# These are the sort of thing that is right in the numbers and wrong on the
+# screen: a name too long for its column, a grid wider than the window, a
+# greyed button that reads as broken rather than as coming, a line of text
+# that appears out of nowhere when something is clicked.
 
 func _init() -> void:
 	await process_frame
@@ -24,17 +25,25 @@ func _init() -> void:
 		await process_frame
 
 	var out: String = OS.get_cmdline_user_args()[0]
-	menu.get_node("ModeChoice").show()
-	for i in 8:
+	# The mode page as it opens, and again with the flavour buttons rolled
+	# out - the second is where the line under Infinite has to have moved down
+	# rather than appeared.
+	menu.call("_on_play_pressed")
+	for i in 10:
 		await process_frame
 	root.get_texture().get_image().save_png("%s/01_modes.png" % out)
+	menu.call("_on_infinite_pressed")
+	for i in 40:
+		await process_frame
+	root.get_texture().get_image().save_png("%s/02_modes_open.png" % out)
+	menu.call("_shut_flavour")
 
 	menu.get_node("ModeChoice").hide()
 	menu.get_node("TrackChoice").show()
 	for i in 12:
 		await process_frame
-	root.get_texture().get_image().save_png("%s/02_tracks.png" % out)
+	root.get_texture().get_image().save_png("%s/03_tracks.png" % out)
 	if times != null:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(times.save_path))
-	print("track select drawn")
+	print("mode page and track select drawn")
 	quit()

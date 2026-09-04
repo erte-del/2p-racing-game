@@ -851,6 +851,20 @@ a split screen, until solo mode exists:
 Godot --path . --script tools/drive_track.gd
 ```
 
+## Choosing a mode
+
+Play opens a page with the two modes on it, each with a line under it saying
+what it is. Infinite is a door rather than a start: it rolls the choice between
+a normal race and a chaotic one out from under itself, and it is that second
+click that starts the game. Asking one question at a time keeps the page down
+to what is actually being decided.
+
+What rolls out is the two buttons and nothing else. The line under Infinite
+stays where it is and is pushed down by them, the same as everything below it.
+It describes the mode rather than the choice, so it is as true before the
+buttons are there as after - and a page where half the words appear on a click
+reads as a page that was hiding something.
+
 ## Choosing a track
 
 Play opens the mode page, and Tracks now opens out of it into a grid of
