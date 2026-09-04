@@ -20,6 +20,15 @@ const COUNT := 20
 ## waiting to be filled.
 const FILES := [
 	"res://tracks/01_first_light.gd",
+	"res://tracks/02_long_way_round.gd",
+	"res://tracks/03_the_weave.gd",
+	"res://tracks/04_cold_start.gd",
+	"res://tracks/05_overpass.gd",
+	"res://tracks/06_split_decision.gd",
+	"res://tracks/07_pinch.gd",
+	"res://tracks/08_switchback.gd",
+	"res://tracks/09_the_gauntlet.gd",
+	"res://tracks/10_long_haul.gd",
 ]
 
 ## Where the overhead shots live. Built by tools/track_thumbnails.gd, one per
