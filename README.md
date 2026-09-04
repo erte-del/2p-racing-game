@@ -851,44 +851,64 @@ a split screen, until solo mode exists:
 Godot --path . --script tools/drive_track.gd
 ```
 
-## How many are playing
-
-Play asks how many are playing before it asks anything else, because it is the
-one choice that changes what every other choice means. The same endless course
-is a race against someone in co-op and a run against the clock alone; the same
-laid-out track is a time to beat alone and a road to race down together. Asking
-it the other way round would have a player pick a mode before they knew what a
-mode was going to be for.
-
-It is also the only choice that decides which scene a race runs in. Everything
-else - the endless course or a laid-out track, chaos or not - is a setting the
-scene reads once it is up. The page opens on whichever way the player played
-last, which is remembered between runs, so someone who always plays alone
-presses the same key twice every time.
-
-Backing out walks the way in, in reverse: the track grid, the modes, how many,
-then the title.
-
 ## Choosing a mode
 
-The mode page comes second, with the two modes on it, each with a line under it
-saying what it is. Infinite is a door rather than a start: it rolls the choice between
-a normal race and a chaotic one out from under itself, and it is that second
-click that starts the game. Asking one question at a time keeps the page down
-to what is actually being decided.
+Play opens one page that asks two things in order, without ever becoming a
+second page.
 
-What rolls out is the two buttons and nothing else. The line under Infinite
-stays where it is and is pushed down by them, the same as everything below it.
-It describes the mode rather than the choice, so it is as true before the
-buttons are there as after - and a page where half the words appear on a click
-reads as a page that was hiding something.
+How many are playing comes first, as two buttons side by side, because it is
+the one choice that changes what every other choice means: the same endless
+course is a race against someone in co-op and a run against the clock alone,
+and the same laid-out track is a time to beat alone and a road to race down
+together. It is also the only choice that decides which scene the race runs in
+- everything after it is a setting that scene reads once it is up, so the
+routing is one line.
 
-Both of those lines are pulled back up towards what they describe. The page is
-one column with one spacing between everything in it, which is right between a
+Answering rolls the modes out from underneath, from the middle of the page
+rather than from under whichever of the two was pressed: what opened is the
+rest of the page, not a drawer belonging to one button. The two stay where they
+are with the answer held down on them, so a player can change their mind
+without going back anywhere, and the page goes on saying which way this race is
+being played while the rest of it is decided. It opens on whichever way they
+played last, which is remembered between runs.
+
+Inside that, Infinite does not start a race either: it opens out in turn,
+sliding the choice between a normal race and a chaotic one down from under
+itself, and it is that click that starts the game. A slide inside a slide costs
+nothing because the outer one is held to the height of its own contents rather
+than to a height measured when it opened - the inner grows as its buttons roll
+down, and the outer grows with it instead of clipping them.
+
+Both slides are the same code. The slot is what the layout sees, so growing its
+minimum height is what moves the rest of the page; the contents ride up inside
+it and are clipped, which is what makes them slide rather than simply appear.
+The height is asked of the contents rather than written down, so it stays right
+if the wording or the font ever changes.
+
+Each mode has a line under it saying what it is, and those lines are not part
+of what slides. The line under Infinite stays where it is and is pushed down by
+the flavour buttons, the same as everything below it: it describes the mode
+rather than the choice, so it is as true before the buttons are there as after,
+and a page where half the words appear on a click reads as a page that was
+hiding something.
+
+Both lines are also pulled back up towards what they describe. The page is one
+column with one spacing between everything in it, which is right between a
 button and the next button and far too much between a button and its own
-description: a line that far under a button reads as a separate thing rather
+description - a line that far under a button reads as a separate thing rather
 than as part of it. They ride in margins with a negative top, which closes that
 one gap without touching any of the others.
+
+Backing out walks the way in, in reverse: the track grid, the flavours, the
+modes, then the page.
+
+`tools/checks/mode_routing.gd` walks in and sees which scene comes out the far
+end. Two questions before a race and two scenes to run it in is four ways in
+and four chances for one of them to land somewhere it should not:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/mode_routing.gd
+```
 
 ## Choosing a track
 
@@ -986,14 +1006,7 @@ trying a corner again bearable.
 On a laid-out track, finishing measures the run against the best so far, which
 is kept in `TrackTimes` and survives the game being closed.
 
-`tools/checks/mode_routing.gd` walks in through the pages and sees which scene
-comes out the far end. Two questions before a race and two scenes to run it in
-is four ways in and four chances for one of them to land somewhere it should
-not:
-
-```
-Godot --path . --headless --fixed-fps 60 --script tools/checks/mode_routing.gd
-```
+Which of the two a race runs in is decided entirely by how many are playing.
 
 `tools/checks/solo_run.gd` drives a whole run, from the line to the flag:
 

@@ -4,28 +4,33 @@ extends Control
 ## The title screen: the name of the game, a button to start it and a button
 ## to change the settings, over the game itself.
 ##
-## Play does not drop straight into a race. It asks how many are playing
-## first, and only then which mode: the endless course the game has always
-## been, or one of the laid-out tracks.
+## Play does not drop straight into a race. It opens one page that asks two
+## things in order, without ever becoming a second page.
 ##
-## How many comes first because it is the one choice that changes what every
-## other choice means. The same endless course is a race against someone in
-## co-op and a run against the clock alone; the same laid-out track is a time
-## to beat alone and a road to race down together. Asking it the other way
-## round would have a player pick a mode before they knew what a mode was
-## going to be for.
+## How many are playing comes first, as two buttons side by side, because it
+## is the one choice that changes what every other choice means: the same
+## endless course is a race against someone in co-op and a run against the
+## clock alone, and the same laid-out track is a time to beat alone and a road
+## to race down together. It is also the only choice that decides which scene
+## the race runs in; everything after it is a setting that scene reads.
+##
+## Answering it rolls the modes out from underneath, from the middle of the
+## page rather than from under whichever of the two was pressed - what opened
+## is the rest of the page, not a drawer belonging to one button. The two stay
+## where they are with the answer showing on them, so a player can change
+## their mind without going back anywhere.
 ##
 ## Coming back from a track opens on the grid of tracks rather than on the
 ## title. A player who has just driven one is nearly always about to drive
 ## another, or the same one again, and making them walk back in through two
 ## pages to do it is asking them to say something they have already said.
 ##
-## The mode page opens showing only the two modes, each with a line under it
-## saying what it is. Infinite does not start a race either: it opens out,
+## Inside that, Infinite does not start a race either: it opens out in turn,
 ## sliding the choice between a normal race and a chaotic one down from under
-## itself, and it is that second click that starts the game. Asking one
-## question at a time keeps the page down to what the players are actually
-## deciding at that moment.
+## itself, and it is that click that starts the game. Asking one question at a
+## time keeps the page down to what is actually being decided at that moment,
+## and a slide inside a slide costs nothing because the outer one is told to
+## follow its own contents rather than a height written down when it opened.
 ##
 ## What rolls out is the two buttons and nothing else. The line under Infinite
 ## stays where it is and is pushed down by them, the same as everything below
@@ -96,18 +101,18 @@ extends Control
 @onready var _play: Button = $Play
 @onready var _settings_button: Button = $Settings
 @onready var _settings_screen: SettingsMenu = $SettingsScreen
-@onready var _player_choice: Control = $PlayerChoice
-@onready var _alone_button: Button = $PlayerChoice/Page/Panel/Margin/Box/Alone
-@onready var _together_button: Button = $PlayerChoice/Page/Panel/Margin/Box/Together
-@onready var _player_back: Button = $PlayerChoice/Page/Panel/Margin/Box/Back
 @onready var _mode_choice: Control = $ModeChoice
-@onready var _infinite_button: Button = $ModeChoice/Page/Panel/Margin/Box/Infinite
+@onready var _alone_button: Button = $ModeChoice/Page/Panel/Margin/Box/Players/Alone
+@onready var _together_button: Button = $ModeChoice/Page/Panel/Margin/Box/Players/Together
+@onready var _mode_slot: Control = $ModeChoice/Page/Panel/Margin/Box/ModeSlot
+@onready var _mode_inner: Control = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner
+@onready var _infinite_button: Button = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/Infinite
 @onready var _mode_back: Button = $ModeChoice/Page/Panel/Margin/Box/Back
-@onready var _flavour_slot: Control = $ModeChoice/Page/Panel/Margin/Box/FlavourSlot
-@onready var _flavour_inner: Control = $ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner
-@onready var _normal_button: Button = $ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner/Row/Normal
-@onready var _chaos_button: Button = $ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner/Row/Chaos
-@onready var _tracks_button: Button = $ModeChoice/Page/Panel/Margin/Box/Tracks
+@onready var _flavour_slot: Control = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/FlavourSlot
+@onready var _flavour_inner: Control = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/FlavourSlot/Inner
+@onready var _normal_button: Button = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/FlavourSlot/Inner/Row/Normal
+@onready var _chaos_button: Button = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/FlavourSlot/Inner/Row/Chaos
+@onready var _tracks_button: Button = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/Tracks
 @onready var _track_choice: Control = $TrackChoice
 @onready var _track_grid: GridContainer = $TrackChoice/Page/Panel/Margin/Box/Scroll/Grid
 @onready var _track_back: Button = $TrackChoice/Page/Panel/Margin/Box/Back
@@ -116,6 +121,11 @@ extends Control
 
 var _elapsed := 0.0
 var _flavour_tween: Tween
+var _mode_tween: Tween
+## True once one of the two has been picked and the modes have rolled out.
+## While that is so, the slot is held to the height of its own contents, which
+## is what lets the flavour buttons slide inside it and push it open further.
+var _modes_open := false
 
 
 func _ready() -> void:
@@ -124,7 +134,6 @@ func _ready() -> void:
 	_settings_screen.closed.connect(_on_settings_closed)
 	_alone_button.pressed.connect(_choose_players.bind(true))
 	_together_button.pressed.connect(_choose_players.bind(false))
-	_player_back.pressed.connect(_close_player_choice)
 	_infinite_button.pressed.connect(_on_infinite_pressed)
 	_mode_back.pressed.connect(_close_mode_choice)
 	_normal_button.pressed.connect(_start_infinite.bind(false))
@@ -132,8 +141,9 @@ func _ready() -> void:
 	_tracks_button.pressed.connect(_on_tracks_pressed)
 	_track_back.pressed.connect(_close_track_choice)
 	_fill_the_track_grid()
-	# The slot is a plain Control, so nothing lays its contents out but this.
+	# The slots are plain Controls, so nothing lays their contents out but this.
 	_flavour_slot.resized.connect(_fit_flavour)
+	_mode_slot.resized.connect(_fit_modes)
 	# So the keyboard alone can start the game - both players are on one
 	# keyboard, and neither has been asked to find the mouse yet.
 	_play.grab_focus()
@@ -146,9 +156,10 @@ func _ready() -> void:
 func _open_where_they_left_off() -> void:
 	if GameSettings.track_file.is_empty():
 		return
-	# The pages it came in through are opened behind it, so backing out of the
-	# grid walks the same way out that a player walked in.
+	# The page it came in through is opened behind it, already answered, so
+	# backing out of the grid walks the same way out that a player walked in.
 	_open_mode_choice()
+	_choose_players(GameSettings.solo)
 	_on_tracks_pressed()
 	_focus_track(TrackRoster.index_of(GameSettings.track_file))
 
@@ -166,6 +177,12 @@ func _process(delta: float) -> void:
 	# would drift, and would be wrong again the moment the window resized.
 	_title.position = Vector2(
 		0.0, bounce_pixels * sin(TAU * _elapsed / bounce_period))
+	# While the modes are out, the slot holding them is exactly as tall as
+	# they are. That is what lets the flavour buttons slide out inside it: the
+	# inner grows as they roll down, and the slot grows with it, instead of
+	# clipping them against a height that was measured before they existed.
+	if _modes_open and (_mode_tween == null or not _mode_tween.is_running()):
+		_mode_slot.custom_minimum_size.y = _mode_inner.get_combined_minimum_size().y
 
 
 ## Swing the camera round the parked cars. The centre is asked for every frame
@@ -182,7 +199,18 @@ func _turn_the_backdrop() -> void:
 ## Play opens the mode choice over the title rather than starting a race, so
 ## the backdrop keeps turning behind it the way the settings do.
 func _on_play_pressed() -> void:
-	_player_choice.show()
+	_open_mode_choice()
+
+
+## The page as it opens: the two of them side by side, neither answered, and
+## the modes rolled away underneath. Always opens closed, however it was left
+## last time, because the question at the top is being asked again.
+func _open_mode_choice() -> void:
+	_shut_flavour()
+	_shut_modes()
+	_alone_button.button_pressed = false
+	_together_button.button_pressed = false
+	_mode_choice.show()
 	# On whichever way they played last, so a player who always plays alone
 	# presses the same key twice every time.
 	if GameSettings.solo:
@@ -191,24 +219,19 @@ func _on_play_pressed() -> void:
 		_together_button.grab_focus()
 
 
-## How many are playing, and then on to what they are playing.
+## How many are playing. Answering rolls the modes out; answering again with
+## the other one leaves them out and simply changes the answer, since nothing
+## below depends on which of the two it was.
 func _choose_players(solo: bool) -> void:
 	GameSettings.solo = solo
 	GameSettings.save_settings()
-	_player_choice.hide()
-	_open_mode_choice()
-
-
-func _open_mode_choice() -> void:
-	# Always opens closed, however it was left last time.
-	_shut_flavour()
-	_mode_choice.show()
-	_infinite_button.grab_focus()
-
-
-func _close_player_choice() -> void:
-	_player_choice.hide()
-	_play.grab_focus()
+	# Held down rather than merely pressed, so the page goes on saying which
+	# way this race is being played while the rest of it is decided.
+	_alone_button.button_pressed = solo
+	_together_button.button_pressed = not solo
+	if not _modes_open:
+		_slide_modes(true)
+		_infinite_button.grab_focus()
 
 
 ## Infinite is a door rather than a start: it opens out into the choice
@@ -422,69 +445,97 @@ func _scene_for_the_players() -> String:
 	return solo_scene if GameSettings.solo else race_scene
 
 
-## Hold the flavour buttons to the width of the page.
+## Hold each slot's contents to the width of the page.
 ##
-## They hang inside a plain Control rather than a container, because a
-## container would insist on being tall enough for them and so could never
-## collapse. The cost of that is having to set their width here: left to its
-## own anchors the row sizes itself to nothing in particular, spreads the two
-## buttons across it, and hangs them out over both edges of the panel.
+## They hang inside plain Controls rather than containers, because a container
+## would insist on being tall enough for them and so could never collapse. The
+## cost of that is having to set their width here: left to its own anchors a
+## row sizes itself to nothing in particular, spreads its buttons across that,
+## and hangs them out over both edges of the panel.
 func _fit_flavour() -> void:
 	_flavour_inner.size.x = _flavour_slot.size.x
 
 
-## Roll the flavour buttons out from under the infinite button, or back under
-## it, pushing everything below them down as they come.
+func _fit_modes() -> void:
+	_mode_inner.size.x = _mode_slot.size.x
+
+
+## Roll a slot's contents out from under whatever is above it, or back under,
+## pushing everything below down as they come.
 ##
 ## The slot is what the layout sees, so growing its minimum height is what
-## moves the rest of the page; the buttons themselves ride up inside it and
-## are clipped, which is what makes them slide rather than simply appear. The
-## height is asked of the contents rather than written down here, so it stays
-## right if the wording or the font ever changes.
-func _slide_flavour(open: bool) -> void:
-	if _flavour_tween:
-		_flavour_tween.kill()
-	_fit_flavour()
-	var height: float = _flavour_inner.get_combined_minimum_size().y
+## moves the rest of the page; the contents ride up inside it and are clipped,
+## which is what makes them slide rather than simply appear. The height is
+## asked of the contents rather than written down here, so it stays right if
+## the wording or the font ever changes.
+func _slide(slot: Control, inner: Control, open: bool, tween: Tween) -> Tween:
+	if tween:
+		tween.kill()
+	inner.size.x = slot.size.x
+	var height: float = inner.get_combined_minimum_size().y
 	if open:
-		_flavour_slot.show()
-		_flavour_slot.custom_minimum_size.y = 0.0
-		_flavour_inner.position.y = -height
-		_flavour_slot.modulate.a = 0.0
+		slot.show()
+		slot.custom_minimum_size.y = 0.0
+		inner.position.y = -height
+		slot.modulate.a = 0.0
 
-	_flavour_tween = create_tween()
-	_flavour_tween.set_parallel(true)
-	_flavour_tween.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_flavour_tween.tween_property(_flavour_slot, "custom_minimum_size:y",
+	var rolling := create_tween()
+	rolling.set_parallel(true)
+	rolling.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	rolling.tween_property(slot, "custom_minimum_size:y",
 		height if open else 0.0, slide_seconds)
-	_flavour_tween.tween_property(_flavour_inner, "position:y",
-		0.0 if open else -height, slide_seconds)
-	_flavour_tween.tween_property(_flavour_slot, "modulate:a",
-		1.0 if open else 0.0, slide_seconds)
+	rolling.tween_property(inner, "position:y", 0.0 if open else -height,
+		slide_seconds)
+	rolling.tween_property(slot, "modulate:a", 1.0 if open else 0.0,
+		slide_seconds)
 	if not open:
 		# Hidden rather than merely flat, or the gap the layout leaves either
 		# side of the slot stays behind as a hole in the page.
-		_flavour_tween.chain().tween_callback(_flavour_slot.hide)
+		rolling.chain().tween_callback(slot.hide)
+	return rolling
 
 
-## Shut the choice with no animation, for opening the page on it rather than
+func _slide_flavour(open: bool) -> void:
+	_flavour_tween = _slide(_flavour_slot, _flavour_inner, open, _flavour_tween)
+
+
+## The modes, rolling out from under the two buttons at the top of the page.
+## They come from the middle rather than from under whichever button was
+## pressed, because what is opening is the rest of the page and not a drawer
+## belonging to one of them.
+func _slide_modes(open: bool) -> void:
+	if open == _modes_open:
+		return
+	_modes_open = open
+	if not open:
+		_shut_flavour()
+	_mode_tween = _slide(_mode_slot, _mode_inner, open, _mode_tween)
+
+
+## Shut a slot with no animation, for opening the page on it rather than
 ## closing it in front of the players.
+func _shut(slot: Control, tween: Tween) -> void:
+	if tween:
+		tween.kill()
+	slot.hide()
+	slot.custom_minimum_size.y = 0.0
+	slot.modulate.a = 0.0
+
+
 func _shut_flavour() -> void:
-	if _flavour_tween:
-		_flavour_tween.kill()
-	_flavour_slot.hide()
-	_flavour_slot.custom_minimum_size.y = 0.0
-	_flavour_slot.modulate.a = 0.0
+	_shut(_flavour_slot, _flavour_tween)
+
+
+func _shut_modes() -> void:
+	_modes_open = false
+	_shut(_mode_slot, _mode_tween)
 
 
 func _close_mode_choice() -> void:
 	_mode_choice.hide()
 	_shut_flavour()
-	_player_choice.show()
-	if GameSettings.solo:
-		_alone_button.grab_focus()
-	else:
-		_together_button.grab_focus()
+	_shut_modes()
+	_play.grab_focus()
 
 
 ## Escape backs out of whichever page is open. The settings screen handles its
@@ -494,8 +545,8 @@ func _input(event: InputEvent) -> void:
 		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
-	# One page at a time, innermost first: off the track grid, then off the
-	# flavour choice, then off the mode page, then off how many are playing.
+	# One thing at a time, innermost first: off the track grid, then off the
+	# flavour choice, then off the modes, then off the page.
 	if _track_choice.visible:
 		get_viewport().set_input_as_handled()
 		_close_track_choice()
@@ -503,12 +554,16 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		_slide_flavour(false)
 		_infinite_button.grab_focus()
+	elif _modes_open:
+		get_viewport().set_input_as_handled()
+		_slide_modes(false)
+		if GameSettings.solo:
+			_alone_button.grab_focus()
+		else:
+			_together_button.grab_focus()
 	elif _mode_choice.visible:
 		get_viewport().set_input_as_handled()
 		_close_mode_choice()
-	elif _player_choice.visible:
-		get_viewport().set_input_as_handled()
-		_close_player_choice()
 
 
 ## The settings lie over the title screen rather than replacing it, so the

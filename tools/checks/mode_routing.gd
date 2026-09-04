@@ -37,13 +37,23 @@ func _init() -> void:
 
 		menu.call("_on_play_pressed")
 		await process_frame
-		if not menu.get_node("PlayerChoice").visible:
-			print("  play did not ask how many are playing")
+		if not menu.get_node("ModeChoice").visible:
+			print("  play did not open the page")
+			faults += 1
+		if menu.get("_modes_open"):
+			print("  the modes were out before anyone said how many")
 			faults += 1
 		menu.call("_choose_players", solo)
-		await process_frame
-		if menu.get_node("PlayerChoice").visible or not menu.get_node("ModeChoice").visible:
-			print("  answering how many did not open the modes")
+		for i in 20:
+			await process_frame
+		if not menu.get("_modes_open"):
+			print("  answering how many did not roll the modes out")
+			faults += 1
+		# The answer stays showing on the two at the top.
+		var alone: Button = menu.get_node("ModeChoice/Page/Panel/Margin/Box/Players/Alone")
+		var together: Button = menu.get_node("ModeChoice/Page/Panel/Margin/Box/Players/Together")
+		if alone.button_pressed != solo or together.button_pressed == solo:
+			print("  the page is not showing which way it is being played")
 			faults += 1
 
 		if mode == "infinite":
@@ -84,6 +94,8 @@ func _init() -> void:
 		await process_frame
 	menu2.call("_on_play_pressed")
 	menu2.call("_choose_players", true)
+	for i in 20:
+		await process_frame
 	menu2.call("_on_tracks_pressed")
 	await process_frame
 	var ladder := PackedStringArray()
@@ -91,16 +103,36 @@ func _init() -> void:
 		if menu2.get_node("TrackChoice").visible:
 			ladder.append("tracks")
 			menu2.call("_close_track_choice")
-		elif menu2.get_node("ModeChoice").visible:
+		elif menu2.get("_modes_open"):
 			ladder.append("modes")
+			menu2.call("_slide_modes", false)
+		elif menu2.get_node("ModeChoice").visible:
+			ladder.append("the page")
 			menu2.call("_close_mode_choice")
-		elif menu2.get_node("PlayerChoice").visible:
-			ladder.append("how many")
-			menu2.call("_close_player_choice")
-		await process_frame
+		for i in 20:
+			await process_frame
 	print("backing out goes %s, then the title" % " -> ".join(ladder))
-	if ladder != PackedStringArray(["tracks", "modes", "how many"]):
+	if ladder != PackedStringArray(["tracks", "modes", "the page"]):
 		print("  backing out did not walk the way in, in reverse")
+		faults += 1
+
+	# And the slide inside the slide: opening the flavour buttons has to open
+	# the slot holding them further rather than being clipped by it.
+	menu2.call("_open_mode_choice")
+	menu2.call("_choose_players", true)
+	for i in 25:
+		await process_frame
+	var closed: float = menu2.get_node(
+		"ModeChoice/Page/Panel/Margin/Box/ModeSlot").custom_minimum_size.y
+	menu2.call("_on_infinite_pressed")
+	for i in 30:
+		await process_frame
+	var opened: float = menu2.get_node(
+		"ModeChoice/Page/Panel/Margin/Box/ModeSlot").custom_minimum_size.y
+	print("the modes are %.0f px, and %.0f with the flavours out"
+		% [closed, opened])
+	if opened <= closed + 10.0:
+		print("  the flavour buttons did not push the modes open further")
 		faults += 1
 	menu2.queue_free()
 

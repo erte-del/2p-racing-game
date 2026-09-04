@@ -58,7 +58,13 @@ func _init() -> void:
 			faults += 1
 
 	# Press it, and see whether the race that starts is on that track.
-	menu.get_node("ModeChoice/Page/Panel/Margin/Box/Tracks").pressed.emit()
+	# In the way a player gets there: the page, then how many are playing,
+	# then the modes that roll out under that.
+	menu.call("_on_play_pressed")
+	menu.call("_choose_players", true)
+	for i in 20:
+		await process_frame
+	menu.get_node("ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/Tracks").pressed.emit()
 	await process_frame
 	var first: Button = _first_live(grid)
 	if first == null:
