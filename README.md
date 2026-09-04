@@ -900,6 +900,50 @@ has to divert from a seed to a file.
 Godot --path . --headless --script tools/checks/track_select.gd
 ```
 
+## Solo
+
+A laid-out track is driven alone against the clock, in its own scene rather
+than in the two-player race with a seat empty. Almost everything in `Main` is
+about there being two of something - two viewports, two cameras, two arrows, a
+leader, a winner - and threading a count through all of it would leave the
+endless mode carrying a branch on every line for a mode it is not. What is
+shared is shared as nodes instead: the car, the track, the chase camera, the
+speed lines and the day and night cycle are the same ones the race uses.
+
+The clock is the whole point. It starts on GO and stops on the line, and
+nothing in between stops it. Going off the road, hitting a barrier, and being
+put back at the last checkpoint all cost time rather than ending the run,
+because time is already the punishment this mode has.
+
+Enter runs again. It does not rebuild the track - it is the same track, and
+rebuilding it would cost a second of watching a road appear that was already
+there - so a retry is the car back on the line and the countdown again.
+Instant retry is not a nicety in a mode like this: it is most of what makes
+trying a corner again bearable.
+
+Finishing measures the run against the best so far, which is held for the
+session. `TRACK TIMES` in the phases below is what makes it survive the game
+being closed.
+
+`tools/checks/solo_run.gd` drives a whole run, from the line to the flag:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/solo_run.gd
+```
+
+The car is driven by the check rather than by a player: flat out where the
+road ahead is straight, backing off as it bends, and aimed through whatever
+`TrackFeatures.gaps_at()` says is open rather than down the middle. Both of
+those had to be there. A car ambling at half throttle cannot clear the hole in
+a jump, falls in, is put back at the checkpoint before it and ambles at the
+same hole again for as long as anything lets it; and a car aimed down the
+centreline drives nose first into the divider of a fork, which is not the
+track being broken but a car refusing to pick a side.
+
+`--fixed-fps` matters more than it looks. Without it the loop sleeps to hold
+sixty ticks a second of wall clock, and driving a kilometre of road takes as
+long as driving a kilometre of road; with it the same run takes about a second.
+
 ## Phases
 
 - [x] **0** — repo, Godot project, `.gitignore`

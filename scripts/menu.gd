@@ -24,8 +24,11 @@ extends Control
 ## The title never sits perfectly still either. It rocks and bobs gently, which
 ## is what keeps a screen that is doing nothing from looking frozen.
 
-## The scene the Play button starts.
+## The scene the endless course runs in, and the one a laid-out track does.
+## A track is driven alone against the clock, which is a different scene from
+## two players racing each other rather than that scene with a seat empty.
 @export_file("*.tscn") var race_scene := "res://scenes/main.tscn"
+@export_file("*.tscn") var solo_scene := "res://scenes/solo.tscn"
 
 @export_group("Backdrop")
 ## How fast the view turns about the cars, in degrees per second. A full
@@ -247,7 +250,7 @@ func _start_track(path: String) -> void:
 	# a car nobody will be given again is not a time.
 	GameSettings.chaos = false
 	GameSettings.save_settings()
-	get_tree().change_scene_to_file(race_scene)
+	get_tree().change_scene_to_file(solo_scene)
 
 
 func _close_track_choice() -> void:
