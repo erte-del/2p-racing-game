@@ -865,6 +865,13 @@ It describes the mode rather than the choice, so it is as true before the
 buttons are there as after - and a page where half the words appear on a click
 reads as a page that was hiding something.
 
+Both of those lines are pulled back up towards what they describe. The page is
+one column with one spacing between everything in it, which is right between a
+button and the next button and far too much between a button and its own
+description: a line that far under a button reads as a separate thing rather
+than as part of it. They ride in margins with a negative top, which closes that
+one gap without touching any of the others.
+
 ## Choosing a track
 
 Play opens the mode page, and Tracks now opens out of it into a grid of

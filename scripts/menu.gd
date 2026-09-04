@@ -25,6 +25,13 @@ extends Control
 ## the buttons are there as after, and a page where half the words appear on a
 ## click reads as a page that was hiding something.
 ##
+## Each of those lines is pulled back up towards what it describes. The page is
+## one column with one spacing between everything in it, which is right between
+## a button and the next button and far too much between a button and its own
+## description - a line that far under a button reads as a separate thing
+## rather than as part of it. They ride in margins with a negative top instead,
+## which closes that one gap without touching any of the others.
+##
 ## What chaos actually does lives in `Chaos`; all that is settled here is
 ## which of the two the players picked.
 ##

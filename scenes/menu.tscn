@@ -156,7 +156,11 @@ size_flags_horizontal = 3
 text = "CHAOS"
 theme_override_font_sizes/font_size = 22
 
-[node name="InfiniteNote" type="Label" parent="ModeChoice/Page/Panel/Margin/Box"]
+[node name="InfiniteNote" type="MarginContainer" parent="ModeChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/margin_top = -11
+
+[node name="Label" type="Label" parent="ModeChoice/Page/Panel/Margin/Box/InfiniteNote"]
 layout_mode = 2
 text = "New track every race."
 horizontal_alignment = 1
@@ -169,7 +173,11 @@ layout_mode = 2
 text = "TRACKS"
 theme_override_font_sizes/font_size = 32
 
-[node name="TracksNote" type="Label" parent="ModeChoice/Page/Panel/Margin/Box"]
+[node name="TracksNote" type="MarginContainer" parent="ModeChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/margin_top = -11
+
+[node name="Label" type="Label" parent="ModeChoice/Page/Panel/Margin/Box/TracksNote"]
 layout_mode = 2
 text = "The same road every time. Learn it, then beat it."
 horizontal_alignment = 1
