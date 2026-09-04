@@ -54,7 +54,10 @@ extends Node3D
 ## Ticking between GO and the line.
 var _running := false
 var _time := 0.0
-## The best run so far, or below zero for a track nobody has finished yet.
+## Which track is being driven, and the best run on it so far - below zero
+## for a track nobody has finished. Held here as well as written down, so the
+## screen has something to compare against without reading a file per lap.
+var _track_file := ""
 var _best := -1.0
 ## Where a reset puts the car, and which checkpoint it is looking for next.
 var _respawn := 0.0
@@ -65,8 +68,10 @@ var _countdown_run := 0
 
 
 func _ready() -> void:
-	_track.track_file = (GameSettings.track_file if not GameSettings.track_file.is_empty()
+	_track_file = (GameSettings.track_file if not GameSettings.track_file.is_empty()
 			else fallback_track)
+	_track.track_file = _track_file
+	_best = TrackTimes.best(_track_file)
 	# Nothing to draft behind and nothing to be shown an arrow to.
 	_car.rival = null
 	_track.generate(0)
@@ -163,7 +168,9 @@ func _finish() -> void:
 	_car.frozen = true
 	_car.reset_motion()
 
-	var beaten := _best < 0.0 or _time < _best
+	# Offered to the record before anything is said about it, so what appears
+	# on the screen is what was actually written down.
+	var beaten := TrackTimes.record(_track_file, _time)
 	var lines := PackedStringArray([_format_time(_time)])
 	if _best < 0.0:
 		lines.append("FIRST TIME SET")

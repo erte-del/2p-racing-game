@@ -30,9 +30,13 @@ func _init() -> void:
 		for child in cell.get_children():
 			if child is Button and not (child as Button).disabled:
 				live += 1
-			if child is Label and not (child as Label).text.is_empty():
-				named += 1
+		# The first label in a cell is the name over the picture; the second
+		# is the time under it.
+		var labels := cell.get_children().filter(func(c: Node) -> bool: return c is Label)
+		if not labels.is_empty() and not (labels[0] as Label).text.is_empty():
+			named += 1
 	print("%d of them can be pressed, %d are named" % [live, named])
+	faults += _check_the_times(grid)
 	if live != TrackRoster.FILES.size():
 		print("  the tracks that exist are not the ones that can be pressed")
 		faults += 1
@@ -75,6 +79,40 @@ func _init() -> void:
 
 	print("%d faults" % faults)
 	quit(1 if faults > 0 else 0)
+
+
+## A track that has been driven shows its time; one that has not says so; and
+## a slot with no track in it says nothing at all. The three are different
+## things and a player should be able to tell them apart at a glance.
+func _check_the_times(grid: GridContainer) -> int:
+	var faults := 0
+	var times: Node = Engine.get_main_loop().root.get_node_or_null(^"/root/TrackTimes")
+	for index in grid.get_child_count():
+		var labels := grid.get_child(index).get_children().filter(
+			func(c: Node) -> bool: return c is Label)
+		if labels.size() < 2:
+			print("  slot %d has no time under it" % (index + 1))
+			faults += 1
+			continue
+		var shown: String = (labels[1] as Label).text
+		if not TrackRoster.exists(index):
+			if not shown.is_empty():
+				print("  slot %d has no track in it but says '%s'"
+					% [index + 1, shown])
+				faults += 1
+			continue
+		var best: float = times.best(TrackRoster.file(index)) if times != null else -1.0
+		var wanted := "NO TIME" if best < 0.0 else "a time"
+		if best < 0.0 and shown != "NO TIME":
+			print("  %s has no time but says '%s'"
+				% [TrackRoster.track_name(index), shown])
+			faults += 1
+		if best >= 0.0 and shown == "NO TIME":
+			print("  %s has a time of %.2f but says it has none"
+				% [TrackRoster.track_name(index), best])
+			faults += 1
+		print("%s shows %s" % [TrackRoster.track_name(index), shown])
+	return faults
 
 
 func _first_live(grid: GridContainer) -> Button:

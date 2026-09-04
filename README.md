@@ -921,9 +921,8 @@ there - so a retry is the car back on the line and the countdown again.
 Instant retry is not a nicety in a mode like this: it is most of what makes
 trying a corner again bearable.
 
-Finishing measures the run against the best so far, which is held for the
-session. `TRACK TIMES` in the phases below is what makes it survive the game
-being closed.
+Finishing measures the run against the best so far, which is kept in
+`TrackTimes` and survives the game being closed.
 
 `tools/checks/solo_run.gd` drives a whole run, from the line to the flag:
 
@@ -943,6 +942,56 @@ track being broken but a car refusing to pick a side.
 `--fixed-fps` matters more than it looks. Without it the loop sleeps to hold
 sixty ticks a second of wall clock, and driving a kilometre of road takes as
 long as driving a kilometre of road; with it the same run takes about a second.
+
+## Track times
+
+`TrackTimes` is an autoload over a `ConfigFile` in `user://`, kept separate
+from `GameSettings` because these are not preferences. A setting is something
+a player chose and can change back; a time is something that happened, and the
+only thing that may overwrite one is a better one.
+
+Every time is stored next to a fingerprint of the track it was set on, which
+is a hash of the track *file* rather than of the course built from it - the
+file is what an author edits, and it changes if and only if they changed the
+track. Edit a corner on track seven and every time set on the old track seven
+stops meaning anything: it was a different road. Those records are dropped the
+first moment anything asks for them, rather than standing as walls nobody can
+get over because nobody ever drove them. `GEOMETRY` is bumped by hand for the
+same reason when something outside the track files changes the road they are
+all built from - the sampling step, the size of a jump, what a pad is worth.
+
+A section per track rather than one section of many keys, so what a track has
+to its name can grow - when the time was set, how many runs it took - without
+moving what is already written down. Tracks are keyed by file name rather than
+path, so moving the tracks folder does not lose everything anyone has driven.
+
+The select screen shows each track's time under its picture, and rebuilds
+itself every time the page opens: a player comes back to that screen straight
+from having beaten something, and a grid built once at startup would still be
+showing the old time. A track that has been driven shows the time, one that has
+not says NO TIME, and a slot with no track in it says nothing at all - three
+different things a player should be able to tell apart at a glance.
+
+`tools/checks/track_times.gd` sets times, closes the game and sees what is
+still there, then edits a track and sees that the time on the old one has gone.
+It writes to a scratch file, so running it does not touch anyone's own record:
+
+```
+Godot --path . --headless --script tools/checks/track_times.gd
+```
+
+## Adding a track
+
+Everything a track needs is in place, so adding the next nineteen is three
+steps and no code:
+
+1. Write `tracks/NN_name.gd` extending `TrackDefinition`, and check it with
+   `tools/checks/track_check.gd` and `tools/checks/track_map.gd`.
+2. Add its path to `TrackRoster.FILES`, in the order it should appear.
+3. Run `tools/track_thumbnails.gd` to draw its overhead shot.
+
+The name on the button, the slot in the grid, the times, the solo race and the
+checks all follow from those.
 
 ## Phases
 

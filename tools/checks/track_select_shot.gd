@@ -10,6 +10,14 @@ extends SceneTree
 func _init() -> void:
 	await process_frame
 	root.size = Vector2i(1280, 800)
+	# A time on the board, so the picture shows a track that has been driven
+	# next to nineteen that have not.
+	var times: Node = root.get_node_or_null(^"/root/TrackTimes")
+	if times != null:
+		times.save_path = "user://times_shot.cfg"
+		times.load_times()
+		times.record("res://tracks/01_first_light.gd", 41.55)
+
 	var menu: Node = load("res://scenes/menu.tscn").instantiate()
 	root.add_child(menu)
 	for i in 30:
@@ -26,5 +34,7 @@ func _init() -> void:
 	for i in 12:
 		await process_frame
 	root.get_texture().get_image().save_png("%s/02_tracks.png" % out)
+	if times != null:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(times.save_path))
 	print("track select drawn")
 	quit()

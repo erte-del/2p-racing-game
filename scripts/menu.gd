@@ -208,7 +208,34 @@ func _fill_the_track_grid() -> void:
 			button.pressed.connect(_start_track.bind(TrackRoster.file(index)))
 		cell.add_child(button)
 
+		# The time under the picture, because it is the thing that changes.
+		# A track with no time to its name says so rather than showing a dash:
+		# there is a difference between a road nobody has finished and one
+		# that is not built.
+		var time := Label.new()
+		time.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		time.custom_minimum_size.x = track_button_size
+		time.clip_text = true
+		time.add_theme_font_size_override("font_size", 20)
+		var best := TrackTimes.best(TrackRoster.file(index)) if TrackRoster.exists(index) else -1.0
+		if best >= 0.0:
+			time.text = _format_time(best)
+		elif TrackRoster.exists(index):
+			time.text = "NO TIME"
+			time.add_theme_color_override("font_color", Color(0.55, 0.58, 0.66))
+		cell.add_child(time)
+
 		_track_grid.add_child(cell)
+
+
+## The same clock the race keeps, so a time on the button and the time that
+## was driven read as the same number.
+func _format_time(seconds: float) -> String:
+	var minutes := int(seconds) / 60
+	var rest := fmod(seconds, 60.0)
+	if minutes > 0:
+		return "%d:%05.2f" % [minutes, rest]
+	return "%.2f" % rest
 
 
 ## The face of a track that does not exist yet.
@@ -221,12 +248,26 @@ func _empty_slot() -> StyleBoxFlat:
 	return box
 
 
+## Rebuilt each time the page opens rather than once at startup: a player
+## comes back to this screen straight from having beaten something, and a
+## grid built before the race would still be showing the old time.
+func _refresh_the_track_grid() -> void:
+	for cell in _track_grid.get_children():
+		cell.queue_free()
+	# Freed nodes are still children until the frame ends, and a grid with two
+	# sets of cells in it lays out both.
+	for cell in _track_grid.get_children():
+		_track_grid.remove_child(cell)
+	_fill_the_track_grid()
+
+
 func _on_tracks_pressed() -> void:
 	# The mode page steps aside rather than lying underneath. Both are full
 	# panels, and one showing through the other reads as a bug however faint
 	# it is - unlike the settings, which lie over a title screen with nothing
 	# on it but a name.
 	_mode_choice.hide()
+	_refresh_the_track_grid()
 	_track_choice.show()
 	_focus_first_track()
 

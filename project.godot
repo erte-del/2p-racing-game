@@ -17,6 +17,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 [autoload]
 
 GameSettings="*res://scripts/game_settings.gd"
+TrackTimes="*res://scripts/track_times.gd"
 
 [display]
 

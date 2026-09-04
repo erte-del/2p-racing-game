@@ -23,6 +23,14 @@ func _init() -> void:
 	if settings != null:
 		settings.track_file = "res://tracks/01_first_light.gd"
 		settings.chaos = false
+	# Pointed at a scratch file, so a check does not write itself into the
+	# player's own record of what they have driven.
+	var times: Node = root.get_node_or_null(^"/root/TrackTimes")
+	if times != null:
+		times.save_path = "user://times_solo_check.cfg"
+		DirAccess.remove_absolute(
+			ProjectSettings.globalize_path(times.save_path))
+		times.load_times()
 
 	var solo: Node = load("res://scenes/solo.tscn").instantiate()
 	root.add_child(solo)
@@ -104,6 +112,21 @@ func _init() -> void:
 	if float(solo.get("_best")) > minf(first, second) + 0.01:
 		print("  the better of the two runs was not kept")
 		faults += 1
+
+	# And the run has to have reached the record, not just the screen.
+	if times != null:
+		var written: float = times.best("res://tracks/01_first_light.gd")
+		print("written down: %s" % _clock(written))
+		if not is_equal_approx(written, minf(first, second)):
+			print("  the best run was not written down")
+			faults += 1
+		times.load_times()
+		if not is_equal_approx(
+			times.best("res://tracks/01_first_light.gd"), minf(first, second)):
+			print("  the best run did not survive being read back")
+			faults += 1
+		DirAccess.remove_absolute(
+			ProjectSettings.globalize_path(times.save_path))
 
 	print("%d faults" % faults)
 	quit(1 if faults > 0 else 0)
