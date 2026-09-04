@@ -1138,6 +1138,49 @@ steps and no code:
 The name on the button, the slot in the grid, the times, the solo race and the
 checks all follow from those.
 
+## What chaos looks like
+
+Chaos already rerolled how a race drives. It also rerolls how it looks.
+
+**The cars are repainted for every course**, bright enough to be picked out of
+a hedge, and set once at the line rather than shifting while anyone is driving.
+The two are given hues on opposite sides of the wheel, so however the colours
+land the players can always tell which car is theirs - that is the one thing
+about a chaotic race not allowed to be chaotic. The rival arrows are recoloured
+with them: the arrow is the only thing telling one player which car is the
+other one, and a car that changed colour under an arrow that did not would be
+worse than no arrow.
+
+**The speed lines are not white.** They turn through the colours, each streak
+from a slightly different place in them, so a boost comes out as a shifting
+spread rather than one tinted sheet. A whole turn's worth of spread would put
+every colour on screen at once and read as noise; a quarter reads as a colour
+that happens to be several colours.
+
+**The leaves never settle.** Each kind of tree turns from its own place in the
+cycle, so the field shimmers instead of the whole horizon pulsing as one.
+
+Which surfaces of a tree are its leaves is asked of the colour rather than the
+name: the model calls its materials Material.001 through Material.007 and
+nothing in that says which is bark and which is a canopy. Every green surface
+in the pack is foliage and nothing else in it is green, so green is the
+question. The meshes are duplicated before anything is done to them, since they
+come from an imported model the whole game shares - and a MultiMesh has no
+per-surface override to reach for instead, only one material for the whole
+thing, which would paint the trunks as well.
+
+None of this reads `GameSettings.chaos`. Each is told by whatever built the
+race, because the title screen backdrop is a race scene too, and a rainbow wood
+behind the menu is not what the menu is for.
+
+`tools/checks/chaos_colour.gd` checks the three that are meant to move and the
+one that is meant to hold still, and then that none of it happens in a race
+that is not chaotic:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/chaos_colour.gd
+```
+
 ## Phases
 
 - [x] **0** — repo, Godot project, `.gitignore`

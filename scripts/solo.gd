@@ -93,6 +93,8 @@ func _ready() -> void:
 			var cars: Array[Car] = [_car]
 			_chaos = Chaos.new(cars, _day_night, _track)
 			_chaos_rng.randomize()
+		_lines.wild = _chaos != null
+		($Trees as Trees).wild = _chaos != null
 		_roll_a_course()
 	else:
 		_track.track_file = _track_file

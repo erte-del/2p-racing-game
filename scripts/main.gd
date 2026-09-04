@@ -118,6 +118,11 @@ func _ready() -> void:
 	if not attract_mode and GameSettings.chaos:
 		_chaos = Chaos.new(_cars, _day_night, _track)
 		_chaos_rng.randomize()
+	# Told rather than left to read the setting, so the title screen backdrop
+	# - which is this scene too - stays the colour it is meant to be.
+	_lines1.wild = _chaos != null
+	_lines2.wild = _chaos != null
+	($Trees as Trees).wild = _chaos != null
 
 	# A laid-out track if one was picked on the way in, and the endless course
 	# otherwise. Never in attract mode: the title backdrop rolls its own
@@ -293,6 +298,11 @@ func _on_course(car: Car, offset: float) -> bool:
 func _new_course(course_seed: int) -> void:
 	if _chaos:
 		_chaos.reroll(_chaos_rng)
+		# Chaos repaints the cars for every course, and an arrow still in the
+		# last course's colour would be pointing at the wrong idea of who the
+		# other player is.
+		_arrow1.recolour(_car2.body_color)
+		_arrow2.recolour(_car1.body_color)
 	_track.generate(course_seed)
 	_place_on_grid()
 	# Snap both cameras, or they fly across the world to the new grid.

@@ -155,6 +155,7 @@ const OBSTACLE_GROUP := &"obstacle"
 ## The beams, and the material of the lamp panels they shine out of.
 var _headlights: Array[SpotLight3D] = []
 var _lamp_material: StandardMaterial3D
+var _paint_material: StandardMaterial3D
 
 ## The model's own steering wheel, turned along with the front wheels.
 var _steering_wheel: Node3D
@@ -306,6 +307,7 @@ func _prepare_materials() -> void:
 				var copy := source.duplicate() as StandardMaterial3D
 				if key == PAINT_MATERIAL:
 					copy.albedo_color = body_color
+					_paint_material = copy
 				elif key == LAMP_MATERIAL:
 					# Authored permanently lit; off until switched on.
 					copy.emission_energy_multiplier = 0.0
@@ -323,6 +325,15 @@ func _prepare_materials() -> void:
 	if _lamp_material == null:
 		push_warning("Car: no '%s' material, so the headlights cannot light up"
 				% LAMP_MATERIAL)
+
+
+## Paint the car a different colour, after it has already been built. The
+## material is the car's own copy rather than the one the model shipped with,
+## so this repaints one car and not both.
+func repaint(colour: Color) -> void:
+	body_color = colour
+	if _paint_material != null:
+		_paint_material.albedo_color = colour
 
 
 ## Found by name rather than by path: the glTF importer decides how deeply it

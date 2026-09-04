@@ -40,6 +40,21 @@ const TREES := preload("res://assets/models/trees.glb")
 ## the track's own batter, so trees keep off the built-up ground under a
 ## raised section instead of standing part way up its slope.
 @export var embankment_batter := 1.8
+@export_group("Chaos")
+## Under chaos the leaves will not hold still. The wood turns through the
+## colours over this many seconds, each kind of tree from a different place in
+## them, so what happens across the field is a shimmer rather than the whole
+## horizon pulsing as one.
+@export var leaf_cycle_seconds := 9.0
+@export_range(0.0, 1.0) var leaf_saturation := 0.62
+@export_range(0.0, 1.0) var leaf_value := 0.66
+
+## Whether this is a chaotic race. Set by whatever built the race, not read
+## off the settings: the title screen backdrop is a race scene too, and a
+## rainbow wood behind the menu is not what the menu is for.
+var wild := false
+
+@export_group("")
 @export var layout_seed := 20260902
 @export var track_path := NodePath("../Track")
 
@@ -49,6 +64,10 @@ const TREES := preload("res://assets/models/trees.glb")
 var placements: Array[Array] = []
 
 var _meshes: Array[Mesh] = []
+## The leaf material of every tree, this node's own copies, so they can be
+## recoloured without every other wood in the game turning with them.
+var _leaves: Array[StandardMaterial3D] = []
+var _elapsed := 0.0
 var _track: Track
 
 
@@ -77,15 +96,54 @@ func build() -> void:
 	_rebuild_instances()
 
 
+## Take a copy of each tree, with a copy of its leaves.
+##
+## The meshes come out of an imported model that the whole game shares, so
+## they are duplicated before anything is done to them - and a MultiMesh has
+## no per-surface override to reach for instead, only one material for the
+## whole thing, which would paint the trunks as well.
 func _load_meshes() -> void:
 	var scene := TREES.instantiate()
 	for node in scene.find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance := node as MeshInstance3D
-		if mesh_instance.mesh:
-			_meshes.append(mesh_instance.mesh)
+		if mesh_instance.mesh == null:
+			continue
+		var mesh: Mesh = mesh_instance.mesh.duplicate()
+		for surface in mesh.get_surface_count():
+			var material := mesh.surface_get_material(surface) as StandardMaterial3D
+			if material == null or not _is_foliage(material.albedo_color):
+				continue
+			var leaves: StandardMaterial3D = material.duplicate()
+			mesh.surface_set_material(surface, leaves)
+			_leaves.append(leaves)
+		_meshes.append(mesh)
 	scene.free()
 	if _meshes.is_empty():
 		push_warning("Trees: no meshes in the tree model")
+
+
+## Which surfaces of a tree are its leaves.
+##
+## Asked of the colour rather than the name, because the model names its
+## materials Material.001 through Material.007 and nothing in that says which
+## is bark and which is a canopy. Every green surface in the pack is foliage
+## and nothing else in it is green, so green is what the question is.
+func _is_foliage(albedo: Color) -> bool:
+	return albedo.g > albedo.r and albedo.g > albedo.b
+
+
+## Turn the wood through the colours, if this is a chaotic race.
+func _process(delta: float) -> void:
+	if not wild or _leaves.is_empty():
+		return
+	_elapsed += delta
+	for i in _leaves.size():
+		# Each kind of leaf from its own place in the turn, so the field
+		# shimmers instead of flashing all at once.
+		_leaves[i].albedo_color = Color.from_hsv(
+			fmod(_elapsed / leaf_cycle_seconds + float(i) / float(_leaves.size()),
+				1.0),
+			leaf_saturation, leaf_value)
 
 
 # --- choosing the spots -------------------------------------------------

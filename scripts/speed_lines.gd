@@ -30,6 +30,22 @@ extends Control
 @export var sweep_rate := 2.2
 @export var rush_ease := 5.0
 
+@export_group("Chaos")
+## Under chaos the streaks are not white. They turn through the colours, each
+## from a slightly different place in them, so the frame comes out as a
+## shifting spread rather than one tinted sheet.
+@export var wild_cycle_seconds := 2.6
+## How far apart round the wheel the streaks are spread. A whole turn would
+## put every colour on the screen at once and read as noise; a quarter reads
+## as a colour that happens to be several colours.
+@export_range(0.0, 1.0) var wild_spread := 0.25
+@export_range(0.0, 1.0) var wild_saturation := 0.85
+
+## Whether this is a chaotic race. Set by whatever built the race, not read
+## off the settings: the title screen backdrop is a race scene too, and it
+## should not be shimmering behind the menu.
+var wild := false
+
 var _car: Car
 ## How much of the rush is currently showing, 0 to 1.
 var _rush := 0.0
@@ -91,6 +107,10 @@ func _draw() -> void:
 		# In and out again across the sweep, so a streak never pops into or
 		# out of the frame at full strength.
 		var colour := line_color
+		if wild:
+			colour = Color.from_hsv(
+				fmod(_time / wild_cycle_seconds + _phases[i] * wild_spread, 1.0),
+				wild_saturation, 1.0, line_color.a)
 		# In and out again across the sweep, but flattened, so a streak
 		# spends most of its life at full strength instead of only touching
 		# it in passing.

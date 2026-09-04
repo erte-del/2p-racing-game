@@ -55,6 +55,14 @@ const NARROW_HALF_WIDTH := Vector2(3.6, 5.6)
 const WIDTH_SPREAD := Vector2(1.5, 4.5)
 const CHECKPOINTS := Vector2i(3, 6)
 
+## The paint. Rolled bright, because a car has to be picked out of a hedge at
+## a glance, and rolled apart: two cars are given hues on opposite sides of
+## the wheel, so however the colours land the players can always tell which
+## one is theirs. That is the one thing about a chaotic race that is not
+## allowed to be chaotic.
+const PAINT_SATURATION := Vector2(0.6, 1.0)
+const PAINT_VALUE := Vector2(0.62, 1.0)
+
 ## How far a car flies off a ramp, as powers of the speed and gravity rolls.
 ## Measured off real flights rather than worked out: the launch is capped, so
 ## range does not follow the clean projectile square of speed.
@@ -110,6 +118,7 @@ func _init(cars: Array[Car], day_night: DayNight, track: Track) -> void:
 ## the course is part of what is being rolled.
 func reroll(rng: RandomNumberGenerator) -> void:
 	_roll_the_cars(rng)
+	_roll_the_colours(rng)
 	_roll_the_course(rng)
 	_roll_the_sky(rng)
 
@@ -138,6 +147,16 @@ func _roll_the_cars(rng: RandomNumberGenerator) -> void:
 		car.fast_turn_radius = _base_car["fast_turn_radius"] * steering
 		car.gravity = _base_car["gravity"] * gravity
 		car.slipstream_bonus = slipstream
+
+
+## A colour each, as far apart as there is room for.
+func _roll_the_colours(rng: RandomNumberGenerator) -> void:
+	var base := rng.randf()
+	var count: int = maxi(_cars.size(), 1)
+	for i in _cars.size():
+		_cars[i].repaint(Color.from_hsv(
+			fmod(base + float(i) / float(count), 1.0),
+			_spread(rng, PAINT_SATURATION), _spread(rng, PAINT_VALUE)))
 
 
 ## The course is described as a floor and a spread rather than as two ends, so

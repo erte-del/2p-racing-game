@@ -58,6 +58,13 @@ func setup(
 	_update_visibility()
 
 
+## Follow the rival into a new colour. The arrow is the only thing telling one
+## player which car is the other one, so a car that changes colour and an arrow
+## that does not would be worse than no arrow.
+func recolour(colour: Color) -> void:
+	material_override = _build_material(colour)
+
+
 ## Runs with physics, like the cars and cameras, so the arrow cannot jitter
 ## against the car it is tracking.
 func _physics_process(delta: float) -> void:
