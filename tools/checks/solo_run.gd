@@ -67,8 +67,7 @@ func _init() -> void:
 	var first: float = solo.get("_time")
 	print("finished in %s, best now %s"
 		% [_clock(first), _clock(solo.get("_best"))])
-	print("result on screen: %s"
-		% String(solo.get_node("Hud/Result").text).replace("\n", " / "))
+	print("result on screen: %s" % _result(solo))
 	if solo.get("_running"):
 		print("  the clock did not stop at the line")
 		faults += 1
@@ -79,7 +78,7 @@ func _init() -> void:
 		print("  not every checkpoint was banked: %d of %d"
 			% [solo.get("_next_checkpoint"), track.checkpoint_offsets().size()])
 		faults += 1
-	if String(solo.get_node("Hud/Result").text).is_empty():
+	if not solo.get_node("Hud/Result").visible:
 		print("  finishing said nothing")
 		faults += 1
 
@@ -89,7 +88,7 @@ func _init() -> void:
 	if solo.get("_time") > 0.01 or solo.get("_running"):
 		print("  restarting did not put the clock back to nothing")
 		faults += 1
-	if not String(solo.get_node("Hud/Result").text).is_empty():
+	if solo.get_node("Hud/Result").visible:
 		print("  the last run's result was still on the screen")
 		faults += 1
 	print("restart puts it back on the line with the clock at %s"
@@ -103,7 +102,7 @@ func _init() -> void:
 		waited_again += 1.0 / 60.0
 	await _drive(solo, track, car)
 	var second: float = solo.get("_time")
-	var said := String(solo.get_node("Hud/Result").text).replace("\n", " / ")
+	var said := _result(solo)
 	print("second run %s against a %s best: %s"
 		% [_clock(second), _clock(first), said])
 	if not (said.contains("BEST BY") or said.contains("OFF THE BEST")):
@@ -222,6 +221,16 @@ func _right(track: Track, at: float) -> Vector3:
 	if forward.length_squared() < 0.000001:
 		return Vector3.RIGHT
 	return forward.normalized().cross(Vector3.UP)
+
+
+## The whole of what the finish screen is saying, on one line.
+func _result(solo: Node) -> String:
+	var parts := PackedStringArray()
+	for name in ["Time", "Medal", "Note"]:
+		var text: String = solo.get_node("Hud/Result/Box/%s" % name).text
+		if not text.is_empty():
+			parts.append(text)
+	return " / ".join(parts)
 
 
 func _clock(seconds: float) -> String:

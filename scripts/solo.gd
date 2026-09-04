@@ -48,7 +48,10 @@ extends Node3D
 @onready var _tally: Label = $Hud/Corner/Box/Tally
 @onready var _best_label: Label = $Hud/Best
 @onready var _countdown: Label = $Hud/Countdown
-@onready var _result: Label = $Hud/Result
+@onready var _result: Control = $Hud/Result
+@onready var _result_time: Label = $Hud/Result/Box/Time
+@onready var _result_medal: Label = $Hud/Result/Box/Medal
+@onready var _result_note: Label = $Hud/Result/Box/Note
 @onready var _hint: Label = $Hud/Hint
 
 ## Ticking between GO and the line.
@@ -59,6 +62,8 @@ var _time := 0.0
 ## screen has something to compare against without reading a file per lap.
 var _track_file := ""
 var _best := -1.0
+## What a lap of this track is worth: gold, silver and bronze, in seconds.
+var _targets := Vector3.ZERO
 ## Where a reset puts the car, and which checkpoint it is looking for next.
 var _respawn := 0.0
 var _next_checkpoint := 0
@@ -75,6 +80,10 @@ func _ready() -> void:
 	# Nothing to draft behind and nothing to be shown an arrow to.
 	_car.rival = null
 	_track.generate(0)
+	# After the track is built, since what a lap of it is worth is read off
+	# the track rather than described a second time.
+	_targets = _track_targets()
+	_result.hide()
 	_lines.watch(_car)
 	_place_on_the_line()
 	_camera.follow(_car)
@@ -127,7 +136,7 @@ func _input(event: InputEvent) -> void:
 func _restart() -> void:
 	_running = false
 	_hint.show()
-	_result.text = ""
+	_result.hide()
 	_place_on_the_line()
 	_camera.follow(_car)
 	_start_after_countdown()
@@ -167,27 +176,59 @@ func _finish() -> void:
 	_hint.show()
 	_car.frozen = true
 	_car.reset_motion()
+	# Set outright rather than left on whatever the last step wrote, so the
+	# clock in the corner and the time in the middle are the same number.
+	_clock.text = _format_time(_time)
 
 	# Offered to the record before anything is said about it, so what appears
 	# on the screen is what was actually written down.
 	var beaten := TrackTimes.record(_track_file, _time)
-	var lines := PackedStringArray([_format_time(_time)])
+
+	_result_time.text = _format_time(_time)
+	var medal := Medal.earned(_time, _targets)
+	_result_medal.text = Medal.label(medal)
+	_result_medal.add_theme_color_override("font_color", Medal.colour(medal))
+
+	# What is worth saying under the medal is whichever of the two things the
+	# player is closer to caring about: a run that beat their own best is
+	# about the best, and one that did not is about the next medal up.
 	if _best < 0.0:
-		lines.append("FIRST TIME SET")
+		_result_note.text = "FIRST TIME SET"
 	elif beaten:
-		lines.append("BEST BY %s" % _format_time(_best - _time))
+		_result_note.text = "BEST BY %s" % _format_time(_best - _time)
 	else:
-		lines.append("%s OFF THE BEST" % _format_time(_time - _best))
+		_result_note.text = "%s OFF THE BEST" % _format_time(_time - _best)
+	var up: Array = Medal.next_up(_time, _targets)
+	if int(up[0]) != Medal.NONE:
+		_result_note.text += "        %s TO %s" % [
+			_format_time(float(up[1])), Medal.label(int(up[0]))]
+
 	if beaten:
 		_best = _time
 	_show_best()
-	_result.text = "\n".join(lines)
+	_result.show()
 
 
 ## The best so far, or nothing at all rather than a dash: an empty corner
 ## says "no time yet" without having to be read.
 func _show_best() -> void:
-	_best_label.text = "" if _best < 0.0 else "BEST  %s" % _format_time(_best)
+	if _best < 0.0:
+		_best_label.text = ""
+		return
+	var medal := Medal.earned(_best, _targets)
+	_best_label.text = "BEST  %s" % _format_time(_best)
+	if medal != Medal.NONE:
+		_best_label.text += "   %s" % Medal.label(medal)
+	# Coloured by what the standing time is worth, so the corner says how the
+	# track is going without having to be read.
+	_best_label.add_theme_color_override("font_color", Medal.colour(medal))
+
+
+## What this track asks for. Read off the track that was actually built, so a
+## definition is not described twice.
+func _track_targets() -> Vector3:
+	var definition := _track.definition()
+	return definition.targets if definition != null else Vector3.ZERO
 
 
 # --- where the car is ---------------------------------------------------

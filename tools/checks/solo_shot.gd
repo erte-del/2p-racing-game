@@ -15,6 +15,11 @@ func _init() -> void:
 	if settings != null:
 		settings.track_file = "res://tracks/01_first_light.gd"
 		settings.chaos = false
+	var times: Node = root.get_node_or_null(^"/root/TrackTimes")
+	if times != null:
+		times.save_path = "user://times_shot.cfg"
+		times.load_times()
+		times.record("res://tracks/01_first_light.gd", 43.10)
 
 	var solo: Node = load("res://scenes/solo.tscn").instantiate()
 	root.add_child(solo)
@@ -38,10 +43,14 @@ func _init() -> void:
 		await physics_frame
 	await _shoot(out, "03_boosting")
 
+	# A time worth a medal, so the picture shows one.
+	solo.set("_time", 41.55)
 	solo.call("_finish")
 	for i in 10:
 		await physics_frame
 	await _shoot(out, "04_finished")
+	if times != null:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(times.save_path))
 	print("solo drawn")
 	quit()
 

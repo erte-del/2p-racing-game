@@ -980,13 +980,61 @@ It writes to a scratch file, so running it does not touch anyone's own record:
 Godot --path . --headless --script tools/checks/track_times.gd
 ```
 
+## Medals
+
+Every track sets what a lap of it is worth - gold, silver and bronze in
+seconds - in its own file, next to its corners. What counts as a good lap is a
+fact about the road rather than a number that could be worked out from one: a
+wide open kilometre and a kilometre of hairpins are not the same forty seconds.
+First Light asks for 40, 45 and 50.
+
+```gdscript
+medals(40.0, 45.0, 50.0)
+```
+
+A target is a time to get under, not a time to match. 39.99 is gold and 40.00
+is silver, because a medal for exactly the number on the screen would make that
+number a lie in one direction or the other, and under is the one a player can
+act on.
+
+Nothing about a medal is stored. It is worked out from the best time and the
+targets every time anything asks, so moving a target moves every medal that
+depends on it at once - which is what you want while a track is still being
+tuned, and costs nothing when it is not. A track that sets no targets has no
+medals rather than every medal, and one that offers only some of them is walked
+past rather than stalled on: a track with no silver takes a lap between the
+gold and bronze times as bronze, and tells the player they are driving at gold.
+
+The finish screen says the time, the medal in its own colour, and both of the
+things a player might be chasing - how far under their own best the run was,
+and how far off the next medal up. The corner keeps the standing best in the
+colour of what it is worth, so the screen says how the track is going without
+having to be read.
+
+On the select screen each track carries a bar of its medal's colour directly
+under its picture. Colouring the time alone was tried first and was not enough:
+against a dark panel a silver time and a time worth nothing are two shades of
+pale, and a medal that has to be compared with its neighbours to be seen is not
+one. The medal colours are read against the game rather than taken from metal -
+a true bronze disappears into the road, and a true silver comes out the same
+white as the time printed above it, so it is pulled towards blue.
+
+`tools/checks/medals.gd` works out what times are worth, including the edges
+that are easy to get wrong: a lap exactly on a target, a track that offers only
+some of the medals, and what to tell a player chasing the next one.
+
+```
+Godot --path . --headless --script tools/checks/medals.gd
+```
+
 ## Adding a track
 
 Everything a track needs is in place, so adding the next nineteen is three
 steps and no code:
 
-1. Write `tracks/NN_name.gd` extending `TrackDefinition`, and check it with
-   `tools/checks/track_check.gd` and `tools/checks/track_map.gd`.
+1. Write `tracks/NN_name.gd` extending `TrackDefinition`, set its `medals()`,
+   and check it with `tools/checks/track_check.gd` and
+   `tools/checks/track_map.gd`.
 2. Add its path to `TrackRoster.FILES`, in the order it should appear.
 3. Run `tools/track_thumbnails.gd` to draw its overhead shot.
 

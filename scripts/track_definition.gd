@@ -30,6 +30,12 @@ var track_name := "Unnamed"
 ## A sentence about what the track is for, for the same places.
 var blurb := ""
 
+## What a lap of this track is worth: gold, silver and bronze, in seconds.
+## Set by the track file with medals(), because what counts as a good lap is a
+## fact about this road and not a number that could be worked out from one.
+## Left at zero on a track that has none.
+var targets := Vector3.ZERO
+
 ## The road, in the order it is driven.
 var pieces: Array[TrackLayout.Piece] = []
 ## Everything standing on it.
@@ -88,6 +94,11 @@ func climb(length: float, rise: float) -> void:
 ## A ramp, a hole with no road in it, and a long flat run to come down on.
 func jump() -> void:
 	_add(TrackLayout.JUMP, ramp_length + jump_gap + landing_length)
+
+
+## What a lap has to beat for each medal, in seconds, fastest first.
+func medals(gold: float, silver: float, bronze: float) -> void:
+	targets = Vector3(gold, silver, bronze)
 
 
 ## The half-width of the road from here on, in metres. Widths are blended

@@ -50,6 +50,19 @@ static func track_name(index: int) -> String:
 	return definition.track_name
 
 
+## What a lap of this track is worth: gold, silver and bronze in seconds, or
+## all zero for a track with no targets set.
+static func targets(index: int) -> Vector3:
+	if not exists(index):
+		return Vector3.ZERO
+	var written := load(FILES[index]) as GDScript
+	if written == null:
+		return Vector3.ZERO
+	var definition: TrackDefinition = written.new()
+	definition.describe()
+	return definition.targets
+
+
 ## The overhead shot for a slot, or null for a track with none yet.
 static func thumbnail(index: int) -> Texture2D:
 	if not exists(index):

@@ -203,10 +203,25 @@ func _fill_the_track_grid() -> void:
 			# come. An empty slot gets its own frame instead: dark, outlined,
 			# and plainly a place where something goes.
 			button.add_theme_stylebox_override("disabled", _empty_slot())
-		button.tooltip_text = TrackRoster.track_name(index)
+		button.tooltip_text = _what_it_asks(index)
 		if not button.disabled:
 			button.pressed.connect(_start_track.bind(TrackRoster.file(index)))
 		cell.add_child(button)
+
+		# A bar of the medal's colour directly under the picture. Colouring
+		# the time alone was not enough: against a dark panel a silver time
+		# and a time worth nothing are two shades of pale, and a medal that
+		# has to be compared with its neighbours to be seen is not one.
+		var medal := Medal.NONE
+		if TrackRoster.exists(index):
+			var standing := TrackTimes.best(TrackRoster.file(index))
+			medal = Medal.earned(standing, TrackRoster.targets(index))
+		var rule := ColorRect.new()
+		rule.custom_minimum_size = Vector2(track_button_size, 5)
+		rule.color = Medal.colour(medal)
+		rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rule.visible = medal != Medal.NONE
+		cell.add_child(rule)
 
 		# The time under the picture, because it is the thing that changes.
 		# A track with no time to its name says so rather than showing a dash:
@@ -219,13 +234,29 @@ func _fill_the_track_grid() -> void:
 		time.add_theme_font_size_override("font_size", 20)
 		var best := TrackTimes.best(TrackRoster.file(index)) if TrackRoster.exists(index) else -1.0
 		if best >= 0.0:
+			# Coloured to match the bar rather than spelled out. A cell this
+			# size has room for a number or for a word, and the number is the
+			# one a player is trying to change.
 			time.text = _format_time(best)
+			time.add_theme_color_override("font_color", Medal.colour(medal))
 		elif TrackRoster.exists(index):
 			time.text = "NO TIME"
 			time.add_theme_color_override("font_color", Color(0.55, 0.58, 0.66))
 		cell.add_child(time)
 
 		_track_grid.add_child(cell)
+
+
+## What a track is and what it wants, for anyone who goes looking.
+func _what_it_asks(index: int) -> String:
+	if not TrackRoster.exists(index):
+		return "Not built yet."
+	var targets := TrackRoster.targets(index)
+	if targets == Vector3.ZERO:
+		return TrackRoster.track_name(index)
+	return "%s\nGOLD %s     SILVER %s     BRONZE %s" % [
+		TrackRoster.track_name(index), _format_time(targets.x),
+		_format_time(targets.y), _format_time(targets.z)]
 
 
 ## The same clock the race keeps, so a time on the button and the time that

@@ -11,6 +11,14 @@ extends SceneTree
 func _init() -> void:
 	await process_frame
 	var settings := root.get_node_or_null(^"/root/GameSettings")
+	var times: Node = root.get_node_or_null(^"/root/TrackTimes")
+	if times != null:
+		# A time on the board, so the colour of one can be checked as well as
+		# the shape of the grid. Scratch file: a check is not a lap.
+		times.save_path = "user://times_select_check.cfg"
+		times.load_times()
+		times.record("res://tracks/01_first_light.gd", 41.55)
+
 	var menu: Node = load("res://scenes/menu.tscn").instantiate()
 	root.add_child(menu)
 	for i in 20:
@@ -77,6 +85,8 @@ func _init() -> void:
 			print("  a timed track is being run under chaos rules")
 			faults += 1
 
+	if times != null:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(times.save_path))
 	print("%d faults" % faults)
 	quit(1 if faults > 0 else 0)
 
@@ -95,6 +105,12 @@ func _check_the_times(grid: GridContainer) -> int:
 			faults += 1
 			continue
 		var shown: String = (labels[1] as Label).text
+		# The bar under the picture has to agree with the time under that.
+		var rules := grid.get_child(index).get_children().filter(
+			func(c: Node) -> bool: return c is ColorRect)
+		if rules.is_empty():
+			print("  slot %d has no medal bar" % (index + 1))
+			faults += 1
 		if not TrackRoster.exists(index):
 			if not shown.is_empty():
 				print("  slot %d has no track in it but says '%s'"
@@ -111,6 +127,27 @@ func _check_the_times(grid: GridContainer) -> int:
 			print("  %s has a time of %.2f but says it has none"
 				% [TrackRoster.track_name(index), best])
 			faults += 1
+		# And the colour has to agree with the number: a gold time shown in
+		# the same grey as a bronze one is a medal nobody can see.
+		if best >= 0.0:
+			var earned := Medal.earned(best, TrackRoster.targets(index))
+			var expected := Medal.colour(earned)
+			var used: Color = (labels[1] as Label).get_theme_color("font_color")
+			if not used.is_equal_approx(expected):
+				print("  %s is worth %s but is not shown in its colour"
+					% [TrackRoster.track_name(index), Medal.label(earned)])
+				faults += 1
+			if not rules.is_empty():
+				var bar := rules[0] as ColorRect
+				if bar.visible != (earned != Medal.NONE):
+					print("  %s is worth %s but its bar is %s"
+						% [TrackRoster.track_name(index), Medal.label(earned),
+							"showing" if bar.visible else "hidden"])
+					faults += 1
+				elif bar.visible and not bar.color.is_equal_approx(expected):
+					print("  %s has a bar in the wrong colour"
+						% TrackRoster.track_name(index))
+					faults += 1
 		print("%s shows %s" % [TrackRoster.track_name(index), shown])
 	return faults
 
