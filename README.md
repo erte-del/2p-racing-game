@@ -851,10 +851,28 @@ a split screen, until solo mode exists:
 Godot --path . --script tools/drive_track.gd
 ```
 
+## How many are playing
+
+Play asks how many are playing before it asks anything else, because it is the
+one choice that changes what every other choice means. The same endless course
+is a race against someone in co-op and a run against the clock alone; the same
+laid-out track is a time to beat alone and a road to race down together. Asking
+it the other way round would have a player pick a mode before they knew what a
+mode was going to be for.
+
+It is also the only choice that decides which scene a race runs in. Everything
+else - the endless course or a laid-out track, chaos or not - is a setting the
+scene reads once it is up. The page opens on whichever way the player played
+last, which is remembered between runs, so someone who always plays alone
+presses the same key twice every time.
+
+Backing out walks the way in, in reverse: the track grid, the modes, how many,
+then the title.
+
 ## Choosing a mode
 
-Play opens a page with the two modes on it, each with a line under it saying
-what it is. Infinite is a door rather than a start: it rolls the choice between
+The mode page comes second, with the two modes on it, each with a line under it
+saying what it is. Infinite is a door rather than a start: it rolls the choice between
 a normal race and a chaotic one out from under itself, and it is that second
 click that starts the game. Asking one question at a time keeps the page down
 to what is actually being decided.
@@ -934,8 +952,20 @@ Godot --path . --headless --script tools/checks/track_select.gd
 
 ## Solo
 
-A laid-out track is driven alone against the clock, in its own scene rather
-than in the two-player race with a seat empty. Almost everything in `Main` is
+Solo is its own scene, and it runs either a laid-out track for a time or the
+endless course for its own sake. Which one it is comes down to whether a track
+was picked on the way in; nothing else about the scene changes.
+
+The endless course alone has no time to beat and nothing to write down - the
+next road is a different road - so there is no medal, no best in the corner and
+no record kept. What the clock is for there is the run you are on. Asking for
+another go rolls another road rather than replaying the same one, which is the
+difference between the endless course and a track: the same road is the whole
+point of one and beside the point of the other. A finished course holds for a
+moment and then rolls the next by itself, so the endless course keeps going
+without being asked to.
+
+It is its own scene rather than the two-player race with a seat empty. Almost everything in `Main` is
 about there being two of something - two viewports, two cameras, two arrows, a
 leader, a winner - and threading a count through all of it would leave the
 endless mode carrying a branch on every line for a mode it is not. What is
@@ -953,8 +983,17 @@ there - so a retry is the car back on the line and the countdown again.
 Instant retry is not a nicety in a mode like this: it is most of what makes
 trying a corner again bearable.
 
-Finishing measures the run against the best so far, which is kept in
-`TrackTimes` and survives the game being closed.
+On a laid-out track, finishing measures the run against the best so far, which
+is kept in `TrackTimes` and survives the game being closed.
+
+`tools/checks/mode_routing.gd` walks in through the pages and sees which scene
+comes out the far end. Two questions before a race and two scenes to run it in
+is four ways in and four chances for one of them to land somewhere it should
+not:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/mode_routing.gd
+```
 
 `tools/checks/solo_run.gd` drives a whole run, from the line to the flag:
 

@@ -4,8 +4,16 @@ extends Control
 ## The title screen: the name of the game, a button to start it and a button
 ## to change the settings, over the game itself.
 ##
-## Play does not drop straight into a race. It asks which mode first: the
-## endless course the game has always been, or one of the laid-out tracks.
+## Play does not drop straight into a race. It asks how many are playing
+## first, and only then which mode: the endless course the game has always
+## been, or one of the laid-out tracks.
+##
+## How many comes first because it is the one choice that changes what every
+## other choice means. The same endless course is a race against someone in
+## co-op and a run against the clock alone; the same laid-out track is a time
+## to beat alone and a road to race down together. Asking it the other way
+## round would have a player pick a mode before they knew what a mode was
+## going to be for.
 ##
 ## Coming back from a track opens on the grid of tracks rather than on the
 ## title. A player who has just driven one is nearly always about to drive
@@ -88,6 +96,10 @@ extends Control
 @onready var _play: Button = $Play
 @onready var _settings_button: Button = $Settings
 @onready var _settings_screen: SettingsMenu = $SettingsScreen
+@onready var _player_choice: Control = $PlayerChoice
+@onready var _alone_button: Button = $PlayerChoice/Page/Panel/Margin/Box/Alone
+@onready var _together_button: Button = $PlayerChoice/Page/Panel/Margin/Box/Together
+@onready var _player_back: Button = $PlayerChoice/Page/Panel/Margin/Box/Back
 @onready var _mode_choice: Control = $ModeChoice
 @onready var _infinite_button: Button = $ModeChoice/Page/Panel/Margin/Box/Infinite
 @onready var _mode_back: Button = $ModeChoice/Page/Panel/Margin/Box/Back
@@ -110,6 +122,9 @@ func _ready() -> void:
 	_play.pressed.connect(_on_play_pressed)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	_settings_screen.closed.connect(_on_settings_closed)
+	_alone_button.pressed.connect(_choose_players.bind(true))
+	_together_button.pressed.connect(_choose_players.bind(false))
+	_player_back.pressed.connect(_close_player_choice)
 	_infinite_button.pressed.connect(_on_infinite_pressed)
 	_mode_back.pressed.connect(_close_mode_choice)
 	_normal_button.pressed.connect(_start_infinite.bind(false))
@@ -131,6 +146,9 @@ func _ready() -> void:
 func _open_where_they_left_off() -> void:
 	if GameSettings.track_file.is_empty():
 		return
+	# The pages it came in through are opened behind it, so backing out of the
+	# grid walks the same way out that a player walked in.
+	_open_mode_choice()
 	_on_tracks_pressed()
 	_focus_track(TrackRoster.index_of(GameSettings.track_file))
 
@@ -164,10 +182,33 @@ func _turn_the_backdrop() -> void:
 ## Play opens the mode choice over the title rather than starting a race, so
 ## the backdrop keeps turning behind it the way the settings do.
 func _on_play_pressed() -> void:
+	_player_choice.show()
+	# On whichever way they played last, so a player who always plays alone
+	# presses the same key twice every time.
+	if GameSettings.solo:
+		_alone_button.grab_focus()
+	else:
+		_together_button.grab_focus()
+
+
+## How many are playing, and then on to what they are playing.
+func _choose_players(solo: bool) -> void:
+	GameSettings.solo = solo
+	GameSettings.save_settings()
+	_player_choice.hide()
+	_open_mode_choice()
+
+
+func _open_mode_choice() -> void:
 	# Always opens closed, however it was left last time.
 	_shut_flavour()
 	_mode_choice.show()
 	_infinite_button.grab_focus()
+
+
+func _close_player_choice() -> void:
+	_player_choice.hide()
+	_play.grab_focus()
 
 
 ## Infinite is a door rather than a start: it opens out into the choice
@@ -190,7 +231,7 @@ func _start_infinite(chaos: bool) -> void:
 	# Settled at the start of the race rather than on every press, so opening
 	# and closing the choice is not a file write per click.
 	GameSettings.save_settings()
-	get_tree().change_scene_to_file(race_scene)
+	get_tree().change_scene_to_file(_scene_for_the_players())
 
 
 # --- choosing a track ---------------------------------------------------
@@ -365,13 +406,20 @@ func _start_track(path: String) -> void:
 	# a car nobody will be given again is not a time.
 	GameSettings.chaos = false
 	GameSettings.save_settings()
-	get_tree().change_scene_to_file(solo_scene)
+	get_tree().change_scene_to_file(_scene_for_the_players())
 
 
 func _close_track_choice() -> void:
 	_track_choice.hide()
 	_mode_choice.show()
 	_tracks_button.grab_focus()
+
+
+## Which scene a race runs in. Everything else about a race - the endless
+## course or a laid-out track, chaos or not - is a setting the scene reads;
+## how many are playing is the one thing that decides which scene it is.
+func _scene_for_the_players() -> String:
+	return solo_scene if GameSettings.solo else race_scene
 
 
 ## Hold the flavour buttons to the width of the page.
@@ -432,7 +480,11 @@ func _shut_flavour() -> void:
 func _close_mode_choice() -> void:
 	_mode_choice.hide()
 	_shut_flavour()
-	_play.grab_focus()
+	_player_choice.show()
+	if GameSettings.solo:
+		_alone_button.grab_focus()
+	else:
+		_together_button.grab_focus()
 
 
 ## Escape backs out of whichever page is open. The settings screen handles its
@@ -442,8 +494,8 @@ func _input(event: InputEvent) -> void:
 		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
-	# One page at a time, outermost first: off the track grid, then off the
-	# flavour choice, then off the mode page.
+	# One page at a time, innermost first: off the track grid, then off the
+	# flavour choice, then off the mode page, then off how many are playing.
 	if _track_choice.visible:
 		get_viewport().set_input_as_handled()
 		_close_track_choice()
@@ -454,6 +506,9 @@ func _input(event: InputEvent) -> void:
 	elif _mode_choice.visible:
 		get_viewport().set_input_as_handled()
 		_close_mode_choice()
+	elif _player_choice.visible:
+		get_viewport().set_input_as_handled()
+		_close_player_choice()
 
 
 ## The settings lie over the title screen rather than replacing it, so the

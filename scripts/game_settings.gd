@@ -35,6 +35,17 @@ var volume := 0.8:
 		_apply_volume()
 		changed.emit()
 
+## Whether the next race is driven alone or by two players sharing the
+## keyboard. Asked before anything else, because it is the one choice that
+## changes what every other choice means: the same endless course is a race
+## against someone in co-op and a run against the clock alone.
+var solo := true:
+	set(value):
+		if value == solo:
+			return
+		solo = value
+		changed.emit()
+
 ## Whether infinite mode races under chaos rules: the cars, the shape of the
 ## course and the clock all rerolled for every race. What that actually
 ## changes lives in `Chaos` - this is only the choice the players made.
@@ -74,6 +85,7 @@ func save_settings() -> void:
 	file.set_value("audio", "volume", volume)
 	file.set_value("world", "time_of_day", time_of_day)
 	file.set_value("race", "chaos", chaos)
+	file.set_value("race", "solo", solo)
 	file.save(SAVE_PATH)
 
 
@@ -84,6 +96,7 @@ func load_settings() -> void:
 	volume = float(file.get_value("audio", "volume", volume))
 	time_of_day = int(file.get_value("world", "time_of_day", time_of_day))
 	chaos = bool(file.get_value("race", "chaos", chaos))
+	solo = bool(file.get_value("race", "solo", solo))
 
 
 ## Silence is its own state: fading a bus to -80 dB is still audible on some

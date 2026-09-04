@@ -25,13 +25,19 @@ func _init() -> void:
 		await process_frame
 
 	var out: String = OS.get_cmdline_user_args()[0]
-	# The mode page as it opens, and again with the flavour buttons rolled
-	# out - the second is where the line under Infinite has to have moved down
-	# rather than appeared.
+	# How many are playing, which is the first thing asked.
 	menu.call("_on_play_pressed")
 	for i in 10:
 		await process_frame
+	root.get_texture().get_image().save_png("%s/00_players.png" % out)
+	menu.call("_choose_players", true)
+	for i in 6:
+		await process_frame
 	root.get_texture().get_image().save_png("%s/01_modes.png" % out)
+
+	# The mode page as it opens, and again with the flavour buttons rolled
+	# out - the second is where the line under Infinite has to have moved down
+	# rather than appeared.
 	menu.call("_on_infinite_pressed")
 	for i in 40:
 		await process_frame

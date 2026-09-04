@@ -1,7 +1,8 @@
 class_name Solo
 extends Node3D
 
-## One car, one road, one clock.
+## One car, one road, one clock. Either a laid-out track, driven for a time,
+## or the endless course, driven for its own sake.
 ##
 ## A separate scene from the two-player race rather than that race with a
 ## player taken out of it. Almost everything in Main is about there being two
@@ -18,11 +19,11 @@ extends Node3D
 
 ## Where BACK goes.
 @export_file("*.tscn") var menu_scene := "res://scenes/menu.tscn"
-## The track to drive when nothing picked one, so the scene can be opened on
-## its own and still be a track rather than an empty world.
-@export_file("*.gd") var fallback_track := "res://tracks/01_first_light.gd"
 
 @export_group("Race")
+## How long the finished course is held before the next one is rolled. Only
+## the endless course does this; a laid-out track waits to be asked.
+@export var result_seconds := 2.4
 ## How long the car is held on the line, and how long GO stays up after it.
 @export var preview_seconds := 3.0
 @export var go_seconds := 0.7
@@ -62,6 +63,13 @@ var _time := 0.0
 ## screen has something to compare against without reading a file per lap.
 var _track_file := ""
 var _best := -1.0
+## True when nothing picked a track, which is the endless course: a fresh road
+## every time, so there is no time to beat and nothing to write down. What the
+## clock is for there is the run you are on.
+var _endless := false
+## What chaos does to a rolled course, when it is asked for.
+var _chaos: Chaos
+var _chaos_rng := RandomNumberGenerator.new()
 ## What a lap of this track is worth: gold, silver and bronze, in seconds.
 var _targets := Vector3.ZERO
 ## Where a reset puts the car, and which checkpoint it is looking for next.
@@ -73,24 +81,35 @@ var _countdown_run := 0
 
 
 func _ready() -> void:
-	_track_file = (GameSettings.track_file if not GameSettings.track_file.is_empty()
-			else fallback_track)
-	_track.track_file = _track_file
-	_best = TrackTimes.best(_track_file)
+	_track_file = GameSettings.track_file
+	_endless = _track_file.is_empty()
 	# Nothing to draft behind and nothing to be shown an arrow to.
 	_car.rival = null
-	_track.generate(0)
+
+	if _endless:
+		# Chaos rolls the car and the shape of the course, so it has to be in
+		# place before the first course is built.
+		if GameSettings.chaos:
+			var cars: Array[Car] = [_car]
+			_chaos = Chaos.new(cars, _day_night, _track)
+			_chaos_rng.randomize()
+		_roll_a_course()
+	else:
+		_track.track_file = _track_file
+		_track.generate(0)
+		_best = TrackTimes.best(_track_file)
+		_targets = _track_targets()
+
 	# After the track is built, since what a lap of it is worth is read off
 	# the track rather than described a second time.
-	_targets = _track_targets()
 	_result.hide()
 	_lines.watch(_car)
 	_place_on_the_line()
 	_camera.follow(_car)
 	_show_best()
-	_hint.text = "ENTER  run again        R  back to the last checkpoint        C  view        ESC  tracks"
-	# Up while the car is held and once it is home, down while it is driving.
-	# What is on the screen mid-run should be the run.
+	_hint.text = "%s        R  back to the last checkpoint        C  view        ESC  %s" % [
+		"ENTER  next course" if _endless else "ENTER  run again",
+		"back" if _endless else "tracks"]
 	_start_after_countdown()
 
 
@@ -137,9 +156,23 @@ func _restart() -> void:
 	_running = false
 	_hint.show()
 	_result.hide()
+	# The endless course is endless: asking for another go means another road,
+	# not the same one again. A laid-out track is the opposite - the same road
+	# is the whole point of it.
+	if _endless:
+		_roll_a_course()
 	_place_on_the_line()
 	_camera.follow(_car)
 	_start_after_countdown()
+
+
+## Throw away the course and roll a new one.
+func _roll_a_course() -> void:
+	if _chaos != null:
+		_chaos.reroll(_chaos_rng)
+	_track.track_file = ""
+	_track.generate(randi())
+	_targets = Vector3.ZERO
 
 
 ## Hold the car on the line, count down, and let it go. The clock starts on GO
@@ -179,12 +212,17 @@ func _finish() -> void:
 	# Set outright rather than left on whatever the last step wrote, so the
 	# clock in the corner and the time in the middle are the same number.
 	_clock.text = _format_time(_time)
+	_result_time.text = _format_time(_time)
+	_result.show()
+
+	if _endless:
+		await _and_on_to_the_next()
+		return
 
 	# Offered to the record before anything is said about it, so what appears
 	# on the screen is what was actually written down.
 	var beaten := TrackTimes.record(_track_file, _time)
 
-	_result_time.text = _format_time(_time)
 	var medal := Medal.earned(_time, _targets)
 	_result_medal.text = Medal.label(medal)
 	_result_medal.add_theme_color_override("font_color", Medal.colour(medal))
@@ -206,13 +244,27 @@ func _finish() -> void:
 	if beaten:
 		_best = _time
 	_show_best()
-	_result.show()
+
+
+## Hold the finished course for a moment, then roll another. There is nothing
+## to compare an endless run against - the next road is a different road - so
+## the time is all there is to say, and the way on is to keep driving.
+func _and_on_to_the_next() -> void:
+	_result_medal.text = ""
+	_result_note.text = "NEXT COURSE"
+	var run := _countdown_run
+	await get_tree().create_timer(result_seconds).timeout
+	# A player who pressed Enter rather than waiting has already started the
+	# next one, and this must not start a third over the top of it.
+	if run != _countdown_run:
+		return
+	_restart()
 
 
 ## The best so far, or nothing at all rather than a dash: an empty corner
 ## says "no time yet" without having to be read.
 func _show_best() -> void:
-	if _best < 0.0:
+	if _endless or _best < 0.0:
 		_best_label.text = ""
 		return
 	var medal := Medal.earned(_best, _targets)

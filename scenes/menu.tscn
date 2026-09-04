@@ -78,6 +78,88 @@ grow_horizontal = 2
 text = "SETTINGS"
 theme_override_font_sizes/font_size = 28
 
+[node name="PlayerChoice" type="Control" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="ColorRect" parent="PlayerChoice"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.62)
+
+[node name="Page" type="CenterContainer" parent="PlayerChoice"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="PlayerChoice/Page"]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="PlayerChoice/Page/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 30
+
+[node name="Box" type="VBoxContainer" parent="PlayerChoice/Page/Panel/Margin"]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="Heading" type="Label" parent="PlayerChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "HOW MANY?"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 44
+
+[node name="Alone" type="Button" parent="PlayerChoice/Page/Panel/Margin/Box"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+text = "SOLO"
+theme_override_font_sizes/font_size = 32
+
+[node name="AloneNote" type="MarginContainer" parent="PlayerChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/margin_top = -11
+
+[node name="Label" type="Label" parent="PlayerChoice/Page/Panel/Margin/Box/AloneNote"]
+layout_mode = 2
+text = "One car, the whole screen, and a clock."
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 18
+
+[node name="Together" type="Button" parent="PlayerChoice/Page/Panel/Margin/Box"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+text = "CO-OP"
+theme_override_font_sizes/font_size = 32
+
+[node name="TogetherNote" type="MarginContainer" parent="PlayerChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/margin_top = -11
+
+[node name="Label" type="Label" parent="PlayerChoice/Page/Panel/Margin/Box/TogetherNote"]
+layout_mode = 2
+text = "Two of you on one keyboard, split down the middle."
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 18
+
+[node name="Back" type="Button" parent="PlayerChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "BACK"
+
 [node name="ModeChoice" type="Control" parent="."]
 visible = false
 anchors_preset = 15

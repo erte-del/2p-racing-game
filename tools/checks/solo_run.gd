@@ -127,8 +127,70 @@ func _init() -> void:
 		DirAccess.remove_absolute(
 			ProjectSettings.globalize_path(times.save_path))
 
+	faults += await _check_the_endless_course(solo)
+
 	print("%d faults" % faults)
 	quit(1 if faults > 0 else 0)
+
+
+## The same scene with nothing picked is the endless course: a rolled road
+## every time, no time to beat and nothing to write down.
+func _check_the_endless_course(previous: Node) -> int:
+	var faults := 0
+	previous.queue_free()
+	await Engine.get_main_loop().process_frame
+
+	var settings: Node = Engine.get_main_loop().root.get_node_or_null(
+		^"/root/GameSettings")
+	settings.track_file = ""
+	settings.chaos = false
+
+	var solo: Node = load("res://scenes/solo.tscn").instantiate()
+	Engine.get_main_loop().root.add_child(solo)
+	for i in 10:
+		await Engine.get_main_loop().physics_frame
+	var track: Track = solo.get_node("Track")
+
+	if track.definition() != null:
+		print("  the endless course came out as a laid-out track")
+		faults += 1
+	if not String(solo.get_node("Hud/Best").text).is_empty():
+		print("  the endless course is offering a time to beat")
+		faults += 1
+	print("endless rolls %.0f m of road, with %s"
+		% [track.length(), track.features().summary()])
+
+	# Another go is another road, not the same one again.
+	var was := track.length()
+	var was_here: Vector3 = track.curve().sample_baked(20.0)
+	solo.call("_restart")
+	await Engine.get_main_loop().process_frame
+	var now_here: Vector3 = track.curve().sample_baked(20.0)
+	if is_equal_approx(was, track.length()) and was_here.is_equal_approx(now_here):
+		print("  asking for another go on the endless course gave the same road")
+		faults += 1
+	else:
+		print("another go rolls another road, %.0f m of it" % track.length())
+	if solo.get("_time") > 0.01:
+		print("  the new course did not start the clock afresh")
+		faults += 1
+	solo.queue_free()
+	await Engine.get_main_loop().process_frame
+
+	# And chaos on top of it has to survive being built with one car.
+	settings.chaos = true
+	var wild: Node = load("res://scenes/solo.tscn").instantiate()
+	Engine.get_main_loop().root.add_child(wild)
+	for i in 10:
+		await Engine.get_main_loop().physics_frame
+	var car: Car = wild.get_node("Car")
+	print("under chaos the one car tops out at %.1f m/s" % car.max_speed)
+	if is_equal_approx(car.max_speed, 25.0):
+		print("  chaos rolled nothing at all")
+		faults += 1
+	settings.chaos = false
+	wild.queue_free()
+	return faults
 
 
 ## Drive the car round by aiming it a little way further along the centreline,
