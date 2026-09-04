@@ -91,6 +91,19 @@ extends Control
 ## across is what decides how wide the page comes out.
 @export var track_button_size := 152.0
 
+@export_group("Chaos")
+## The chaos button never settles on a colour. Everything else on the page
+## says what it is in words; this one also says it by refusing to sit still,
+## which is the only thing on the screen that behaves the way the mode does.
+##
+## How long one turn through the colours takes. Slow: the point is a button
+## that is never quite the colour it was, not one that flashes.
+@export var chaos_cycle_seconds := 7.0
+## How far the colour is pushed. Held well under full, because this tints the
+## whole button - its dark face, its border and the word on it - and a strong
+## tint takes the word with it.
+@export_range(0.0, 1.0) var chaos_tint := 0.5
+
 @export_group("Mode choice")
 ## How long the flavour buttons take to roll out from under infinite. Long
 ## enough to read as movement, short enough that a player who knows what they
@@ -177,6 +190,11 @@ func _process(delta: float) -> void:
 	# would drift, and would be wrong again the moment the window resized.
 	_title.position = Vector2(
 		0.0, bounce_pixels * sin(TAU * _elapsed / bounce_period))
+	# Modulate rather than a stylebox, so one line covers the button in every
+	# state it has. Overriding its face would leave it plain the moment it was
+	# hovered or focused, which is most of the time it is on the screen.
+	_chaos_button.modulate = Color.from_hsv(
+		fmod(_elapsed / chaos_cycle_seconds, 1.0), chaos_tint, 1.0)
 	# While the modes are out, the slot holding them is exactly as tall as
 	# they are. That is what lets the flavour buttons slide out inside it: the
 	# inner grows as they roll down, and the slot grows with it, instead of

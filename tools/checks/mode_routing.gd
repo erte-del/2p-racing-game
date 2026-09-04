@@ -12,6 +12,45 @@ const SOLO := "Solo"
 const COOP := "Main"
 
 
+## Every other button on the page says what it is in words. The chaos one also
+## says it by never settling on a colour, so what is checked is that it is
+## still moving a second later and that it has gone somewhere, rather than
+## drifting a shade and stopping.
+func _check_the_chaos_button(menu: Node) -> int:
+	var chaos: Button = menu.get_node(
+		"ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/FlavourSlot/Inner/Row/Chaos")
+	var seen: Array[Color] = []
+	for sample in 4:
+		seen.append(chaos.modulate)
+		for i in 30:
+			await Engine.get_main_loop().process_frame
+
+	var faults := 0
+	for i in range(1, seen.size()):
+		if seen[i].is_equal_approx(seen[i - 1]):
+			print("  the chaos button held the same colour for half a second")
+			faults += 1
+	# And it goes somewhere rather than wobbling: half a turn of the colours
+	# in a second and a half puts it a long way from where it started.
+	if seen[0].is_equal_approx(seen[-1]):
+		print("  the chaos button came back to where it started")
+		faults += 1
+	print("the chaos button went %s -> %s in a second and a half"
+		% [_hue(seen[0]), _hue(seen[-1])])
+	# The word on it still has to be readable through the tint.
+	var faintest: float = 1.0
+	for colour in seen:
+		faintest = minf(faintest, colour.v)
+	if faintest < 0.85:
+		print("  the tint is dark enough to swallow the word on the button")
+		faults += 1
+	return faults
+
+
+func _hue(colour: Color) -> String:
+	return "%.0f degrees" % (colour.h * 360.0)
+
+
 func _init() -> void:
 	await process_frame
 	var settings: Node = root.get_node_or_null(^"/root/GameSettings")
@@ -134,6 +173,7 @@ func _init() -> void:
 	if opened <= closed + 10.0:
 		print("  the flavour buttons did not push the modes open further")
 		faults += 1
+	faults += await _check_the_chaos_button(menu2)
 	menu2.queue_free()
 
 	if times != null:

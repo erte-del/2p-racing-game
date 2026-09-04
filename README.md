@@ -872,6 +872,19 @@ without going back anywhere, and the page goes on saying which way this race is
 being played while the rest of it is decided. It opens on whichever way they
 played last, which is remembered between runs.
 
+The chaos button never settles on a colour. Everything else on the page says
+what it is in words; this one also says it by refusing to sit still, which is
+the only thing on the screen that behaves the way the mode does. It turns
+through the colours over `chaos_cycle_seconds` (7) - slow, because the point is
+a button that is never quite the colour it was rather than one that flashes -
+and `chaos_tint` (0.5) is held well under full because this tints the whole
+button, its face, its border and the word on it, and a strong tint takes the
+word with it.
+
+It is a `modulate` rather than a stylebox, so one line covers the button in
+every state it has. Overriding its face would leave it plain the moment it was
+hovered or focused, which is most of the time it is on the screen.
+
 Inside that, Infinite does not start a race either: it opens out in turn,
 sliding the choice between a normal race and a chaotic one down from under
 itself, and it is that click that starts the game. A slide inside a slide costs
