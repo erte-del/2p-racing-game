@@ -12,7 +12,7 @@ extends TrackDefinition
 func describe() -> void:
 	track_name = "Long Haul"
 	blurb = "Nothing new, and a very long way to keep getting it right."
-	medals(67.0, 74.0, 82.0)
+	medals(65.0, 72.0, 80.0)
 
 	straight(70.0)
 
@@ -20,15 +20,17 @@ func describe() -> void:
 	corner(46.0, 50.0)
 	straight(44.0)
 	corner(-54.0, 46.0)
-	straight(40.0)
+	straight(36.0)
 	pad(0.0)
-	straight(60.0)
+	straight(52.0)
 
 	# First jump, early, off a clear run.
-	straight(52.0)
+	straight(46.0)
 	jump()
 
-	# A pair of rows on the road out of the landing.
+	# A pair of rows on the road out of the landing, far enough past it that
+	# a long jump does not put the car down on top of the first one.
+	straight(20.0)
 	barrier(-1.0, -0.3)
 	straight(40.0)
 	barrier(0.3, 1.0)
@@ -54,22 +56,22 @@ func describe() -> void:
 	width(6.0)
 	corner(-148.0, 19.0)
 	width(8.0)
-	straight(56.0)
+	straight(48.0)
 
 	# A short slalom, three rows, the same alternating pattern as the Gauntlet
 	# but with a little more room between them.
 	barrier(-1.0, 0.28)
-	straight(28.0)
+	straight(26.0)
 	barrier(-0.28, 1.0)
-	straight(28.0)
+	straight(26.0)
 	barrier(-1.0, 0.28)
-	straight(54.0)
+	straight(46.0)
 
 	# A long open right, then the second pad on the exit of it.
 	corner(84.0, 40.0)
-	straight(38.0)
+	straight(30.0)
 	pad(0.35)
-	straight(56.0)
+	straight(46.0)
 
 	# The second fork, right lane, on a road that is already fast.
 	fork(1.0, 54.0)
@@ -83,9 +85,9 @@ func describe() -> void:
 	width(6.2)
 	corner(-118.0, 21.0)
 	width(8.0)
-	straight(46.0)
+	straight(40.0)
 	climb(50.0, 4.0)
-	straight(56.0)
+	straight(50.0)
 	jump()
 
 	# And a last esse to the line, because a straight run in after all that

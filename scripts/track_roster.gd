@@ -29,6 +29,11 @@ const FILES := [
 	"res://tracks/08_switchback.gd",
 	"res://tracks/09_the_gauntlet.gd",
 	"res://tracks/10_long_haul.gd",
+	"res://tracks/11_the_hook.gd",
+	"res://tracks/12_leap_of_faith.gd",
+	"res://tracks/13_needle.gd",
+	"res://tracks/14_relentless.gd",
+	"res://tracks/15_rattlesnake.gd",
 ]
 
 ## Where the overhead shots live. Built by tools/track_thumbnails.gd, one per
