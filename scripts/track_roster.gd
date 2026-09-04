@@ -50,6 +50,11 @@ static func track_name(index: int) -> String:
 	return definition.track_name
 
 
+## Which slot a track file sits in, or -1 for one that is not on the list.
+static func index_of(track_file: String) -> int:
+	return FILES.find(track_file)
+
+
 ## What a lap of this track is worth: gold, silver and bronze in seconds, or
 ## all zero for a track with no targets set.
 static func targets(index: int) -> Vector3:

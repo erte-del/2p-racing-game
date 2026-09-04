@@ -891,6 +891,17 @@ question nobody asked. Infinite clears it. Tracks also turns chaos off - a
 track is a road to learn and a time to beat, and a time set by a car nobody
 will be given again is not a time.
 
+Leaving a track puts a player back on the grid of tracks rather than at the
+title, with the cursor on the one they were driving. A player who has just
+driven a track is nearly always about to drive another, or the same one again,
+and making them walk back in through two pages to do it is asking them to say
+something they have already said.
+
+The menu knows they came from a track because one is still picked - nothing
+clears `GameSettings.track_file` but starting an infinite race - and that same
+setting is how it knows which track to put the cursor back on. Opening the game
+fresh, with nothing picked, still opens on the title.
+
 `tools/checks/track_select.gd` presses the buttons and sees where they go,
 which is three places for a track to be chosen and then quietly not raced: the
 grid built in code, the setting carried across a scene change, and a Track that

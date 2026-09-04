@@ -85,10 +85,59 @@ func _init() -> void:
 			print("  a timed track is being run under chaos rules")
 			faults += 1
 
+	faults += await _check_coming_back()
+
 	if times != null:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(times.save_path))
 	print("%d faults" % faults)
 	quit(1 if faults > 0 else 0)
+
+
+## Leaving a track should put a player back on the grid of tracks, with the
+## cursor on the one they were driving - not back at the title, three presses
+## away from the thing they were about to do again.
+func _check_coming_back() -> int:
+	var faults := 0
+	var settings: Node = Engine.get_main_loop().root.get_node_or_null(
+		^"/root/GameSettings")
+	if settings == null:
+		return 0
+
+	# As it is on the way out of a track: one is still picked.
+	settings.track_file = TrackRoster.file(0)
+	var menu: Node = load("res://scenes/menu.tscn").instantiate()
+	Engine.get_main_loop().root.add_child(menu)
+	for i in 20:
+		await Engine.get_main_loop().process_frame
+
+	if not menu.get_node("TrackChoice").visible:
+		print("  coming back from a track did not open on the tracks")
+		faults += 1
+	var focused := menu.get_viewport().gui_get_focus_owner()
+	var wanted: Button = _first_live(menu.get_node(
+		"TrackChoice/Page/Panel/Margin/Box/Scroll/Grid"))
+	if focused != wanted:
+		print("  the cursor did not come back to the track that was driven")
+		faults += 1
+	else:
+		print("coming back opens on the grid, on %s"
+			% TrackRoster.track_name(0))
+	menu.queue_free()
+	await Engine.get_main_loop().process_frame
+
+	# And a fresh start, with nothing picked, still opens on the title.
+	settings.track_file = ""
+	var fresh: Node = load("res://scenes/menu.tscn").instantiate()
+	Engine.get_main_loop().root.add_child(fresh)
+	for i in 20:
+		await Engine.get_main_loop().process_frame
+	if fresh.get_node("TrackChoice").visible or fresh.get_node("ModeChoice").visible:
+		print("  opening the game fresh did not open on the title")
+		faults += 1
+	else:
+		print("opening fresh still opens on the title")
+	fresh.queue_free()
+	return faults
 
 
 ## A track that has been driven shows its time; one that has not says so; and

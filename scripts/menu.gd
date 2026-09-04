@@ -7,6 +7,11 @@ extends Control
 ## Play does not drop straight into a race. It asks which mode first: the
 ## endless course the game has always been, or one of the laid-out tracks.
 ##
+## Coming back from a track opens on the grid of tracks rather than on the
+## title. A player who has just driven one is nearly always about to drive
+## another, or the same one again, and making them walk back in through two
+## pages to do it is asking them to say something they have already said.
+##
 ## The mode page opens showing only the two modes. Infinite does not start a
 ## race either: it opens out, sliding the choice between a normal race and a
 ## chaotic one down from under itself, and it is that second click that
@@ -103,6 +108,17 @@ func _ready() -> void:
 	# So the keyboard alone can start the game - both players are on one
 	# keyboard, and neither has been asked to find the mouse yet.
 	_play.grab_focus()
+	_open_where_they_left_off()
+
+
+## A track is still picked if the player came here from one, since nothing
+## clears that but starting an infinite race. So it is also how this screen
+## knows to open on the grid, and which track to put the cursor back on.
+func _open_where_they_left_off() -> void:
+	if GameSettings.track_file.is_empty():
+		return
+	_on_tracks_pressed()
+	_focus_track(TrackRoster.index_of(GameSettings.track_file))
 
 
 func _process(delta: float) -> void:
@@ -300,19 +316,32 @@ func _on_tracks_pressed() -> void:
 	_mode_choice.hide()
 	_refresh_the_track_grid()
 	_track_choice.show()
-	_focus_first_track()
+	_focus_track()
 
 
-## The first track that can actually be pressed. With one track made, that is
-## the only one; with twenty it is still where a player wants to start.
-func _focus_first_track() -> void:
-	for cell in _track_grid.get_children():
-		for child in cell.get_children():
-			var button := child as Button
-			if button != null and not button.disabled:
-				button.grab_focus()
-				return
+## Put the cursor on a track, or on the first one that can be pressed. With
+## one track made that is the only one; with twenty it is still where a player
+## wants to start.
+func _focus_track(index := -1) -> void:
+	var cells := _track_grid.get_children()
+	if index >= 0 and index < cells.size():
+		var wanted := _button_in(cells[index])
+		if wanted != null and not wanted.disabled:
+			wanted.grab_focus()
+			return
+	for cell in cells:
+		var button := _button_in(cell)
+		if button != null and not button.disabled:
+			button.grab_focus()
+			return
 	_track_back.grab_focus()
+
+
+func _button_in(cell: Node) -> Button:
+	for child in cell.get_children():
+		if child is Button:
+			return child
+	return null
 
 
 func _start_track(path: String) -> void:
