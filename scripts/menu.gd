@@ -114,6 +114,10 @@ extends Control
 @onready var _play: Button = $Play
 @onready var _settings_button: Button = $Settings
 @onready var _settings_screen: SettingsMenu = $SettingsScreen
+@onready var _account_button: Button = $Account
+@onready var _account_screen: AccountMenu = $AccountScreen
+@onready var _boards_button: Button = $TrackChoice/Page/Panel/Margin/Box/Boards
+@onready var _boards_screen: LeaderboardMenu = $LeaderboardScreen
 @onready var _mode_choice: Control = $ModeChoice
 @onready var _alone_button: Button = $ModeChoice/Page/Panel/Margin/Box/Players/Alone
 @onready var _together_button: Button = $ModeChoice/Page/Panel/Margin/Box/Players/Together
@@ -153,6 +157,17 @@ func _ready() -> void:
 	_chaos_button.pressed.connect(_start_infinite.bind(true))
 	_tracks_button.pressed.connect(_on_tracks_pressed)
 	_track_back.pressed.connect(_close_track_choice)
+	_account_button.pressed.connect(_on_account_pressed)
+	_account_screen.closed.connect(_on_account_closed)
+	_boards_button.pressed.connect(_on_boards_pressed)
+	_boards_screen.closed.connect(_on_boards_closed)
+	# A time pulled down off the server is a time this screen is showing the
+	# old version of, so the grid is rebuilt when the sync moves one.
+	Leaderboard.times_changed.connect(_on_times_changed)
+	# A build with no server in it should not grow a button that cannot do
+	# anything, or a board that is always empty.
+	_account_button.visible = Leaderboard.available()
+	_boards_button.visible = Leaderboard.available()
 	_fill_the_track_grid()
 	# The slots are plain Controls, so nothing lays their contents out but this.
 	_flavour_slot.resized.connect(_fit_flavour)
@@ -559,7 +574,9 @@ func _close_mode_choice() -> void:
 ## Escape backs out of whichever page is open. The settings screen handles its
 ## own, and it lies over these, so it gets first refusal on the key.
 func _input(event: InputEvent) -> void:
-	if _settings_screen.visible:
+	if _settings_screen.visible or _account_screen.visible:
+		return
+	if _boards_screen.visible:
 		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
@@ -594,3 +611,43 @@ func _on_settings_closed() -> void:
 	# Coming back to a screen with nothing focused would leave the keyboard
 	# dead, so the button that opened the settings takes focus again.
 	_settings_button.grab_focus()
+
+
+## The account screen lies over the title the same way the settings do.
+func _on_account_pressed() -> void:
+	_account_screen.open()
+
+
+func _on_account_closed() -> void:
+	_account_button.grab_focus()
+
+
+## The boards open on whichever track the cursor is sitting on, because that
+## is the one the player is asking about.
+func _on_boards_pressed() -> void:
+	_boards_screen.open(_track_under_the_cursor())
+
+
+func _on_boards_closed() -> void:
+	# The sync the boards set going may have pulled a better time down, and
+	# the grid behind them would still be showing the old one.
+	_refresh_the_track_grid()
+	_boards_button.grab_focus()
+
+
+## A sync moved a record. Only the track grid shows times, and only when it is
+## open, so there is nothing to do the rest of the time.
+func _on_times_changed() -> void:
+	if _track_choice.visible:
+		_refresh_the_track_grid()
+
+
+## The track the cursor is on, or an empty string if it is not on one. Worked
+## out from focus rather than remembered, so it cannot go stale.
+func _track_under_the_cursor() -> String:
+	var focused := get_viewport().gui_get_focus_owner()
+	var cells := _track_grid.get_children()
+	for index in cells.size():
+		if _button_in(cells[index]) == focused:
+			return TrackRoster.file(index)
+	return GameSettings.track_file

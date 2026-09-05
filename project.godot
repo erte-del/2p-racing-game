@@ -18,6 +18,8 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 
 GameSettings="*res://scripts/game_settings.gd"
 TrackTimes="*res://scripts/track_times.gd"
+Backend="*res://scripts/backend.gd"
+Leaderboard="*res://scripts/leaderboard.gd"
 
 [display]
 

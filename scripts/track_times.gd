@@ -79,6 +79,40 @@ func fingerprint(track_file: String) -> int:
 	return hash("%d\n%s" % [GEOMETRY, text])
 
 
+## What a track is, as a string every machine agrees on.
+##
+## `fingerprint` is the same idea, but it is the engine's own hash: fine for
+## deciding whether this machine's record still stands, useless as something
+## to compare across machines and versions, which is what a shared board needs
+## from it. This one is sha256, so the number a Mac computes for track seven
+## is the number a Windows machine computes for track seven, this year and
+## next.
+func signature(track_file: String) -> String:
+	var text := FileAccess.get_file_as_string(track_file)
+	if text.is_empty():
+		return ""
+	return ("%d\n%s" % [GEOMETRY, text]).sha256_text()
+
+
+## Take a time that was set somewhere else - the same player, on their other
+## machine - and keep it if it is better than what is here.
+##
+## Deliberately not `record`. What comes back off the server is not a run that
+## just happened on this machine, and treating it as one would announce it as
+## a new best in the middle of the menu and send it straight back where it
+## came from. Nothing is emitted and nothing is pushed; the local record just
+## quietly catches up with what the player has actually done.
+func adopt(track_file: String, seconds: float) -> bool:
+	var standing := best(track_file)
+	if standing >= 0.0 and seconds >= standing:
+		return false
+	var key := _key(track_file)
+	_best[key] = seconds
+	_fingerprints[key] = fingerprint(track_file)
+	save_times()
+	return true
+
+
 ## Forget a track's time. Nothing in the game calls this yet; it is here for
 ## the day a screen offers to.
 func forget(track_file: String) -> void:

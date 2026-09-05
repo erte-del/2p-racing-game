@@ -11,5 +11,9 @@ export_presets.cfg
 .mono/
 data_*/
 
+# Which server this copy of the game talks to, and its public key. The game
+# runs without it; backend.example.cfg says what goes in it.
+backend.cfg
+
 # System/tool-specific ignores
 .DS_Store
