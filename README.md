@@ -6,6 +6,10 @@ A split-screen two-player racing game, built in Godot 4.7 (GDScript).
 
 - Godot 4.7.2 (standard build, not .NET)
 - Blender 5.2 LTS — only needed to re-export the car models
+- A Supabase project — only needed for accounts and leaderboards, and only
+  if you want them. Without one the game runs exactly as it did before any of
+  that existed: `backend/README.md` is the setup, and the whole of the server
+  side is `backend/schema.sql`.
 
 ## Layout
 
@@ -13,8 +17,15 @@ A split-screen two-player racing game, built in Godot 4.7 (GDScript).
 assets/models/    imported .glb models
 scenes/           main.tscn and per-entity scenes
 scripts/          GDScript
+tracks/           the twenty laid-out tracks, one file each
 tools/            Blender export scripts (not shipped in the game)
+backend/          the server side: the schema, the setup, the emails
 ```
+
+`backend/` holds no code that runs in the game. It is the SQL that builds the
+two tables the leaderboards live in, the notes for standing a project up, and
+the two pages a confirmation email needs. The game's half of that is three
+scripts in `scripts/` like any other.
 
 ## Menu
 
@@ -42,6 +53,11 @@ rendering behind a hidden container, and drawing the course twice more for
 nobody would cost as much as the menu itself. The rival arrows have their
 processing stopped rather than being hidden, because each decides for itself
 every frame whether it should be visible and would simply turn itself back on.
+
+Under Play and Settings sits Account, and it is there only when there is a
+server to talk to. A build with no `backend.cfg` in it does not grow a button
+that cannot do anything - the same reason the Leaderboard button on the track
+page is not always there either.
 
 A light shade sits between the world and the text. The backdrop is meant to
 show through, but a white title over a bright noon sky is a coin toss, and the
@@ -962,6 +978,14 @@ Scenery is left out of them. At the size they are shown, trees and hills come
 out as noise across the one thing the picture is for, which is the shape of the
 road.
 
+Under the grid, above Back, is Leaderboard. It opens on whichever track the
+cursor is sitting on, worked out from what currently holds focus rather than
+remembered, so it cannot go stale. That is one page with the track picked
+inside it rather than a board hung off each of the twenty cells: a player
+looking at one board is nearly always about to look at the next, and a page
+they have to back out of and come back into twenty times is a page they look
+at once.
+
 The track that was picked travels to the race in `GameSettings.track_file`, the
 same way the chaos choice does, and is not written to disk: it is what was
 picked on the way into this race rather than a preference, and a game that
@@ -1076,6 +1100,19 @@ showing the old time. A track that has been driven shows the time, one that has
 not says NO TIME, and a slot with no track in it says nothing at all - three
 different things a player should be able to tell apart at a glance.
 
+`TrackTimes` also knows a track by a second name. `fingerprint()` is the
+engine's own hash and is what decides whether this machine's record still
+stands; `signature()` is sha256 over the same material and is what a shared
+board is keyed on. The difference matters only when a time leaves the machine
+it was set on: a board has to agree across a Mac, a Windows box and next
+year's Godot, and an engine hash promises none of that.
+
+`adopt()` is `record()` without the announcement. It takes a time that was set
+somewhere else - the same player, on their other machine - and keeps it if it
+is better. It is deliberately not `record()`: what comes back off a server is
+not a run that just happened here, and treating it as one would declare a new
+best in the middle of the menu and send it straight back where it came from.
+
 `tools/checks/track_times.gd` sets times, closes the game and sees what is
 still there, then edits a track and sees that the time on the old one has gone.
 It writes to a scratch file, so running it does not touch anyone's own record:
@@ -1083,6 +1120,92 @@ It writes to a scratch file, so running it does not touch anyone's own record:
 ```
 Godot --path . --headless --script tools/checks/track_times.gd
 ```
+
+## Accounts
+
+`Backend` is the game's one door out to the internet, and the only script in it
+that touches HTTP. Everything above it is written as though the server always
+answers, because this is where that is made true: every call can be awaited,
+every call comes back with something even when the request failed, and no
+screen waits on one before it will draw.
+
+Nothing here may stop the game. A player with no account drives every track,
+keeps every time and earns every medal; a player on a plane drives the same
+game as a player at home and simply does it without a board on the wall. That
+is not politeness, it is the reason `TrackTimes` stays the truth the game is
+played against and all of this sits above it rather than underneath.
+
+Passwords pass through and are never kept. They go to the server over HTTPS in
+the one request that checks them, and what comes back - a token that expires
+and can be revoked - is what gets written down, in `user://session.cfg`, so
+signing in is something a player does once rather than every time they open the
+game. A token about to expire is swapped for a new one before the request that
+needed it goes out, because a call that sets off valid and arrives expired
+fails for no reason a player could understand. A refresh the server refuses
+signs this machine out; a refresh that merely could not be sent leaves the
+session alone, because nobody should be thrown out of their account by a
+dropped wifi connection.
+
+Which server, and its public key, live in `backend.cfg`, which is not committed
+- it is yours rather than the game's, and `backend.example.cfg` says what goes
+in it. The key is meant to ship: it identifies the project rather than the
+player, and what stops one player writing over another's time is the row level
+security on the tables, not this key being secret.
+
+The account screen is two pages wearing one frame - signing in and signing up
+differ by one field and one button - so it is built in code rather than written
+into the scene, the same way the track grid and the controls sheet are.
+
+## Leaderboards
+
+`Leaderboard` sends what was driven up and brings back what was driven
+elsewhere. It listens for `TrackTimes.beaten`, so a finished run posts itself
+without the race scene knowing anything about a network, and the result screen
+never waits on the answer.
+
+A board is only ever the times set on this exact version of a track, by cars
+tuned the way these ones are - that is what the signature settles. Change a
+corner on track seven and its board empties rather than mixing two different
+roads, which is the same rule the local record already lived by, applied to
+everybody at once.
+
+Every finish is sent as an upsert, because the game does not know and should
+not have to know whether this player has been here before. Whether it is an
+improvement is the server's business: it is the one holding the record, and it
+is the only one whose answer cannot be edited by whoever is holding the
+keyboard. A trigger returns the old row when the new time is not faster, so a
+slower lap is accepted and quietly changes nothing.
+
+A time that could not be sent is not lost. It goes to an outbox in `user://`
+and is tried again the next time the game finds a network and an account, which
+is what makes a week of driving on a train arrive all at once rather than not
+at all. The outbox is drained before anything is read back, so nothing is
+pulled down that is about to be beaten by something already waiting to go up.
+
+Signing in pulls everything the player has on the server into the local record,
+and pushes up anything better that was set here before the account existed.
+That is the backup half: reinstall the game, or open it on another machine, and
+twenty best laps are where they were left.
+
+Reading a board works signed out, deliberately. Somebody deciding whether an
+account is worth making should be able to see what they would be joining, and a
+board that demands a sign-in before it will show you anything is a board with
+nobody on it.
+
+The whole server side is `backend/schema.sql`: two tables, a trigger, the
+policies and the grants. Both gates matter and it is easy to open only one - a
+policy says which rows a role may touch, a grant says whether it may touch the
+table at all, and careful policies with no grants is a table nobody can read.
+`anon` may read; `authenticated` may read and write its own rows; nobody may
+delete, which is the missing delete policy and the withheld privilege agreeing
+with each other.
+
+What none of it can do is tell whether a time was actually driven. The game
+runs on the player's machine, so a determined person can send whatever number
+they like under their own name, and there is a floor here only against the
+absurd. Proving a lap happened means sending the inputs and replaying them on
+the server, which is a much larger piece of work than this and is not what this
+is. For a board among people who know each other that is usually fine.
 
 ## Medals
 
@@ -1217,3 +1340,4 @@ Godot --path . --headless --fixed-fps 60 --script tools/checks/chaos_colour.gd
 - [x] **5** — procedural track generation
 - [x] **6** — countdown, checkpoints, finish line, winner, timer
 - [ ] **7** — polish: models, environment, audio, particles, UI, themes, boosts
+- [x] **8** — accounts, times backed up off the machine, leaderboards
