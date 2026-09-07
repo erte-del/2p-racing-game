@@ -76,12 +76,6 @@ of `p3_*` actions.
 
 ## Car model
 
-Both players drive `car_low-poly_jdm.blend`, exported to `assets/models/car.glb`
-by `tools/export_car.py`:
-
-```bash
-/Applications/Blender.app/Contents/MacOS/Blender -b "path/to/car_low-poly_jdm.blend" --python tools/export_car.py
-```
 
 It replaced an earlier low poly car that was only a body shell and four wheels.
 This one carries an interior, a steering wheel and a gear stick, which is what
@@ -244,9 +238,6 @@ where the cycle stands, for anything that should react to nightfall later.
 
 `tools/checks/day_night_shot.gd` renders the world at four points in the cycle:
 
-```bash
-Godot --path . --script tools/checks/day_night_shot.gd -- /tmp/shots
-```
 
 ## Headlights
 
@@ -387,13 +378,4 @@ Tucking in behind the other car raises top speed by up to `slipstream_bonus`
 behind: the rival must be ahead within a cone and both must be travelling the
 same way, which makes it an overtaking aid rather than a free boost.
 
-## Phases
 
-- [x] **0** — repo, Godot project, `.gitignore`
-- [x] **1** — one car driving (WASD)
-- [x] **2** — second car (arrow keys)
-- [x] **3** — split screen
-- [x] **4** — a hand-made track
-- [x] **5** — procedural track generation
-- [x] **6** — countdown, checkpoints, finish line, winner, timer
-- [ ] **7** — polish: models, environment, audio, particles, UI, themes, boosts
