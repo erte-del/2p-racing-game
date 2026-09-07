@@ -28,7 +28,7 @@ signal beaten(track: String, seconds: float)
 
 ## Not a const, so a check can point at somewhere that is not the player's own
 ## record of what they have done.
-var save_path := SAVE_PATH
+var save_path := Sandbox.path(SAVE_PATH)
 
 ## Track key -> seconds, and track key -> the fingerprint it was set on.
 var _best := {}

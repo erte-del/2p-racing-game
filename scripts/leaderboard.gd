@@ -23,6 +23,9 @@ extends Node
 ## Where times that have not reached the server yet wait their turn.
 const OUTBOX_PATH := "user://outbox.cfg"
 
+## Where it actually goes. A test run is sent somewhere else; see `Sandbox`.
+var outbox_path := Sandbox.path(OUTBOX_PATH)
+
 ## How many places a board shows. Enough that a good player is on it and
 ## short enough to read at a glance.
 const BOARD_SIZE := 25
@@ -282,13 +285,13 @@ func _save_outbox() -> void:
 	var file := ConfigFile.new()
 	for key in _outbox:
 		file.set_value(key, "seconds", _outbox[key])
-	file.save(OUTBOX_PATH)
+	file.save(outbox_path)
 
 
 func _load_outbox() -> void:
 	_outbox.clear()
 	var file := ConfigFile.new()
-	if file.load(OUTBOX_PATH) != OK:
+	if file.load(outbox_path) != OK:
 		return
 	for key in file.get_sections():
 		_outbox[key] = float(file.get_value(key, "seconds", -1.0))

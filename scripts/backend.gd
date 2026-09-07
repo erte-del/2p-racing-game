@@ -61,6 +61,13 @@ var _expires_at := 0.0
 
 
 func _ready() -> void:
+	# A test run has no backend at all. Leaving the config unread is what does
+	# it: with no url and no key nothing is `configured()`, so there is no
+	# session to load, no token to refresh, no board to fetch and no time to
+	# post - and every one of those paths is the one a build shipped without a
+	# `backend.cfg` already takes.
+	if Sandbox.on():
+		return
 	_load_config()
 	_load_session()
 	if not _refresh_token.is_empty():
@@ -151,7 +158,7 @@ func sign_out() -> void:
 	_access_token = ""
 	_refresh_token = ""
 	_expires_at = 0.0
-	DirAccess.remove_absolute(SESSION_PATH)
+	DirAccess.remove_absolute(Sandbox.path(SESSION_PATH))
 	signed_out.emit()
 
 
@@ -325,12 +332,12 @@ func _save_session() -> void:
 	# file on disk the better.
 	file.set_value("session", "refresh_token", _refresh_token)
 	file.set_value("session", "user_id", user_id)
-	file.save(SESSION_PATH)
+	file.save(Sandbox.path(SESSION_PATH))
 
 
 func _load_session() -> void:
 	var file := ConfigFile.new()
-	if file.load(SESSION_PATH) != OK:
+	if file.load(Sandbox.path(SESSION_PATH)) != OK:
 		return
 	_refresh_token = str(file.get_value("session", "refresh_token", ""))
 	user_id = str(file.get_value("session", "user_id", ""))

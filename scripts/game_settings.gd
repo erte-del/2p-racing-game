@@ -20,6 +20,10 @@ const ALWAYS_NIGHT := 2
 
 const SAVE_PATH := "user://settings.cfg"
 
+## Where they actually go. A test run is sent somewhere else entirely; see
+## `Sandbox`.
+var save_path := Sandbox.path(SAVE_PATH)
+
 ## Emitted whenever any setting changes, however it was changed.
 signal changed
 
@@ -126,12 +130,12 @@ func save_settings() -> void:
 	file.set_value("race", "solo", solo)
 	for i in car_colours.size():
 		file.set_value("cars", "colour_%d" % (i + 1), car_colours[i])
-	file.save(SAVE_PATH)
+	file.save(save_path)
 
 
 func load_settings() -> void:
 	var file := ConfigFile.new()
-	if file.load(SAVE_PATH) != OK:
+	if file.load(save_path) != OK:
 		return
 	volume = float(file.get_value("audio", "volume", volume))
 	time_of_day = int(file.get_value("world", "time_of_day", time_of_day))
