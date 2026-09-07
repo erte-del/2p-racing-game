@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://scripts/day_night.gd" id="8_daynight"]
 [ext_resource type="Theme" path="res://scenes/menu_theme.tres" id="9_theme"]
 [ext_resource type="PackedScene" path="res://scenes/pause.tscn" id="10_pause"]
+[ext_resource type="Script" path="res://scripts/medal_badge.gd" id="11_badge"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
 
@@ -150,7 +151,7 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 0.8)
 theme_override_constants/outline_size = 14
 theme_override_font_sizes/font_size = 120
 
-[node name="Result" type="CenterContainer" parent="Hud"]
+[node name="Result" type="Control" parent="Hud"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -158,36 +159,67 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Box" type="VBoxContainer" parent="Hud/Result"]
-layout_mode = 2
+[node name="Centre" type="CenterContainer" parent="Hud/Result"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 mouse_filter = 2
-theme_override_constants/separation = -4
 
-[node name="Time" type="Label" parent="Hud/Result/Box"]
+[node name="Panel" type="PanelContainer" parent="Hud/Result/Centre"]
 layout_mode = 2
-mouse_filter = 2
+
+[node name="Margin" type="MarginContainer" parent="Hud/Result/Centre/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 52
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 52
+theme_override_constants/margin_bottom = 30
+
+[node name="Box" type="VBoxContainer" parent="Hud/Result/Centre/Panel/Margin"]
+custom_minimum_size = Vector2(460, 0)
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Time" type="Label" parent="Hud/Result/Centre/Panel/Margin/Box"]
+layout_mode = 2
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.8)
-theme_override_constants/outline_size = 14
 theme_override_font_sizes/font_size = 78
 
-[node name="Medal" type="Label" parent="Hud/Result/Box"]
+[node name="Medal" type="Label" parent="Hud/Result/Centre/Panel/Margin/Box"]
 layout_mode = 2
-mouse_filter = 2
 horizontal_alignment = 1
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.8)
-theme_override_constants/outline_size = 12
-theme_override_font_sizes/font_size = 46
+theme_override_font_sizes/font_size = 40
 
-[node name="Note" type="Label" parent="Hud/Result/Box"]
+[node name="Note" type="Label" parent="Hud/Result/Centre/Panel/Margin/Box"]
 layout_mode = 2
-mouse_filter = 2
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
-theme_override_colors/font_outline_color = Color(0, 0, 0, 0.8)
-theme_override_constants/outline_size = 10
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 26
+
+[node name="Choice" type="MarginContainer" parent="Hud/Result/Centre/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/margin_top = 24
+
+[node name="Row" type="HBoxContainer" parent="Hud/Result/Centre/Panel/Margin/Box/Choice"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 16
+
+[node name="Restart" type="Button" parent="Hud/Result/Centre/Panel/Margin/Box/Choice/Row"]
+layout_mode = 2
+text = "RUN IT AGAIN"
+
+[node name="Next" type="Button" parent="Hud/Result/Centre/Panel/Margin/Box/Choice/Row"]
+layout_mode = 2
+text = "NEXT TRACK"
+
+[node name="Badge" type="Control" parent="Hud/Result"]
+visible = false
+mouse_filter = 2
+script = ExtResource("11_badge")
 
 [node name="Hint" type="Label" parent="Hud"]
 anchors_preset = 12

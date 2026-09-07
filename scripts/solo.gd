@@ -50,10 +50,15 @@ extends Node3D
 @onready var _best_label: Label = $Hud/Best
 @onready var _countdown: Label = $Hud/Countdown
 @onready var _result: Control = $Hud/Result
-@onready var _result_time: Label = $Hud/Result/Box/Time
-@onready var _result_medal: Label = $Hud/Result/Box/Medal
-@onready var _result_note: Label = $Hud/Result/Box/Note
+@onready var _result_panel: Control = $Hud/Result/Centre/Panel
+@onready var _result_time: Label = $Hud/Result/Centre/Panel/Margin/Box/Time
+@onready var _result_medal: Label = $Hud/Result/Centre/Panel/Margin/Box/Medal
+@onready var _result_note: Label = $Hud/Result/Centre/Panel/Margin/Box/Note
+@onready var _badge: MedalBadge = $Hud/Result/Badge
 @onready var _hint: Label = $Hud/Hint
+@onready var _choice: Control = $Hud/Result/Centre/Panel/Margin/Box/Choice
+@onready var _again_button: Button = $Hud/Result/Centre/Panel/Margin/Box/Choice/Row/Restart
+@onready var _next_button: Button = $Hud/Result/Centre/Panel/Margin/Box/Choice/Row/Next
 @onready var _pause: PauseMenu = $Pause
 
 ## Ticking between GO and the line.
@@ -79,6 +84,10 @@ var _next_checkpoint := 0
 ## Which countdown is the current one, so an older one that is still waiting
 ## on a timer cannot clear the screen out from under a newer one.
 var _countdown_run := 0
+## What the keyboard was on when the pause screen went up, so closing it hands
+## the keyboard back rather than leaving it dead. Hiding a control releases its
+## focus, and the pause screen hides one on the way out.
+var _focus_before_pause: Control
 
 
 func _ready() -> void:
@@ -118,6 +127,14 @@ func _ready() -> void:
 	_show_best()
 	_pause.restart_requested.connect(_restart)
 	_pause.quit_requested.connect(_on_pause_quit)
+	_pause.resumed.connect(_take_the_keyboard_back)
+	_choice.hide()
+	# The panel is only as wide as whatever is in it, and that changes with
+	# the wording, so where its corner is has to be asked rather than written
+	# down. It answers whenever it is laid out.
+	_result_panel.resized.connect(_pin_the_badge)
+	_again_button.pressed.connect(_restart)
+	_next_button.pressed.connect(_on_next_track)
 	_hint.text = "%s        R  back to the last checkpoint        C  view        ESC  pause" % [
 		"ENTER  next course" if _endless else "ENTER  run again"]
 	_start_after_countdown()
@@ -134,7 +151,10 @@ func _physics_process(delta: float) -> void:
 	# another without waiting for anything.
 	if Input.is_action_just_pressed("p1_view"):
 		_camera.set_inside(not _camera.is_inside())
-	if Input.is_action_just_pressed("restart"):
+	# Not while the finished run is offering the choice: the same key works
+	# the button the cursor is on, and a track that restarted itself on the
+	# press that asked for the next one would be doing both.
+	if Input.is_action_just_pressed("restart") and not _choice.visible:
 		_restart()
 		return
 	if not _running:
@@ -181,6 +201,7 @@ func _apply_paint() -> void:
 ## which is where the menu opens anyway, since nothing has cleared the track
 ## that is still chosen.
 func _open_pause() -> void:
+	_focus_before_pause = get_viewport().gui_get_focus_owner()
 	if _endless:
 		var what := "ENDLESS COURSE"
 		if _chaos != null:
@@ -190,6 +211,15 @@ func _open_pause() -> void:
 	var definition := _track.definition()
 	var named := definition.track_name.to_upper() if definition != null else ""
 	_pause.open(named, "RESTART", "BACK TO TRACKS")
+
+
+## Coming back from the pause screen with nothing focused would leave the
+## keyboard dead in front of a question, so whatever it was on goes back.
+func _take_the_keyboard_back() -> void:
+	if _focus_before_pause == null or not _focus_before_pause.is_visible_in_tree():
+		return
+	_focus_before_pause.grab_focus()
+	_focus_before_pause = null
 
 
 func _on_pause_quit() -> void:
@@ -206,6 +236,7 @@ func _restart() -> void:
 	_running = false
 	_hint.show()
 	_result.hide()
+	_choice.hide()
 	# The endless course is endless: asking for another go means another road,
 	# not the same one again. A laid-out track is the opposite - the same road
 	# is the whole point of it.
@@ -264,6 +295,9 @@ func _finish() -> void:
 	_clock.text = _format_time(_time)
 	_result_time.text = _format_time(_time)
 	_result.show()
+	# Nothing to pin until a track says what was won; the endless course never
+	# does, and takes the badge off on its way past.
+	_badge.show_medal(Medal.NONE)
 
 	if _endless:
 		await _and_on_to_the_next()
@@ -273,8 +307,11 @@ func _finish() -> void:
 	# on the screen is what was actually written down.
 	var beaten := TrackTimes.record(_track_file, _time)
 
+	# A run that earned nothing says so rather than leaving the line blank.
+	# Silence where the medal goes reads as a screen that has not finished
+	# drawing, and "no medal" is an answer to the question the player asked.
 	var medal := Medal.earned(_time, _targets)
-	_result_medal.text = Medal.label(medal)
+	_result_medal.text = Medal.label(medal) if medal != Medal.NONE else "NO MEDAL"
 	_result_medal.add_theme_color_override("font_color", Medal.colour(medal))
 
 	# What is worth saying under the medal is whichever of the two things the
@@ -294,6 +331,75 @@ func _finish() -> void:
 	if beaten:
 		_best = _time
 	_show_best()
+	_badge.show_medal(medal)
+	_offer_the_way_on(medal)
+
+	# Hung only once the buttons are on the panel, because they are what
+	# decides how wide it is and the corner moves with them. One frame is what
+	# it takes for the page to be laid out with them in it.
+	await get_tree().process_frame
+	_pin_the_badge()
+	_badge.drop_in()
+
+
+## Hang the medal on the top left corner of the panel.
+##
+## The disc sits *on* the corner rather than beside it, so the panel's own
+## border runs under it - which is what makes it read as pinned to the box
+## instead of floating next to one. Both live in the same space, so the corner
+## the panel reports is the corner to hang it from.
+func _pin_the_badge() -> void:
+	if not _badge.visible:
+		return
+	_badge.pin_to(_result_panel.position + Vector2(16.0, 16.0))
+
+
+## The two ways off a finished track: the same road again, or the next one.
+##
+## Put on the screen as buttons rather than left to the hint line, because
+## this is the one moment in a run when the game is actually asking something
+## - the rest of it the player is driving, and a line of small text along the
+## bottom is right for keys that are always there and wrong for a question.
+##
+## The cursor starts on running it again, which is what a player who has just
+## been told how far off the next medal they are almost always wants. Gold is
+## the exception: there is nothing left to find on this road, so the cursor
+## moves to the next one. A track with nothing after it yet keeps the button,
+## greyed and saying why - the same nineteen doors the select screen shows.
+func _offer_the_way_on(medal: int) -> void:
+	var next := _next_track()
+	_next_button.disabled = next < 0
+	_next_button.tooltip_text = ("" if next >= 0
+			else "This is the last track built so far.")
+	# The hint line is about driving, and there is no driving to be done until
+	# one of these is pressed.
+	_hint.hide()
+	_choice.show()
+	if medal == Medal.GOLD and next >= 0:
+		_next_button.grab_focus()
+	else:
+		_again_button.grab_focus()
+
+
+## The slot after this one, or -1 when there is nothing built there yet. A
+## track that is not on the roster at all has no next either, rather than
+## quietly meaning the first one.
+func _next_track() -> int:
+	var here := TrackRoster.index_of(_track_file)
+	if here < 0 or not TrackRoster.exists(here + 1):
+		return -1
+	return here + 1
+
+
+## On to the next road. The scene reads which track it is on the way up, so
+## changing track means building it again - which is also what throws away the
+## course, the best time and the targets belonging to the old one.
+func _on_next_track() -> void:
+	var next := _next_track()
+	if next < 0:
+		return
+	GameSettings.track_file = TrackRoster.file(next)
+	get_tree().reload_current_scene()
 
 
 ## Hold the finished course for a moment, then roll another. There is nothing
