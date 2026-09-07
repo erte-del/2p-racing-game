@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<!-- Nothing here is worth finding in a search result; it is a page you are
+     sent to, not one you look for. -->
+<meta name="robots" content="noindex">
+<title>2P Racing Confirmation</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Saira+Condensed:wght@600;700&display=swap">
+
+<style>
+  /* The palette is lifted straight out of the game's own menu theme rather
+     than invented here: the panel fill, the 3px borders and the pale blue
+     text are the same values scenes/menu_theme.tres uses, and the gold is
+     the gold a gold medal is drawn in. A player arriving from the game
+     should not feel they have left it.
+
+     Deliberately one theme. The game is dark, this page is a moment inside
+     the game, and a light version of it would be a different product. Every
+     colour is painted explicitly so it holds on any host background. */
+  :root {
+    --ground:      #080B13;
+    --panel:       #0E1320;
+    --raised:      #192132;
+    --edge:        rgba(229, 237, 255, 0.22);
+    --edge-strong: rgba(229, 237, 255, 0.55);
+    --bright:      #E5EDFF;
+    --quiet:       #C7D4ED;
+    --dim:         #8C94A8;
+    --gold:        #FFD140;
+    --go:          #99E6AD;
+    --stop:        #FA8C80;
+
+    --accent: var(--go);
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--quiet);
+    font-family: "Barlow", ui-sans-serif, system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .stage {
+    min-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 56px 20px 72px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 540px;
+    background: var(--panel);
+    border: 3px solid var(--edge-strong);
+    border-radius: 10px;
+    padding: 40px 40px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .eyebrow {
+    font-family: "Saira Condensed", "Barlow", sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin: 0;
+  }
+
+  h1 {
+    font-family: "Saira Condensed", "Barlow", sans-serif;
+    font-weight: 700;
+    font-size: clamp(44px, 9vw, 62px);
+    line-height: 0.95;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    text-wrap: balance;
+    color: var(--accent);
+    margin: -8px 0 0;
+  }
+
+  .lead {
+    font-size: 19px;
+    color: var(--bright);
+    margin: 0;
+  }
+
+  /* The divider is a piece of road: the dashed centre line the players spend
+     the whole game trying to stay near. One flourish, and the only thing on
+     the page that could not belong to some other product. */
+  .road {
+    height: 26px;
+    background: var(--raised);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+  .road::after {
+    content: "";
+    position: absolute;
+    inset: 50% 12px auto;
+    height: 3px;
+    transform: translateY(-50%);
+    background: repeating-linear-gradient(
+      to right,
+      var(--edge-strong) 0 26px,
+      transparent 26px 46px
+    );
+  }
+
+  .detail { margin: 0; }
+
+  .steps {
+    margin: 0;
+    padding-left: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .steps li { padding-left: 4px; }
+  .steps strong { color: var(--bright); font-weight: 600; }
+
+  .note {
+    margin: 0;
+    padding-top: 20px;
+    border-top: 1px solid var(--edge);
+    font-size: 15px;
+    color: var(--dim);
+  }
+
+  a {
+    color: var(--bright);
+    text-decoration-color: var(--edge-strong);
+    text-underline-offset: 3px;
+  }
+  a:focus-visible {
+    outline: 3px solid var(--gold);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+
+  @media (max-width: 480px) {
+    .card { padding: 30px 24px 28px; }
+  }
+</style>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; }
+  img { max-width: 100%; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <main class="card">
+    <p class="eyebrow">2P Racing Game</p>
+
+    <!-- The confirmed state is what the page says at rest, so it reads
+         correctly before a line of script has run. The script below only
+         rewrites it when the address bar says the link failed. -->
+    <h1 id="headline">Email confirmed</h1>
+
+    <p class="lead" id="lead">Your address is verified and your account is ready to race.</p>
+
+    <div class="road" role="presentation"></div>
+
+    <div id="detail">
+      <ol class="steps">
+        <li>Close this tab.</li>
+        <li>Open the game and press <strong>Account</strong>.</li>
+        <li>Sign in with the email and password you just used.</li>
+      </ol>
+    </div>
+
+    <p class="note" id="note">
+      From then on your best time on every track is backed up as you set it, and
+      stands on the leaderboards against everyone else driving the same road.
+    </p>
+  </main>
+</div>
+
+<script>
+  // Everything that decides which of the two states this page shows arrives
+  // in the URL fragment. Supabase puts a failure there as `error` and
+  // `error_description`; on success it puts tokens there instead, which are
+  // no business of this page - they are read past, never shown, and the
+  // fragment is dropped from the address bar either way so nothing sensitive
+  // sits in the tab or in the browser's history.
+  (function () {
+    var hash = window.location.hash.replace(/^#/, "");
+    if (hash) {
+      try {
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      } catch (e) {
+        // A browser that will not let the URL be rewritten changes nothing
+        // about what the page says.
+      }
+    }
+
+    var params = new URLSearchParams(hash);
+    var code = params.get("error_code") || params.get("error");
+    if (!code) return;
+
+    var expired = /expired|invalid/i.test(code + " " + (params.get("error_description") || ""));
+
+    document.documentElement.style.setProperty("--accent", "var(--stop)");
+    document.getElementById("headline").textContent =
+      expired ? "Link already used" : "Confirmation failed";
+
+    document.getElementById("lead").textContent = expired
+      ? "These links work once, and this one has been spent."
+      : "Supabase turned this confirmation link down.";
+
+    document.getElementById("detail").innerHTML = expired
+      ? '<ol class="steps">' +
+        "<li>Try signing in from the game first — a link that was clicked once " +
+        "<strong>has already confirmed the account</strong>, and this message only means it " +
+        "cannot be clicked again.</li>" +
+        "<li>If signing in still says the email is not confirmed, sign up again to be sent a " +
+        "fresh link.</li>" +
+        "</ol>"
+      : '<ol class="steps">' +
+        "<li>Sign up again from the game to be sent a new link.</li>" +
+        "<li>Open it in this browser rather than forwarding it on.</li>" +
+        "</ol>";
+
+    var described = params.get("error_description");
+    if (described) {
+      document.getElementById("note").textContent =
+        "The server said: " + described.replace(/\+/g, " ");
+    }
+  })();
+</script>
+</body>
+</html>

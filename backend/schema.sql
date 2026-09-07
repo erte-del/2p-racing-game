@@ -110,3 +110,24 @@ create policy times_improve_own on public.times
 
 -- Deliberately no delete policy on times. A record is something that
 -- happened; the only thing that may touch one is a better one.
+
+-- And the privileges the policies sit on top of.
+--
+-- These are two different gates and both have to be open. A policy says which
+-- rows of a table a role may touch; a grant says whether that role may touch
+-- the table at all. A table with careful policies and no grant is a table
+-- nobody can read, which arrives as "permission denied for table times"
+-- rather than as an empty board.
+--
+-- `anon` is a player who has not signed in, and may only ever read: that is
+-- what lets somebody look at a board before deciding an account is worth
+-- making. `authenticated` may also write, but which rows it may write are
+-- still decided by the policies above.
+grant select on public.racers to anon, authenticated;
+grant select on public.times to anon, authenticated;
+
+-- Insert and update, because a time is sent as an upsert and an upsert is
+-- both. No delete, matching the missing delete policy: taking that privilege
+-- away entirely means a record cannot be removed even by a mistake here.
+grant insert, update on public.racers to authenticated;
+grant insert, update on public.times to authenticated;
