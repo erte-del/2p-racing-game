@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/trees.gd" id="7_trees"]
 [ext_resource type="Script" path="res://scripts/day_night.gd" id="8_daynight"]
 [ext_resource type="Theme" path="res://scenes/menu_theme.tres" id="9_theme"]
+[ext_resource type="PackedScene" path="res://scenes/pause.tscn" id="10_pause"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
 
@@ -202,3 +203,5 @@ theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 8
 theme_override_font_sizes/font_size = 20
+
+[node name="Pause" parent="." instance=ExtResource("10_pause")]

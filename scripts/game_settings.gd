@@ -63,6 +63,20 @@ var chaos := false:
 ## nobody asked.
 var track_file := ""
 
+## What each player's car is painted, player 1 first.
+##
+## Held as colours rather than as places in the palette, so a paint that is
+## not on the palette is still a paint this can carry - and so that reordering
+## the swatches one day cannot silently repaint somebody's car.
+##
+## Kept in an array rather than as two properties because everything that
+## reads it is already looping over players, and because a one-car race is
+## simply the same list read one entry deep.
+var car_colours := PackedColorArray([
+	Paints.default_for(0), Paints.default_for(1),
+])
+
+
 ## One of NORMAL, ALWAYS_DAY, ALWAYS_NIGHT.
 var time_of_day := NORMAL:
 	set(value):
@@ -77,6 +91,30 @@ func _ready() -> void:
 	_apply_volume()
 
 
+## What a player's car is painted. Out of range answers with the default for
+## player one rather than failing, so a mode that only has one car can ask
+## without first checking how many there are.
+func car_colour(player: int) -> Color:
+	if player < 0 or player >= car_colours.size():
+		return Paints.default_for(0)
+	return car_colours[player]
+
+
+## Repaint a player's car.
+##
+## Announced through `changed` like everything else here, which is what lets
+## the paint appear on the car the moment the swatch is pressed: the race is
+## already listening, and it repaints from this rather than being told to by
+## whatever screen the press happened on.
+func set_car_colour(player: int, colour: Color) -> void:
+	if player < 0 or player >= car_colours.size():
+		return
+	if car_colours[player].is_equal_approx(colour):
+		return
+	car_colours[player] = colour
+	changed.emit()
+
+
 ## Write the current choices out. Called when a screen that was changing them
 ## is closed, rather than on every change, so dragging the volume slider does
 ## not write a file per frame.
@@ -86,6 +124,8 @@ func save_settings() -> void:
 	file.set_value("world", "time_of_day", time_of_day)
 	file.set_value("race", "chaos", chaos)
 	file.set_value("race", "solo", solo)
+	for i in car_colours.size():
+		file.set_value("cars", "colour_%d" % (i + 1), car_colours[i])
 	file.save(SAVE_PATH)
 
 
@@ -97,6 +137,14 @@ func load_settings() -> void:
 	time_of_day = int(file.get_value("world", "time_of_day", time_of_day))
 	chaos = bool(file.get_value("race", "chaos", chaos))
 	solo = bool(file.get_value("race", "solo", solo))
+	for i in car_colours.size():
+		# Checked rather than trusted: this file is on the player's disk, and
+		# a car painted with whatever was in it is a crash rather than a
+		# setting that failed to load.
+		var stored: Variant = file.get_value(
+			"cars", "colour_%d" % (i + 1), Paints.default_for(i))
+		if stored is Color:
+			car_colours[i] = stored
 
 
 ## Silence is its own state: fading a bus to -80 dB is still audible on some

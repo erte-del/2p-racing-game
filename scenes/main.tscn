@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/surroundings.gd" id="6_surround"]
 [ext_resource type="Script" path="res://scripts/trees.gd" id="7_trees"]
 [ext_resource type="Script" path="res://scripts/day_night.gd" id="8_daynight"]
+[ext_resource type="PackedScene" path="res://scenes/pause.tscn" id="10_pause"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
 
@@ -320,3 +321,5 @@ theme_override_constants/outline_size = 12
 theme_override_font_sizes/font_size = 46
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="Pause" parent="." instance=ExtResource("10_pause")]

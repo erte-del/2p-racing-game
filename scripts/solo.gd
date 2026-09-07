@@ -54,6 +54,7 @@ extends Node3D
 @onready var _result_medal: Label = $Hud/Result/Box/Medal
 @onready var _result_note: Label = $Hud/Result/Box/Note
 @onready var _hint: Label = $Hud/Hint
+@onready var _pause: PauseMenu = $Pause
 
 ## Ticking between GO and the line.
 var _running := false
@@ -105,13 +106,20 @@ func _ready() -> void:
 	# After the track is built, since what a lap of it is worth is read off
 	# the track rather than described a second time.
 	_result.hide()
+	# The paint the player chose, and a standing offer to change it: the pause
+	# screen writes to the setting rather than reaching in here, so a swatch
+	# pressed mid-run lands on the car through the same path the saved choice
+	# takes at the start of one.
+	_apply_paint()
+	GameSettings.changed.connect(_apply_paint)
 	_lines.watch(_car)
 	_place_on_the_line()
 	_camera.follow(_car)
 	_show_best()
-	_hint.text = "%s        R  back to the last checkpoint        C  view        ESC  %s" % [
-		"ENTER  next course" if _endless else "ENTER  run again",
-		"back" if _endless else "tracks"]
+	_pause.restart_requested.connect(_restart)
+	_pause.quit_requested.connect(_on_pause_quit)
+	_hint.text = "%s        R  back to the last checkpoint        C  view        ESC  pause" % [
+		"ENTER  next course" if _endless else "ENTER  run again"]
 	_start_after_countdown()
 
 
@@ -142,10 +150,50 @@ func _physics_process(delta: float) -> void:
 		_finish()
 
 
+## Escape stops the run where it stands rather than throwing it away. Leaving
+## is still one press further on, in the pause screen, where it says what it
+## is going to do before it does it.
 func _input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel"):
-		get_viewport().set_input_as_handled()
-		get_tree().change_scene_to_file(menu_scene)
+	if _pause.visible or not event.is_action_pressed("ui_cancel"):
+		return
+	get_viewport().set_input_as_handled()
+	_open_pause()
+
+
+# --- pausing ------------------------------------------------------------
+
+## Put the player's colour on the car. Chaos is the one thing that overrules
+## it: it repaints the car for every course on purpose, and a chosen colour
+## landing back on it halfway through would be the mode failing to do the one
+## thing it says it does.
+func _apply_paint() -> void:
+	if _chaos != null:
+		return
+	_car.repaint(GameSettings.car_colour(0))
+
+
+
+## What the pause screen says it is sitting on top of.
+##
+## The endless course has no name to give and no road to go back to, so it is
+## named by what it is and its way out is the title screen. A laid-out track
+## names itself, and leaving it goes back to the grid it was picked from -
+## which is where the menu opens anyway, since nothing has cleared the track
+## that is still chosen.
+func _open_pause() -> void:
+	if _endless:
+		var what := "ENDLESS COURSE"
+		if _chaos != null:
+			what += "  \u2013  CHAOS"
+		_pause.open(what, "NEXT COURSE", "QUIT TO MENU")
+		return
+	var definition := _track.definition()
+	var named := definition.track_name.to_upper() if definition != null else ""
+	_pause.open(named, "RESTART", "BACK TO TRACKS")
+
+
+func _on_pause_quit() -> void:
+	get_tree().change_scene_to_file(menu_scene)
 
 
 # --- the run ------------------------------------------------------------
@@ -191,7 +239,7 @@ func _start_after_countdown() -> void:
 	var each := preview_seconds / float(steps)
 	for remaining in range(steps, 0, -1):
 		_countdown.text = str(remaining)
-		await get_tree().create_timer(each).timeout
+		await get_tree().create_timer(each, false).timeout
 		if run != _countdown_run:
 			return
 
@@ -200,7 +248,7 @@ func _start_after_countdown() -> void:
 	_car.frozen = false
 	_running = true
 
-	await get_tree().create_timer(go_seconds).timeout
+	await get_tree().create_timer(go_seconds, false).timeout
 	if run == _countdown_run:
 		_countdown.text = ""
 
@@ -255,7 +303,7 @@ func _and_on_to_the_next() -> void:
 	_result_medal.text = ""
 	_result_note.text = "NEXT COURSE"
 	var run := _countdown_run
-	await get_tree().create_timer(result_seconds).timeout
+	await get_tree().create_timer(result_seconds, false).timeout
 	# A player who pressed Enter rather than waiting has already started the
 	# next one, and this must not start a third over the top of it.
 	if run != _countdown_run:

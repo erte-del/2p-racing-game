@@ -37,6 +37,10 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @onready var _places: Array[Label] = [$Hud/Top/Box/Place, $Hud/Bottom/Box/Place]
 @onready var _results: Array[Label] = [$Result/Top/Label, $Result/Bottom/Label]
 @onready var _tallies: Array[Label] = [$Progress/Top/Label, $Progress/Bottom/Label]
+@onready var _pause: PauseMenu = $Pause
+
+## Where leaving the race goes.
+@export_file("*.tscn") var menu_scene := "res://scenes/menu.tscn"
 
 @export_group("Starting grid")
 ## Sideways offset from the centreline, in metres.
@@ -105,6 +109,10 @@ var _chaos: Chaos
 ## Its own generator, so a chaos roll cannot shift the sequence the courses
 ## come out of and make the same seed build a different track.
 var _chaos_rng := RandomNumberGenerator.new()
+## True when nothing picked a track, which is the endless course: a fresh road
+## every time. It decides what starting over means, since there is nothing to
+## start again on a road that is different each time it is rolled.
+var _endless := true
 
 
 func _ready() -> void:
@@ -130,6 +138,9 @@ func _ready() -> void:
 	# the one screen that is always moving always the same.
 	if not attract_mode:
 		_track.track_file = GameSettings.track_file
+		_endless = GameSettings.track_file.is_empty()
+		_pause.restart_requested.connect(_restart)
+		_pause.quit_requested.connect(_on_pause_quit)
 	_new_course(starting_seed if starting_seed != 0 else randi())
 
 	# Each player watches their own speed: the streaks show whenever a car is
@@ -140,6 +151,13 @@ func _ready() -> void:
 	# Each player sees an arrow in the *other* car's colour.
 	_arrow1.setup(_car1, _car2, _car2.body_color, LAYER_P1_ONLY, _camera1)
 	_arrow2.setup(_car2, _car1, _car1.body_color, LAYER_P2_ONLY, _camera2)
+
+	# The paint the players chose, and a standing offer to change it: the
+	# pause screen writes to the setting rather than reaching in here, so a
+	# swatch pressed mid-race lands on the car through the same path the
+	# saved choice takes at the start of one.
+	_apply_paint()
+	GameSettings.changed.connect(_apply_paint)
 
 	# Show everything except the rival's private layer. Subtracting one layer
 	# rather than listing the wanted ones means anything added to the world
@@ -166,8 +184,12 @@ func _dress_for_the_title_screen() -> void:
 	_day_night.night_seconds = attract_phase_seconds
 	for car in _cars:
 		car.frozen = true
-	for overlay in [$Split, $Hud, $Progress, $Countdown, $Result]:
+	for overlay in [$Split, $Hud, $Progress, $Countdown, $Result, _pause]:
 		overlay.hide()
+	# The menu is not a paused race, and this scene is its backdrop. Turned off
+	# outright rather than merely hidden, so there is no second screen behind
+	# the title quietly listening for the key that closes the one in front.
+	_pause.process_mode = Node.PROCESS_MODE_DISABLED
 	for camera in [_camera1, _camera2]:
 		camera.get_parent().render_target_update_mode = SubViewport.UPDATE_DISABLED
 		camera.current = false
@@ -219,6 +241,75 @@ func _poll_view_toggles() -> void:
 	for i in _cars.size():
 		if Input.is_action_just_pressed(_cars[i].input_prefix + "_view"):
 			cameras[i].set_inside(not cameras[i].is_inside())
+
+
+## Escape stops the race where it stands. The backdrop behind the title is
+## this scene too, and it is not a race anyone is in the middle of.
+func _input(event: InputEvent) -> void:
+	if attract_mode or _pause.visible:
+		return
+	if not event.is_action_pressed("ui_cancel"):
+		return
+	get_viewport().set_input_as_handled()
+	_open_pause()
+
+
+## What the pause screen says it is sitting on top of, and what its two ways
+## out of the race mean here. The endless course has no name and no road to go
+## back to; a laid-out track names itself, and leaving it goes back to the grid
+## it was picked from - which is where the menu opens anyway, since nothing has
+## cleared the track that is still chosen.
+func _open_pause() -> void:
+	if _endless:
+		var what := "ENDLESS COURSE"
+		if _chaos != null:
+			what += "  \u2013  CHAOS"
+		_pause.open(what, "NEXT COURSE", "QUIT TO MENU")
+		return
+	var definition := _track.definition()
+	var named := definition.track_name.to_upper() if definition != null else ""
+	_pause.open(named, "RESTART", "BACK TO TRACKS")
+
+
+## Start the race over. The endless course is endless: asking for another go
+## means another road. A laid-out track is the opposite - the same road is the
+## whole point of it, so only the cars go back to the line.
+##
+## Either way this counts as a new countdown, which is what stops a result
+## screen that is still waiting out its own timer from starting a third race
+## over the top of this one.
+func _restart() -> void:
+	_racing = false
+	_show_result("")
+	_countdown_run += 1
+	if _endless:
+		_new_course(randi())
+	else:
+		_place_on_grid()
+		_camera1.follow(_car1)
+		_camera2.follow(_car2)
+	_start_after_countdown()
+
+
+func _on_pause_quit() -> void:
+	get_tree().change_scene_to_file(menu_scene)
+
+
+## Put the players' colours on the cars, and on the arrows that point at them.
+##
+## Chaos is the one thing that overrules this. It repaints both cars for every
+## course on purpose, and a chosen colour landing back on them halfway through
+## would be the mode failing to do the one thing it says it does.
+func _apply_paint() -> void:
+	if _chaos != null:
+		return
+	_car1.repaint(GameSettings.car_colour(0))
+	_car2.repaint(GameSettings.car_colour(1))
+	# Each player is shown an arrow in the *other* car's colour, so repainting
+	# a car without repainting the arrow would point one player at a colour
+	# nobody on the course is wearing.
+	_arrow1.recolour(_car2.body_color)
+	_arrow2.recolour(_car1.body_color)
 
 
 func _bit(layer: int) -> int:
@@ -323,7 +414,12 @@ func _finish_course(winner: int) -> void:
 
 	_show_result("%s WINS\n%s" % [
 		_colour_name(_cars[winner].body_color), _format_time(_race_time)])
-	await get_tree().create_timer(result_seconds).timeout
+	var run := _countdown_run
+	await get_tree().create_timer(result_seconds, false).timeout
+	# A player who restarted from the pause screen rather than waiting has
+	# already started the next race, and this must not lay another over it.
+	if run != _countdown_run:
+		return
 	_show_result("")
 
 	_new_course(randi())
@@ -344,7 +440,11 @@ func _start_after_countdown() -> void:
 	var each := preview_seconds / float(steps)
 	for remaining in range(steps, 0, -1):
 		_show_count(str(remaining))
-		await get_tree().create_timer(each).timeout
+		await get_tree().create_timer(each, false).timeout
+		# A restart part way through starts its own countdown, and this one
+		# must not go on counting over it and release the cars at its own GO.
+		if run != _countdown_run:
+			return
 
 	_show_count("GO")
 	_race_time = 0.0
@@ -354,7 +454,7 @@ func _start_after_countdown() -> void:
 		car.frozen = false
 	_racing = true
 
-	await get_tree().create_timer(go_seconds).timeout
+	await get_tree().create_timer(go_seconds, false).timeout
 	# Only clear if another countdown has not started in the meantime.
 	if run == _countdown_run:
 		_show_count("")
