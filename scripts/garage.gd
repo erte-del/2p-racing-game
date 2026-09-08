@@ -36,6 +36,18 @@ const STOCK := ""
 ## And where that one lives.
 const STOCK_MODEL := "res://assets/models/car.glb"
 
+## What a player may point at. Wider than what `CarImport` can read,
+## because a .blend is not read at all - it is handed to Blender and
+## what comes back is a .glb, which is.
+const BLEND := "blend"
+const ACCEPTS := ["glb", "gltf", BLEND]
+
+## Where a .blend is turned into a .glb on the way past. One name rather
+## than one per file: it is read and hashed immediately, and a folder
+## slowly filling with conversions nobody asked to keep is a folder
+## somebody has to go and empty.
+const CONVERTED := "user://converted.glb"
+
 ## How long a car's name may be. Long enough to say what it is and short
 ## enough to sit under a tile on the garage screen.
 const NAME_LIMIT := 24
@@ -98,8 +110,24 @@ func portrait_path(id: String) -> String:
 ## Answers {ok, id, error}. The model is read and checked before a byte of it
 ## is written down, so a file that is not a car never becomes a folder that
 ## has to be cleaned up.
+##
+## Awaited, because a .blend goes out to Blender on the way in and that is
+## a second program starting up. A .glb never waits, but every caller has
+## to await this all the same - which of the two it was given is not
+## something the caller should have to know.
 func add(path: String) -> Dictionary:
-	var read := CarImport.read(path)
+	# A .blend is not a model this game can read; it is a model Blender
+	# can read. What is kept is always the .glb, so a car carries the
+	# same id and the same bytes however it happened to arrive.
+	var source := path
+	if path.get_extension().to_lower() == BLEND:
+		var converted := Sandbox.path(CONVERTED)
+		var turned: Dictionary = await Blender.convert(self, path, converted)
+		if not turned.ok:
+			return {"ok": false, "id": "", "error": str(turned.error)}
+		source = converted
+
+	var read := CarImport.read(source)
 	if not read.ok:
 		return {"ok": false, "id": "", "error": str(read.error)}
 	# Only wanted to know it would load. The garage screen asks for its own
@@ -107,7 +135,7 @@ func add(path: String) -> Dictionary:
 	# strictly needed on the one action a person is waiting on anyway.
 	(read.model as Node3D).queue_free()
 
-	var bytes := FileAccess.get_file_as_bytes(path)
+	var bytes := FileAccess.get_file_as_bytes(source)
 	var id := _id_for(bytes)
 	if has(id):
 		# The same model, added again. Nothing to write and nothing wrong -
@@ -127,6 +155,9 @@ func add(path: String) -> Dictionary:
 	details.set_value("car", "added_at", Time.get_unix_time_from_system())
 	details.set_value("car", "quarter_turns", 0)
 	details.set_value("car", "vertices", read.vertices)
+	# Named after what the player actually picked, not after the .glb it
+	# was turned into on the way in - "converted.glb" tells nobody
+	# anything.
 	details.set_value("car", "came_from", path.get_file())
 	details.save("%s/%s" % [folder, DETAILS])
 

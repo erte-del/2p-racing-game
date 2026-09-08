@@ -59,6 +59,13 @@ horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
 theme_override_font_sizes/font_size = 18
 
+[node name="NoView" type="Label" parent="Page/Panel/Margin/Box/Title"]
+layout_mode = 2
+text = "a car you add has no first person view"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 18
+
 [node name="Columns" type="HBoxContainer" parent="Page/Panel/Margin/Box"]
 layout_mode = 2
 theme_override_constants/separation = 50
@@ -75,7 +82,7 @@ horizontal_alignment = 1
 theme_override_font_sizes/font_size = 26
 
 [node name="Scroll" type="ScrollContainer" parent="Page/Panel/Margin/Box/Columns/P1"]
-custom_minimum_size = Vector2(232, 372)
+custom_minimum_size = Vector2(232, 336)
 layout_mode = 2
 horizontal_scroll_mode = 0
 
@@ -95,7 +102,7 @@ horizontal_alignment = 1
 theme_override_font_sizes/font_size = 26
 
 [node name="Scroll" type="ScrollContainer" parent="Page/Panel/Margin/Box/Columns/P2"]
-custom_minimum_size = Vector2(232, 372)
+custom_minimum_size = Vector2(232, 336)
 layout_mode = 2
 horizontal_scroll_mode = 0
 
@@ -121,6 +128,11 @@ text = "TURN"
 layout_mode = 2
 text = "REMOVE"
 
+[node name="Find" type="Button" parent="Page/Panel/Margin/Box/Actions"]
+visible = false
+layout_mode = 2
+text = "FIND BLENDER"
+
 [node name="Message" type="Label" parent="Page/Panel/Margin/Box"]
 visible = false
 layout_mode = 2
@@ -139,3 +151,8 @@ text = "BACK"
 title = "Pick a car"
 size = Vector2i(720, 480)
 ok_button_text = "Open"
+
+[node name="Finder" type="FileDialog" parent="."]
+title = "Where is Blender?"
+size = Vector2i(720, 480)
+ok_button_text = "Use this"

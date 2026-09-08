@@ -28,7 +28,7 @@ func _init() -> void:
 
 	var ids: Array = []
 	for shape: Array in SHAPES:
-		var added: Dictionary = garage.add(_write_a_car(shape[0], shape[1]))
+		var added: Dictionary = await garage.add(_write_a_car(shape[0], shape[1]))
 		garage.rename(str(added.id), str(shape[0]).to_upper())
 		ids.append(str(added.id))
 	# Both players in something they brought, so the shot shows the thing

@@ -45,7 +45,9 @@ const TILE := Vector2(212, 172)
 @onready var _remove_button: Button = $Page/Panel/Margin/Box/Actions/Remove
 @onready var _message: Label = $Page/Panel/Margin/Box/Message
 @onready var _back_button: Button = $Page/Panel/Margin/Box/Back
+@onready var _find_button: Button = $Page/Panel/Margin/Box/Actions/Find
 @onready var _picker: FileDialog = $Picker
+@onready var _finder: FileDialog = $Finder
 
 ## How many cars are on the road: one column of tiles, or two.
 var _players := 1
@@ -59,6 +61,10 @@ var _portraits := {}
 func _ready() -> void:
 	_back_button.pressed.connect(close)
 	_add_button.pressed.connect(_on_add_pressed)
+	# Said on the button rather than in the heading, where it would widen
+	# the whole panel to carry a list only somebody about to press it needs.
+	_add_button.tooltip_text = "A .glb, a .gltf, or a .blend if Blender is "\
+			+ "on this machine."
 	_turn_button.pressed.connect(_on_turn_pressed)
 	_remove_button.pressed.connect(_on_remove_pressed)
 
@@ -66,8 +72,15 @@ func _ready() -> void:
 	_picker.access = FileDialog.ACCESS_FILESYSTEM
 	_picker.use_native_dialog = true
 	_picker.title = "Pick a car"
-	_picker.filters = PackedStringArray(["*.glb, *.gltf ; Models"])
+	_picker.filters = PackedStringArray(["*.glb, *.gltf, *.blend ; Models"])
 	_picker.file_selected.connect(_on_file_picked)
+
+	_finder.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	_finder.access = FileDialog.ACCESS_FILESYSTEM
+	_finder.use_native_dialog = true
+	_finder.title = "Where is Blender?"
+	_finder.file_selected.connect(_on_blender_picked)
+	_find_button.pressed.connect(_on_find_pressed)
 	hide()
 
 
@@ -79,6 +92,10 @@ func open(players: int) -> void:
 	# Nobody is player one when they are the only car on the road.
 	_names[0].text = "PLAYER 1" if _players > 1 else "YOUR CAR"
 	_say("")
+	# There is nothing to find until a player has tried to add a .blend
+	# and been told there is no Blender, so the button is not standing
+	# there on a machine where it would never be pressed.
+	_find_button.visible = not Blender.here()
 	_rebuild()
 	show()
 	_focus_chosen(0)
@@ -204,13 +221,54 @@ func _on_add_pressed() -> void:
 ## Whatever comes back is said on the screen: a car that would not load is the
 ## one moment on here where a person needs a sentence rather than a tile.
 func _on_file_picked(path: String) -> void:
-	var added := Garage.add(path)
+	# Said before the wait rather than after it. A .blend goes out to
+	# Blender, which is a second program starting up on a cold machine,
+	# and a screen that sat there saying nothing for eight seconds is a
+	# screen a player presses again.
+	var blend := path.get_extension().to_lower() == Garage.BLEND
+	_say(("Handing %s to Blender. This takes a few seconds…"
+		if blend else "Reading %s…") % path.get_file())
+	_working(true)
+	var added: Dictionary = await Garage.add(path)
+	_working(false)
 	if not added.ok:
 		_say(str(added.error))
+		_find_button.visible = not Blender.here()
 		return
 	_rebuild()
 	_say("Added %s." % Garage.name_of(str(added.id)))
 	_draw_what_has_no_picture()
+
+
+## A player who has Blender somewhere the game did not think to look can say
+## where it is. Checked by name before it is written down: running an arbitrary
+## file somebody pointed at to find out what it is would be the whole problem.
+func _on_find_pressed() -> void:
+	_finder.popup_centered_ratio(0.6)
+
+
+func _on_blender_picked(path: String) -> void:
+	if not Blender.looks_right(path):
+		_say("That does not look like Blender. It is the program itself that "
+			+ "is wanted, not a .blend file.")
+		return
+	Blender.remember(path)
+	_find_button.visible = false
+	_say("Blender found. Add your .blend again.")
+
+
+## While Blender is working, nothing else on the screen should be pressable -
+## a second file handed in on top of the first would be two Blenders running
+## and one of them writing over the other's answer.
+func _working(busy: bool) -> void:
+	_add_button.disabled = busy
+	_find_button.disabled = busy
+	_back_button.disabled = busy
+	if busy:
+		_turn_button.disabled = true
+		_remove_button.disabled = true
+	else:
+		_show_what_can_be_done()
 
 
 ## Nothing can work out which end of an arbitrary model is the front, so the

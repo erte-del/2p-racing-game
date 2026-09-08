@@ -5,7 +5,8 @@ A split-screen two-player racing game, built in Godot 4.7 (GDScript).
 ## Requirements
 
 - Godot 4.7.2 (standard build, not .NET)
-- Blender 5.2 LTS — only needed to re-export the car models
+- Blender 5.2 LTS — only needed to re-export the car models, and by players
+  who want to add a car as a `.blend` rather than a `.glb`
 - A Supabase project — only needed for accounts and leaderboards, and only
   if you want them. Without one the game runs exactly as it did before any of
   that existed: `backend/README.md` is the setup, and the whole of the server
@@ -145,12 +146,10 @@ numbers measured from the JDM model.
 
 ## Custom cars
 
-A player can point the game at a model and drive it. `.glb` and `.gltf` only -
-Godot imports a `.blend` by handing it to Blender, and there is no editor in a
-game somebody is playing, so turning one into a `.glb` is a separate job for a
-machine that has Blender on it. It is read at run time through `GLTFDocument`
-rather than imported, which is what makes any of this possible in a shipped
-build at all.
+A player can point the game at a model and drive it: `.glb`, `.gltf`, or a
+`.blend` on a machine that has Blender. Models are read at run time through
+`GLTFDocument` rather than imported, which is what makes any of this possible in
+a shipped build at all.
 
 Everything comes in through `scripts/car_import.gd`, and so will everything
 downloaded from anybody else, because one door is the only kind that holds.
@@ -195,6 +194,42 @@ the same tuning and the same road, so it is a different thing to look at and not
 a different thing to race - which is also why a lap set in one is comparable
 with a lap set in any other, and why none of this reaches the leaderboards.
 
+### Blender
+
+Godot imports a `.blend` by handing it to Blender, and only in the editor. A
+game somebody is playing has no editor, so `scripts/blender.gd` does the same
+thing the editor does: finds Blender, runs it headless on the file with a
+script, and reads the `.glb` that comes out. Everything after that is the path a
+`.glb` already took, so a car that arrives this way is fitted, painted and
+checked exactly like one somebody exported themselves - and what is kept is
+always the `.glb`, so a car carries the same id and the same bytes however it
+happened to arrive.
+
+Blender is looked for in the usual places per platform, and a player whose copy
+is somewhere else can point at it; that choice wins, because on a machine with
+three of them the one they went and found is the one they meant. It is checked
+by name before it is ever run - running an arbitrary file somebody pointed at to
+find out what it is would be the whole problem.
+
+It is run with `--factory-startup`, so a player's own preferences and add-ons
+cannot change what comes out, and `--disable-autoexec`, because **a `.blend` can
+carry Python that runs when it is opened**. This is a file that may have come
+from a stranger, and none of it is ours to run.
+
+Blender is not shipped with the game and cannot be - it is a separate program.
+A player who has not got it is told so and pointed at `.glb`, which the rest of
+the game reads perfectly well. This is a convenience, not a dependency.
+
+The converter itself lives as a string in `blender.gd` rather than as a file in
+`tools/` beside the other Blender scripts. Those are run by hand on this machine
+and are deliberately not shipped; this one has to be there on the machine of
+somebody playing the game, and the surest way to ship a file is not to have one.
+
+The wait is timed against the clock rather than by adding up frame deltas. A
+frame delta is what the game thinks a frame took, which is not the same thing
+when frames are not being paced: a headless run gets through thousands a second,
+and a timeout counted that way kills Blender before it has finished starting up.
+
 ### The garage
 
 `user://cars/<id>/`, holding the model as it arrived, a small config beside it
@@ -216,6 +251,11 @@ about", and it is the one the player is looking at.
 
 Unlike the paint, it is not disabled under chaos. Chaos rolls how a car drives
 and what colour it is, and never what model it is.
+
+The heading says a car you add has no first person view, because that is a fact
+about the choice rather than about the keypress - a player deciding between the
+stock car and something they brought should know before they pick, not by
+pressing C afterwards and having nothing happen.
 
 The pictures are drawn once, when a car is first seen, into a world of their own
 so the course and the sky are not in the shot, and kept beside the model. A

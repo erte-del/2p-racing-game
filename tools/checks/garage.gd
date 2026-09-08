@@ -42,10 +42,10 @@ func _init() -> void:
 
 	faults += _the_box_has_not_moved()
 	faults += await _every_shape_fits()
-	faults += _the_same_file_is_the_same_car()
-	faults += _rubbish_is_turned_away()
+	faults += await _the_same_file_is_the_same_car()
+	faults += await _rubbish_is_turned_away()
 	faults += await _a_car_can_be_worn()
-	faults += _a_quarter_turn_refits()
+	faults += await _a_quarter_turn_refits()
 
 	_empty_the_garage()
 	print("%d faults" % faults)
@@ -76,7 +76,7 @@ func _every_shape_fits() -> int:
 	for shape: Array in SHAPES:
 		var what: String = shape[0]
 		var size: Vector3 = shape[1]
-		var added: Dictionary = _garage.add(_write_a_car(what, size))
+		var added: Dictionary = await _garage.add(_write_a_car(what, size))
 		if not added.ok:
 			print("  %s was refused: %s" % [what, added.error])
 			faults += 1
@@ -126,9 +126,9 @@ func _the_same_file_is_the_same_car() -> int:
 	# not guaranteed to give the same bytes, and it is the bytes that name a
 	# car - what is being checked is the same file, not the same shape.
 	var path := _write_a_car("a twin", Vector3(1.9, 1.3, 4.4))
-	var first: Dictionary = _garage.add(path)
+	var first: Dictionary = await _garage.add(path)
 	var before: int = _garage.cars().size()
-	var again: Dictionary = _garage.add(path)
+	var again: Dictionary = await _garage.add(path)
 	if not again.ok or str(again.id) != str(first.id):
 		print("  the same file came back as a different car")
 		return 1
@@ -148,7 +148,7 @@ func _rubbish_is_turned_away() -> int:
 	file.store_string("this is not a model, it is a sentence")
 	file.close()
 	var before: int = _garage.cars().size()
-	var added: Dictionary = _garage.add(where)
+	var added: Dictionary = await _garage.add(where)
 	if added.ok:
 		print("  a text file was accepted as a car")
 		faults += 1
@@ -158,7 +158,7 @@ func _rubbish_is_turned_away() -> int:
 	else:
 		print("a text file is refused: \"%s\"" % added.error)
 
-	var wrong: Dictionary = _garage.add("%s/car.txt" % Sandbox.folder(INBOX))
+	var wrong: Dictionary = await _garage.add("%s/car.txt" % Sandbox.folder(INBOX))
 	if wrong.ok:
 		print("  a .txt was accepted as a car")
 		faults += 1
@@ -168,7 +168,7 @@ func _rubbish_is_turned_away() -> int:
 ## And it has to actually go on a car, without taking the car with it.
 func _a_car_can_be_worn() -> int:
 	var faults := 0
-	var added: Dictionary = _garage.add(_write_a_car("a lorry", Vector3(2.6, 4.1, 12.0)))
+	var added: Dictionary = await _garage.add(_write_a_car("a lorry", Vector3(2.6, 4.1, 12.0)))
 	var car: Car = load("res://scenes/car/car.tscn").instantiate()
 	root.add_child(car)
 	await process_frame
@@ -229,7 +229,7 @@ func _a_car_can_be_worn() -> int:
 ## Turning a car swaps its length for its width, so it has to be fitted again
 ## on the other side of the turn rather than merely spun where it stands.
 func _a_quarter_turn_refits() -> int:
-	var added: Dictionary = _garage.add(_write_a_car("a plank", Vector3(0.1, 0.1, 6.0)))
+	var added: Dictionary = await _garage.add(_write_a_car("a plank", Vector3(0.1, 0.1, 6.0)))
 	var straight: Node3D = _garage.model_for(added.id)
 	var square: AABB = straight.transform * CarImport.measure(straight)
 	straight.queue_free()
