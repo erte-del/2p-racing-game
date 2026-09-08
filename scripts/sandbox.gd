@@ -58,15 +58,38 @@ static func path(wanted: String) -> String:
 	return "%s/%s" % [FOLDER, wanted.get_file()]
 
 
+## Where a whole folder of files goes. `path` flattens what it is given into
+## one directory, which is right for the handful of single files that were all
+## there was when it was written, and wrong for anything that keeps a folder
+## per thing - the garage keeps a folder per car. This relocates the folder
+## instead and leaves what is under it alone.
+##
+## It makes the folder as well, because every caller wants it to be there.
+static func folder(wanted: String) -> String:
+	var made := wanted
+	if on():
+		made = "%s/%s" % [FOLDER, wanted.trim_prefix("user://")]
+	DirAccess.make_dir_recursive_absolute(made)
+	return made
+
+
 static func _asked_for() -> bool:
 	return FLAG in OS.get_cmdline_args() or FLAG in OS.get_cmdline_user_args()
 
 
-## A scene under `tools/` named on the command line. Those are harnesses -
+## Anything under `tools/` named on the command line. Those are harnesses -
 ## there is nothing in that folder a player runs - so they are sandboxed
 ## without being asked, which is the only kind of guard that holds.
+##
+## Scripts as well as scenes. Harnesses come in both shapes: some load a scene
+## and drive it, and most are a `--script` that never names one. Only scenes
+## were caught at first, which meant the guard that was meant to stop a test
+## rewriting somebody's records was missing from the harnesses that actually
+## finish a lap.
 static func _running_out_of_tools() -> bool:
 	for arg in OS.get_cmdline_args():
-		if arg.ends_with(".tscn") and arg.contains("tools/"):
+		if not arg.contains("tools/"):
+			continue
+		if arg.ends_with(".tscn") or arg.ends_with(".gd"):
 			return true
 	return false

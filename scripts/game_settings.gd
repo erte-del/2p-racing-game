@@ -80,6 +80,14 @@ var car_colours := PackedColorArray([
 	Paints.default_for(0), Paints.default_for(1),
 ])
 
+## Which car each player is driving, player one first, as ids out of the
+## garage. An empty id is the model the game ships with, which is what a
+## player who has never opened the garage is driving.
+##
+## Held as ids rather than as places in a list, for the reason the paints are
+## held as colours: a garage is added to and deleted from, and a choice stored
+## as "the third one" is a choice that quietly becomes a different car.
+var car_ids := PackedStringArray(["", ""])
 
 ## One of NORMAL, ALWAYS_DAY, ALWAYS_NIGHT.
 var time_of_day := NORMAL:
@@ -119,6 +127,29 @@ func set_car_colour(player: int, colour: Color) -> void:
 	changed.emit()
 
 
+## Which car a player is driving. Out of range answers with the stock car
+## rather than failing, the same way `car_colour` does.
+func car_id(player: int) -> String:
+	if player < 0 or player >= car_ids.size():
+		return Garage.STOCK
+	return car_ids[player]
+
+
+## Put a player in a different car.
+##
+## Announced through `changed` like everything else here, which is what lets
+## the car appear on the road the moment the tile is pressed: the race is
+## already listening, and it dresses the cars from this rather than being told
+## to by whatever screen the press happened on.
+func set_car_id(player: int, id: String) -> void:
+	if player < 0 or player >= car_ids.size():
+		return
+	if car_ids[player] == id:
+		return
+	car_ids[player] = id
+	changed.emit()
+
+
 ## Write the current choices out. Called when a screen that was changing them
 ## is closed, rather than on every change, so dragging the volume slider does
 ## not write a file per frame.
@@ -130,6 +161,8 @@ func save_settings() -> void:
 	file.set_value("race", "solo", solo)
 	for i in car_colours.size():
 		file.set_value("cars", "colour_%d" % (i + 1), car_colours[i])
+	for i in car_ids.size():
+		file.set_value("cars", "model_%d" % (i + 1), car_ids[i])
 	file.save(save_path)
 
 
@@ -149,6 +182,12 @@ func load_settings() -> void:
 			"cars", "colour_%d" % (i + 1), Paints.default_for(i))
 		if stored is Color:
 			car_colours[i] = stored
+	for i in car_ids.size():
+		# Not checked against the garage here. This runs before there is one to
+		# ask, and an id belonging to a car that has since been deleted is
+		# already handled where it is used: `Garage.dress` puts a player who
+		# has lost their car back in the stock one.
+		car_ids[i] = str(file.get_value("cars", "model_%d" % (i + 1), ""))
 
 
 ## Silence is its own state: fading a bus to -80 dB is still audible on some

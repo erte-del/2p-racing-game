@@ -18,9 +18,12 @@ assets/models/    imported .glb models
 scenes/           main.tscn and per-entity scenes
 scripts/          GDScript
 tracks/           the twenty laid-out tracks, one file each
-tools/            Blender export scripts (not shipped in the game)
+tools/            Blender export scripts and the checks (not shipped)
 backend/          the server side: the schema, the setup, the emails
 ```
+
+Cars a player adds go to `user://cars/`, not into the project. They are
+theirs rather than the game's; see **Custom cars**.
 
 `backend/` holds no code that runs in the game. It is the SQL that builds the
 two tables the leaderboards live in, the notes for standing a project up, and
@@ -135,9 +138,89 @@ turning. One with no `Paint` material has its biggest panel painted instead, the
 colour multiplying whatever texture it arrived with, so a textured model keeps
 its texture and wears the player's colour over it. One with no materials at all
 is given one, because two cars nobody can tell apart is not a split screen
-anybody can read. And its headlights are placed off the shape itself - out to
+anybody can read. That last one is not a nicety: the paint is what
+tells two brought-in cars apart, since the model no longer does. And its headlights are placed off the shape itself - out to
 29% of its width, 47% up its height, on its front face - rather than off the
 numbers measured from the JDM model.
+
+## Custom cars
+
+A player can point the game at a model and drive it. `.glb` and `.gltf` only -
+Godot imports a `.blend` by handing it to Blender, and there is no editor in a
+game somebody is playing, so turning one into a `.glb` is a separate job for a
+machine that has Blender on it. It is read at run time through `GLTFDocument`
+rather than imported, which is what makes any of this possible in a shipped
+build at all.
+
+Everything comes in through `scripts/car_import.gd`, and so will everything
+downloaded from anybody else, because one door is the only kind that holds.
+It reads with no base path on purpose: a `.gltf` that keeps its meshes and
+textures in files beside it cannot reach them and fails, which is the wanted
+answer rather than a limitation - a car has to be one file, because one file is
+what can be handed to somebody else and still be the same car when it arrives.
+Then a size cap (8 MB), a vertex cap and a surface cap, and everything that is
+not a mesh is thrown out: a camera in the file would fight the two the split
+screen already has, and a light would be a second sun bolted to somebody's
+bumper.
+
+### Fitting
+
+What comes in is scaled by **one** number on all three axes, never three.
+Fitting each axis separately would make every model exactly car-shaped, which
+is to say it would flatten a motorbike and stretch a rubber duck, and the whole
+appeal of bringing your own car is that it still looks like the thing you
+brought.
+
+The **length** is what is matched, because length is what a person means by how
+big a car is: a model that is already roughly car-shaped comes out at exactly
+the 4.87 m of the car the game ships with, and looks like it belongs on the road
+beside it. Width and height are not matched, only capped, at 15% over the
+collision box - a wing mirror reaching a little past the box is a wing mirror
+and not a fault. Whichever of the three bites first is the one that decides, so
+a lorry is brought down by its height rather than stretched to fill the road,
+and something tall and thin comes out small. A lamp post scaled until it fits
+under 1.7 m of car is a short lamp post, and the alternative is a car whose
+corners are nowhere near it.
+
+Then it is centred across the road and stood on the ground rather than left at
+whatever height it was modelled at. Nothing can work out which end of an
+arbitrary model is the front, so the game guesses - the long way round is the
+length - and TURN in the garage is how a player says it guessed wrong. The turn
+is stored rather than applied, because the fit is worked out again on the other
+side of it: a quarter turn swaps a car's length for its width, and it has to be
+scaled against a different limit afterwards.
+
+The hitbox never moves. A brought-in car keeps the same 2.06 x 1.45 x 4.87 box,
+the same tuning and the same road, so it is a different thing to look at and not
+a different thing to race - which is also why a lap set in one is comparable
+with a lap set in any other, and why none of this reaches the leaderboards.
+
+### The garage
+
+`user://cars/<id>/`, holding the model as it arrived, a small config beside it
+and a picture of it. The id is the SHA-256 of the model itself, shortened, so
+adding the same file twice is the same car rather than two of it - and so a car
+will carry the same name on every machine it ever reaches. A test run keeps its
+own garage somewhere else; see `Sandbox`.
+
+Nothing about it needs an account, a network or a `backend.cfg`. A car somebody
+adds is theirs, on their machine, and stays there.
+
+The garage screen sits on the pause menu beside PAINT and is shaped like it: a
+column of tiles per player, the stock car first. Pressing a tile puts that
+player in that car immediately, because the race is right there behind the panel
+and a car you can see on the road is the only way to find out whether it is the
+one you wanted. ADD A CAR, TURN and REMOVE act on whichever tile the cursor is
+on - there is exactly one thing on the screen that is "the car being talked
+about", and it is the one the player is looking at.
+
+Unlike the paint, it is not disabled under chaos. Chaos rolls how a car drives
+and what colour it is, and never what model it is.
+
+The pictures are drawn once, when a car is first seen, into a world of their own
+so the course and the sky are not in the shot, and kept beside the model. A
+garage of a dozen cars should not be a dozen models rendered every time the
+screen opens.
 
 ## Views
 

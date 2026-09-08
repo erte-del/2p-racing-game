@@ -119,6 +119,17 @@ const OBSTACLE_GROUP := &"obstacle"
 ## everything that puts a car down on a surface reads it.
 @export var wheel_radius := 0.355
 
+## Which car out of the garage this one is wearing, or empty for the model the
+## game ships with. Set by whoever dressed it, and read by the same, so that a
+## car is not rebuilt every time some unrelated setting changes; see
+## `Garage.dress`.
+var model_id := ""
+## And how far round it was turned when it was fitted. Part of which
+## model this is rather than a separate fact: turning a car changes the
+## size it is fitted at, so a car turned in the garage is a different
+## model to build even though it is the same car.
+var model_turns := 0
+
 ## The other car, for slipstream. Wired up by the level.
 var rival: Car
 ## While frozen the car ignores input and holds still, used for the pause
