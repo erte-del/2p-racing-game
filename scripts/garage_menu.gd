@@ -25,6 +25,14 @@ extends Control
 ## for the half that is not ours, since a car off the network is the half a
 ## player should be able to see the edge of.
 ##
+## Sharing asks what the car is called before it sends anything. A name that
+## was fine on this machine - whatever the file happened to be called - is
+## about to be the only thing anybody else has to go on, and the moment a
+## player decides to put a car up is the one moment they are actually thinking
+## about that. What they type is the car's name here as well as there: there is
+## one name, and a garage that disagreed with the list would be a bug somebody
+## had to hold in their head.
+##
 ## Adding, turning and removing act on whichever tile the cursor is on, rather
 ## than on a car chosen a second time in some other list. There is exactly one
 ## thing on this screen that is "the car being talked about", and it is the one
@@ -62,7 +70,13 @@ const TILE := Vector2(200, 134)
 @onready var _find_button: Button = $Page/Panel/Margin/Box/Actions/Find
 @onready var _picker: FileDialog = $Picker
 @onready var _finder: FileDialog = $Finder
+@onready var _naming_page: Control = $Naming
+@onready var _naming_field: LineEdit = $Naming/Page/Panel/Margin/Box/Name
+@onready var _naming_share: Button = $Naming/Page/Panel/Margin/Box/Row/Share
+@onready var _naming_cancel: Button = $Naming/Page/Panel/Margin/Box/Row/Cancel
 @onready var _shared_page: Control = $Shared
+@onready var _shared_search: LineEdit = $Shared/Page/Panel/Margin/Box/Find/Search
+@onready var _shared_count: Label = $Shared/Page/Panel/Margin/Box/Find/Count
 @onready var _shared_list: VBoxContainer = $Shared/Page/Panel/Margin/Box/Scroll/List
 @onready var _shared_message: Label = $Shared/Page/Panel/Margin/Box/Message
 @onready var _shared_back: Button = $Shared/Page/Panel/Margin/Box/Back
@@ -71,9 +85,15 @@ const TILE := Vector2(200, 134)
 var _players := 1
 ## Which car the cursor is sitting on, and which player's row it is in.
 var _under_the_cursor := ""
+## The car the naming panel is open about, if it is open.
+var _being_named := ""
 ## Pictures already loaded, so moving up and down the list is not a file read
 ## per keypress.
 var _portraits := {}
+## The shared cars as the server last described them, before any searching.
+## Kept so that typing filters what is already in hand rather than asking the
+## server again on every keystroke.
+var _shared_rows: Array = []
 
 
 func _ready() -> void:
@@ -102,6 +122,16 @@ func _ready() -> void:
 	_share_button.pressed.connect(_on_share_pressed)
 	_browse_button.pressed.connect(_on_browse_pressed)
 	_shared_back.pressed.connect(_close_shared)
+	_shared_search.text_changed.connect(func(_text: String) -> void:
+		_show_the_shared_list())
+	_naming_field.max_length = Garage.NAME_LIMIT
+	# Enter shares, because a player who has finished typing a name has
+	# finished with this panel.
+	_naming_field.text_submitted.connect(func(_text: String) -> void:
+		_confirm_the_name())
+	_naming_field.text_changed.connect(_on_name_typed)
+	_naming_share.pressed.connect(_confirm_the_name)
+	_naming_cancel.pressed.connect(_close_naming)
 	# The list arrives whenever it arrives, and the Share button reads
 	# differently once it has - so the screen follows it rather than
 	# waiting on it.
@@ -126,6 +156,7 @@ func open(players: int) -> void:
 	_share_button.visible = CarLibrary.available()
 	_browse_button.visible = CarLibrary.available()
 	_shared_page.hide()
+	_naming_page.hide()
 	_rebuild()
 	# Asked for in the background. Nothing on this screen waits on it;
 	# what it changes is whether Share reads SHARE or UNSHARE, and that
@@ -153,7 +184,11 @@ func _input(event: InputEvent) -> void:
 	if _picker.visible or _finder.visible:
 		return
 	get_viewport().set_input_as_handled()
-	# One step at a time: off the shared cars, then off the garage.
+	# One step at a time: off the naming panel, off the shared cars, then
+	# off the garage.
+	if _naming_page.visible:
+		_close_naming()
+		return
 	if _shared_page.visible:
 		_close_shared()
 		return
@@ -340,36 +375,104 @@ func _on_file_picked(path: String) -> void:
 ## here: the server is the one that knows what is shared, and a button reading
 ## off anything else would be wrong the moment somebody unshared a car on
 ## another machine.
+##
+## Going up asks what it is called first. Coming down does not ask anything:
+## taking a car back is a thing a player has already decided by the time they
+## press the button, and a panel in the way of it would be a panel arguing.
 func _on_share_pressed() -> void:
 	var id := _under_the_cursor
 	if not Garage.has(id):
 		return
-	var taking_down := CarLibrary.is_mine(id)
-	_say("Taking %s down…" % Garage.name_of(id) if taking_down
-		else "Sharing %s…" % Garage.name_of(id))
+	if CarLibrary.is_mine(id):
+		await _take_it_down(id)
+		return
+	_open_naming(id)
+
+
+## Ask what the car is called, starting from what it is called now. The name
+## is selected rather than merely shown, so typing replaces it and a player
+## happy with it can press Enter without touching the text at all.
+func _open_naming(id: String) -> void:
+	_being_named = id
+	_naming_field.text = Garage.name_of(id)
+	_naming_page.show()
+	_naming_field.grab_focus()
+	_naming_field.select_all()
+	_on_name_typed(_naming_field.text)
+
+
+## A car has to be called something. The button goes quiet rather than the
+## panel refusing after the fact, because an empty box is a thing a player can
+## see is empty.
+func _on_name_typed(text: String) -> void:
+	_naming_share.disabled = text.strip_edges().is_empty()
+
+
+func _close_naming() -> void:
+	_being_named = ""
+	_naming_page.hide()
+	# Back to the button that opened it, unless there is not one - a build
+	# with no server never shows Share, and cannot open this panel either.
+	if _share_button.visible:
+		_share_button.grab_focus()
+
+
+## The name is written down before anything is sent, because `publish` reads
+## the garage for it. One name rather than a name passed alongside the car:
+## a garage that disagreed with the list is the bug this avoids having.
+func _confirm_the_name() -> void:
+	var id := _being_named
+	var called := _naming_field.text.strip_edges()
+	if not Garage.has(id) or called.is_empty():
+		return
+	_naming_page.hide()
+	_being_named = ""
+	if called != Garage.name_of(id):
+		Garage.rename(id, called)
+		_rebuild()
+		_focus_on(id)
+	await _put_it_up(id)
+
+
+func _put_it_up(id: String) -> void:
+	_say("Sharing %s…" % Garage.name_of(id))
 	_working(true)
-	# Written out rather than as one awaited ternary: the branches of a
-	# ternary are called before the await ever sees them.
-	var answer: Dictionary
-	if taking_down:
-		answer = await CarLibrary.unpublish(id)
-	else:
-		answer = await CarLibrary.publish(id)
+	var answer: Dictionary = await CarLibrary.publish(id)
 	_working(false)
 	if not answer.ok:
 		_say(str(answer.error))
 		return
-	_say("%s is no longer shared." % Garage.name_of(id) if taking_down
-		else "%s is shared. Anybody can drive it now." % Garage.name_of(id))
-	# The list in hand is now the list as it was before this happened.
+	_say("%s is shared. Anybody can drive it now." % Garage.name_of(id))
+	await _read_the_list_again()
+
+
+func _take_it_down(id: String) -> void:
+	_say("Taking %s down…" % Garage.name_of(id))
+	_working(true)
+	var answer: Dictionary = await CarLibrary.unpublish(id)
+	_working(false)
+	if not answer.ok:
+		_say(str(answer.error))
+		return
+	_say("%s is no longer shared." % Garage.name_of(id))
+	await _read_the_list_again()
+
+
+## The list in hand is now the list as it was before this happened.
+func _read_the_list_again() -> void:
 	await CarLibrary.catalogue(true)
 	_show_what_can_be_done()
 
 
 func _on_browse_pressed() -> void:
 	_shared_page.show()
+	# Opened showing everything, whatever was typed last time. A page that
+	# remembered a search would open on a list with things missing from it
+	# and nothing on screen saying why.
+	_shared_search.text = ""
 	_say_on_the_list("Looking…")
-	_shared_back.grab_focus()
+	_shared_count.text = ""
+	_shared_search.grab_focus()
 	_fill_shared(await CarLibrary.catalogue(true))
 
 
@@ -386,18 +489,30 @@ func _on_catalogue_arrived(rows: Array) -> void:
 	_show_what_can_be_done()
 
 
-## One row per shared car: what it is, who put it up, and how big it is.
+## What the server last said, kept and then drawn. Everything that arrives
+## comes through here, so there is one place that decides what is on the page.
+func _fill_shared(rows: Array) -> void:
+	_shared_rows = rows
+	_show_the_shared_list()
+
+
+## One row per shared car: what it is, who put it up, and how big it is -
+## narrowed to what is being searched for.
 ##
 ## A car this machine already has is shown as had rather than hidden. Seeing
 ## your own car on the list is how a player knows sharing worked, and a list
 ## that quietly dropped everything you own would be a list that got shorter the
 ## more you used it.
-func _fill_shared(rows: Array) -> void:
+func _show_the_shared_list() -> void:
 	for old in _shared_list.get_children():
 		_shared_list.remove_child(old)
 		old.queue_free()
 
-	if rows.is_empty():
+	var looking_for := _shared_search.text.strip_edges().to_lower()
+	var shown := _matching(_shared_rows, looking_for)
+	_count_them(shown.size(), looking_for)
+
+	if _shared_rows.is_empty():
 		if not CarLibrary.available():
 			_say_on_the_list("This copy of the game has no server set up.")
 		elif not CarLibrary.answered():
@@ -406,14 +521,24 @@ func _fill_shared(rows: Array) -> void:
 		else:
 			_say_on_the_list("Nobody has shared a car yet.")
 		return
+	if shown.is_empty():
+		# The list is not empty, the search is. Said differently, because
+		# "nobody has shared a car" would be a lie with a car on the server.
+		_say_on_the_list("Nothing here is called \"%s\", and nobody by that "
+			% _shared_search.text.strip_edges() + "name has shared one.")
+		return
 	_say_on_the_list("")
 
-	for row: Dictionary in rows:
+	for row: Dictionary in shown:
 		var id := str(row["id"])
 		var here: bool = bool(row["here"])
 		var line := Button.new()
-		line.custom_minimum_size = Vector2(580, 44)
+		line.custom_minimum_size = Vector2(720, 44)
 		line.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		# Clipped rather than allowed to set the width of the page: one long
+		# name would otherwise widen the whole panel, and the panel would
+		# change size as a search took that row out of the list.
+		line.clip_text = true
 		line.text = "%s      by %s      %s      %s" % [
 			str(row["name"]), str(row["by"]), _thousands(int(row["vertices"])),
 			"IN YOUR GARAGE" if here else "GET",
@@ -424,6 +549,38 @@ func _fill_shared(rows: Array) -> void:
 		if not here:
 			line.pressed.connect(_on_get_pressed.bind(id))
 		_shared_list.add_child(line)
+
+
+## The rows a search matches: by what the car is called, or by who put it up.
+## Both, because a player typing a name has one of the two in mind and the page
+## cannot know which - and searching the one they did not mean would look
+## broken rather than strict.
+func _matching(rows: Array, looking_for: String) -> Array:
+	if looking_for.is_empty():
+		return rows
+	var found: Array = []
+	for row: Dictionary in rows:
+		if (str(row["name"]).to_lower().contains(looking_for)
+				or str(row["by"]).to_lower().contains(looking_for)):
+			found.append(row)
+	return found
+
+
+## How many cars are up there, in the corner of the search box.
+##
+## What it counts is what came down, which is capped - so a full page says so
+## with a + rather than claiming a number it cannot know. And while a search is
+## on it says how many of how many, because a count that silently became the
+## number of matches would read as cars disappearing off the server.
+func _count_them(shown: int, looking_for: String) -> void:
+	if _shared_rows.is_empty():
+		_shared_count.text = ""
+		return
+	var all := _shared_rows.size()
+	var how_many := ("%d+" % all if all >= CarLibrary.CATALOGUE_SIZE
+			else str(all))
+	_shared_count.text = ("%d of %s" % [shown, how_many]
+			if not looking_for.is_empty() else "%s shared" % how_many)
 
 
 ## Bring somebody else's car down. It arrives as bytes and goes through the
@@ -480,6 +637,7 @@ func _working(busy: bool) -> void:
 	_find_button.disabled = busy
 	_browse_button.disabled = busy
 	_back_button.disabled = busy
+	_naming_share.disabled = busy or _naming_field.text.strip_edges().is_empty()
 	if busy:
 		_share_button.disabled = true
 	if busy:

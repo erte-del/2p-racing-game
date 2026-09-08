@@ -35,6 +35,8 @@ func _init() -> void:
 	faults += await _quiet_with_no_server()
 	faults += await _a_model_off_the_wire_is_checked()
 	faults += await _the_id_is_the_model()
+	faults += await _a_name_is_asked_for_before_it_goes_up()
+	faults += await _the_list_can_be_searched()
 
 	_empty_the_garage()
 	print("%d faults" % faults)
@@ -159,6 +161,176 @@ func _the_id_is_the_model() -> int:
 
 
 ## A small .glb, made here, standing in for one that came off a server.
+## Pressing SHARE asks what the car is called before it sends anything, and
+## what is typed is the car's name in the garage as well as on the list.
+##
+## Checked with no server, which is where this run is: everything up to the
+## request itself happens the same way either way, and it is the panel in front
+## of the request that is being looked at rather than the request.
+func _a_name_is_asked_for_before_it_goes_up() -> int:
+	var faults := 0
+	var added: Dictionary = _garage.adopt(_a_car(), "WEDGE")
+	var id := str(added.id)
+
+	var screen: Control = load("res://scenes/garage.tscn").instantiate()
+	root.add_child(screen)
+	# Added rather than opened. `open` starts drawing a picture for every
+	# tile, in a world of its own with a camera in it, and this run has no
+	# renderer to finish that in - what is being looked at here is the panels,
+	# which do not need the tiles behind them.
+	await process_frame
+
+	var panel: Control = screen.get_node(^"Naming")
+	var field: LineEdit = screen.get_node(^"Naming/Page/Panel/Margin/Box/Name")
+	var go: Button = screen.get_node(^"Naming/Page/Panel/Margin/Box/Row/Share")
+
+	screen._under_the_cursor = id
+	screen._on_share_pressed()
+	await process_frame
+	if not panel.visible:
+		print("  SHARE sent the car without asking what it is called")
+		faults += 1
+	if field.text != "WEDGE":
+		print("  the box did not start from what the car is already called: %s"
+			% field.text)
+		faults += 1
+
+	# A car has to be called something.
+	field.text = "   "
+	screen._on_name_typed(field.text)
+	if not go.disabled:
+		print("  a car with no name at all could still be shared")
+		faults += 1
+
+	# What is typed is what it is called here, not only there.
+	field.text = "  THE GREEN ONE  "
+	screen._on_name_typed(field.text)
+	await screen._confirm_the_name()
+	if _garage.name_of(id) != "THE GREEN ONE":
+		print("  the car is still called %s" % _garage.name_of(id))
+		faults += 1
+	if panel.visible:
+		print("  the panel stayed up after it was answered")
+		faults += 1
+
+	# And backing out of the panel changes nothing.
+	screen._under_the_cursor = id
+	screen._on_share_pressed()
+	await process_frame
+	field.text = "SOMETHING ELSE"
+	screen._close_naming()
+	if _garage.name_of(id) != "THE GREEN ONE":
+		print("  cancelling renamed it anyway: %s" % _garage.name_of(id))
+		faults += 1
+	if panel.visible:
+		print("  cancelling left the panel up")
+		faults += 1
+
+	await _let_it_go(screen)
+	if faults == 0:
+		print("SHARE asks what the car is called, and the answer is its name "
+			+ "in the garage too")
+	return faults
+
+
+## Typing on the browse page narrows the list, and the number beside the box
+## says how many are up there.
+##
+## The rows are made here rather than fetched. What is being checked is the
+## page - what it shows, what it says when a search matches nothing, and what
+## the count reads - and that is the same page whether the rows came off a real
+## server or out of this function.
+func _the_list_can_be_searched() -> int:
+	var faults := 0
+	var screen: Control = load("res://scenes/garage.tscn").instantiate()
+	root.add_child(screen)
+	# Added rather than opened. `open` starts drawing a picture for every
+	# tile, in a world of its own with a camera in it, and this run has no
+	# renderer to finish that in - what is being looked at here is the panels,
+	# which do not need the tiles behind them.
+	await process_frame
+
+	var search: LineEdit = screen.get_node(
+			^"Shared/Page/Panel/Margin/Box/Find/Search")
+	var count: Label = screen.get_node(
+			^"Shared/Page/Panel/Margin/Box/Find/Count")
+	var list: VBoxContainer = screen.get_node(
+			^"Shared/Page/Panel/Margin/Box/Scroll/List")
+	var message: Label = screen.get_node(^"Shared/Page/Panel/Margin/Box/Message")
+
+	screen._fill_shared([
+		_a_row("banana", "THE BANANA", "kit"),
+		_a_row("lorry", "A BIG LORRY", "erte"),
+		_a_row("wedge", "WEDGE", "kit"),
+	])
+	if list.get_child_count() != 3:
+		print("  the whole list is %d rows, not 3" % list.get_child_count())
+		faults += 1
+	if count.text != "3 shared":
+		print("  the count reads '%s' rather than '3 shared'" % count.text)
+		faults += 1
+
+	# By name, and case does not matter.
+	search.text = "lorry"
+	screen._show_the_shared_list()
+	if list.get_child_count() != 1:
+		print("  searching a name gave %d rows, not 1" % list.get_child_count())
+		faults += 1
+	if count.text != "1 of 3":
+		print("  the count reads '%s' rather than '1 of 3'" % count.text)
+		faults += 1
+
+	# By who shared it, which is the other thing a player might have in mind.
+	search.text = "KIT"
+	screen._show_the_shared_list()
+	if list.get_child_count() != 2:
+		print("  searching a name gave %d rows, not 2" % list.get_child_count())
+		faults += 1
+
+	# Matching nothing is not the same as nobody having shared anything.
+	search.text = "zzz"
+	screen._show_the_shared_list()
+	if list.get_child_count() != 0:
+		print("  a search matching nothing still drew rows")
+		faults += 1
+	if not message.visible or message.text.contains("Nobody has shared"):
+		print("  a search matching nothing says: %s" % message.text)
+		faults += 1
+
+	# A full page cannot know how many there are, and says so.
+	var many: Array = []
+	for i in _library.CATALOGUE_SIZE:
+		many.append(_a_row("car%d" % i, "CAR %d" % i, "kit"))
+	search.text = ""
+	screen._fill_shared(many)
+	if count.text != "%d+ shared" % _library.CATALOGUE_SIZE:
+		print("  a full page counts itself as '%s'" % count.text)
+		faults += 1
+
+	await _let_it_go(screen)
+	if faults == 0:
+		print("the browse page can be searched by name or by who shared it, "
+			+ "and counts what is up there")
+	return faults
+
+
+## Take a screen back down and wait for it to actually go. The garage draws
+## its pictures in a world of its own, and quitting on top of that leaves the
+## renderer holding things it then complains about at exit.
+func _let_it_go(screen: Node) -> void:
+	screen.queue_free()
+	for i in 4:
+		await process_frame
+
+
+## One row shaped the way the catalogue hands them over.
+func _a_row(id: String, called: String, by: String) -> Dictionary:
+	return {
+		"id": id, "name": called, "by": by, "vertices": 4200,
+		"owner": "somebody", "mine": false, "here": false,
+	}
+
+
 func _a_car() -> PackedByteArray:
 	var model := Node3D.new()
 	var mesh := MeshInstance3D.new()

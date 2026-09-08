@@ -284,12 +284,37 @@ shared. That is a much easier promise to keep than a boolean somebody has to
 remember to check, and it is why unsharing takes the car back down rather than
 hiding it.
 
+Pressing SHARE asks what the car is called before it sends anything. A name
+that was fine on this machine - whatever the file happened to be called, upper
+cased - is about to be the only thing anybody else has to go on, and the moment
+a player decides to put a car up is the one moment they are actually thinking
+about that. What they type is the car's name in their own garage as well as on
+the list: `publish` reads the name out of the garage rather than taking one
+passed alongside it, so there is one name and no way for the two to disagree.
+Backing out changes nothing, and taking a car down asks nothing - that is a
+thing a player has already decided by the time they press the button.
+
 `scripts/car_library.gd` is the layer over `Backend`, exactly as `Leaderboard`
 is over `TrackTimes`: the garage is the truth the game is played against and
 works with the network unplugged, and this sends a car up, brings other people's
 down, and asks nothing of the rest of the game in return. Browsing works signed
 out - somebody deciding whether an account is worth making should be able to see
 what they would be joining - and sharing is a thing done as somebody.
+
+The browse page can be searched, and says how many are up there. Typing
+narrows the rows already in hand rather than asking the server on every
+keystroke - the catalogue is capped at `CarLibrary.CATALOGUE_SIZE`, so the
+whole of what the page can show is on this machine already, and a request per
+character would be a request per character for nothing. It matches on the name
+and on who shared it, because a player typing has one of the two in mind and
+the page cannot know which.
+
+The count is what came down rather than what exists. A page filled to the cap
+says `60+` instead of claiming a number it has no way to know, and while a
+search is on it reads `3 of 60` - a count that silently became the number of
+matches would read as cars disappearing off the server. Matching nothing is
+also said differently from nobody having shared anything, because with a car on
+the list the second sentence is a lie.
 
 The order of the two requests is the whole safety of it. Going up, the model
 goes first and the row second, because the storage policy makes an object

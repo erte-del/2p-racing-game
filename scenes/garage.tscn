@@ -243,6 +243,83 @@ title = "Where is Blender?"
 size = Vector2i(720, 480)
 ok_button_text = "Use this"
 
+[node name="Naming" type="Control" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="ColorRect" parent="Naming"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.62)
+
+[node name="Page" type="CenterContainer" parent="Naming"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Naming/Page"]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Naming/Page/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 30
+
+[node name="Box" type="VBoxContainer" parent="Naming/Page/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="VBoxContainer" parent="Naming/Page/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Heading" type="Label" parent="Naming/Page/Panel/Margin/Box/Title"]
+layout_mode = 2
+text = "WHAT IS IT CALLED?"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 34
+
+[node name="Note" type="Label" parent="Naming/Page/Panel/Margin/Box/Title"]
+layout_mode = 2
+text = "the name everybody will see it under, and the name it keeps in your garage"
+horizontal_alignment = 1
+autowrap_mode = 3
+custom_minimum_size = Vector2(460, 0)
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 18
+
+[node name="Name" type="LineEdit" parent="Naming/Page/Panel/Margin/Box"]
+custom_minimum_size = Vector2(460, 52)
+layout_mode = 2
+alignment = 1
+caret_blink = true
+
+[node name="Row" type="HBoxContainer" parent="Naming/Page/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="Share" type="Button" parent="Naming/Page/Panel/Margin/Box/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "SHARE IT"
+
+[node name="Cancel" type="Button" parent="Naming/Page/Panel/Margin/Box/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "CANCEL"
+
 [node name="Shared" type="Control" parent="."]
 visible = false
 anchors_preset = 15
@@ -297,8 +374,29 @@ horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
 theme_override_font_sizes/font_size = 18
 
+[node name="Find" type="HBoxContainer" parent="Shared/Page/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Search" type="LineEdit" parent="Shared/Page/Panel/Margin/Box/Find"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "search by name or who shared it"
+clear_button_enabled = true
+caret_blink = true
+
+[node name="Count" type="Label" parent="Shared/Page/Panel/Margin/Box/Find"]
+layout_mode = 2
+text = ""
+vertical_alignment = 1
+horizontal_alignment = 2
+custom_minimum_size = Vector2(110, 0)
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 16
+
 [node name="Scroll" type="ScrollContainer" parent="Shared/Page/Panel/Margin/Box"]
-custom_minimum_size = Vector2(620, 360)
+custom_minimum_size = Vector2(760, 360)
 layout_mode = 2
 horizontal_scroll_mode = 0
 
@@ -313,7 +411,7 @@ layout_mode = 2
 text = ""
 horizontal_alignment = 1
 autowrap_mode = 3
-custom_minimum_size = Vector2(620, 0)
+custom_minimum_size = Vector2(760, 0)
 theme_override_colors/font_color = Color(0.95, 0.83, 0.55, 1)
 theme_override_font_sizes/font_size = 18
 
