@@ -46,12 +46,23 @@ func _ready() -> void:
 func follow(target: Car) -> void:
 	_target = target
 	_rush = 0.0
+	# A car with nowhere to sit takes the camera back outside rather than
+	# leaving it buried in whatever the player is now driving.
+	if _inside and (target == null or not target.has_cockpit()):
+		_inside = false
 	_apply_fov()
 	_snap()
 
 
 ## Swap between the chase view and the driver's eye.
+##
+## A car the players brought from outside has no interior: it is a shape, and
+## a camera put inside one looks at the back of a solid shell. The refusal
+## lives here rather than where the key is read, because both the race and the
+## solo run press this same button and neither should have to remember.
 func set_inside(inside: bool) -> void:
+	if inside and (_target == null or not _target.has_cockpit()):
+		return
 	if _inside == inside:
 		return
 	_inside = inside

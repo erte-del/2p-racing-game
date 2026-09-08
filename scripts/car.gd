@@ -8,15 +8,6 @@ extends CharacterBody3D
 ## That is far easier to tune for split-screen arcade racing than
 ## VehicleBody3D, and it will not flip over on a procedural track.
 
-## Name of the material in the model that carries the car's paint. Every
-## surface using it gets recoloured; the tyres, glass and chrome are left alone.
-const PAINT_MATERIAL := "Paint"
-## The model's glass exports as opaque, which walls the first person view in.
-const GLASS_MATERIAL := "Glass"
-## The headlight panels. Authored permanently emissive, which is only right
-## once they are switched on.
-const LAMP_MATERIAL := "Lamp"
-
 ## Static bodies in this group cost speed to hit. The rails are not in it: a
 ## car scraping down a barrier at the edge of the road is already being pushed
 ## back where it belongs, and taking its speed as well for a mistake it is in
@@ -120,46 +111,13 @@ const OBSTACLE_GROUP := &"obstacle"
 @export var max_pitch := 32.0
 @export var pitch_ease := 9.0
 
-@export_group("Cockpit")
-## Where the driver's eye sits, in the car's own space. The car is right hand
-## drive, so this sits over on the +X side behind the wheel.
-@export var eye_point := Vector3(0.4, 1.18, 0.14)
-## How much of the world shows through the windows.
-@export_range(0.0, 1.0) var glass_opacity := 0.18
-## A steering wheel turns much further than the road wheels do.
-@export var wheel_turn_ratio := 3.0
-
-@export_group("Headlights")
-## Where the right headlight sits, in the car's own space; the left one is
-## mirrored. Measured off the model: the two Lamp quads sit at x +/-0.602,
-## 0.683 above the ground, 2.179 ahead of the wheelbase centre.
-@export var headlight_offset := Vector3(0.602, 0.683, -2.179)
-## Degrees the beams are tipped down, so they light the road rather than the
-## horizon.
-@export var headlight_dip := 5.0
-## Half-angle of the beam, in degrees.
-@export var headlight_angle := 26.0
-## How far the beam carries, in metres.
-@export var headlight_range := 55.0
-## Brightness at full night.
-@export var headlight_energy := 4.5
-@export var headlight_color := Color(1.0, 0.96, 0.86)
-## How brightly the lamp panels themselves glow when lit.
-@export var lamp_glow := 3.5
-
 @export_group("Wheels")
-@export var wheel_radius := 0.355      ## metres, wheel centre height in-game
-@export var max_wheel_steer := 0.5     ## rad the front wheels visually turn
-@export var wheel_steer_speed := 4.0   ## how fast the wheels visually turn
-
-## The beams, and the material of the lamp panels they shine out of.
-var _headlights: Array[SpotLight3D] = []
-var _lamp_material: StandardMaterial3D
-var _paint_material: StandardMaterial3D
-
-## The model's own steering wheel, turned along with the front wheels.
-var _steering_wheel: Node3D
-var _wheel_rest_basis := Basis.IDENTITY
+## Metres: how high the wheel centres sit, which is both the car's ride height
+## and the radius its wheels are rolled at. It stays on the car rather than
+## going to the shell with the rest of the wheel business, because it is a
+## fact about where the car sits on the road rather than about the model, and
+## everything that puts a car down on a surface reads it.
+@export var wheel_radius := 0.355
 
 ## The other car, for slipstream. Wired up by the level.
 var rival: Car
@@ -181,15 +139,12 @@ var _hit_recovery := 0.0
 ## the height it was at, which is what that is worked out from.
 var _climb := 0.0
 var _last_height := 0.0
-## Everything that is looked at rather than driven on: the shell, its lights
-## and the driver's eye. It tips to follow the road while the body it hangs
-## off stays upright.
-var _body: Node3D
+## Everything that is looked at rather than driven on: the model, its paint,
+## its lights and the driver's eye. It tips to follow the road while the body
+## it hangs off stays upright.
+var _shell: CarShell
 ## How far the shell is tipped, in radians, nose up positive.
 var _pitch := 0.0
-## Visual-only wheel state.
-var _wheel_steer := 0.0
-var _wheel_roll := 0.0
 
 # Action names are built once; doing it per frame would allocate every tick.
 var _accelerate: StringName
@@ -197,15 +152,9 @@ var _brake: StringName
 var _steer_left: StringName
 var _steer_right: StringName
 
-var _front_wheels: Array[Node3D] = []
-var _rear_wheels: Array[Node3D] = []
-# Each wheel's untouched orientation, so the animation composes onto it
-# instead of assuming the model exported with identity rotations.
-var _wheel_rest: Array[Basis] = []
-
 
 func _ready() -> void:
-	_body = $Body
+	_shell = $Body
 	# No snapping to the floor. Snapping exists to keep a body glued to the
 	# ground over a crest, which is exactly what a ramp must not do: with it
 	# on, a car runs off the lip of a jump and is dragged down over the edge
@@ -217,18 +166,10 @@ func _ready() -> void:
 	_steer_left = StringName(input_prefix + "_steer_left")
 	_steer_right = StringName(input_prefix + "_steer_right")
 
-	_front_wheels = _collect_wheels(["Wheel_FL", "Wheel_FR"])
-	_rear_wheels = _collect_wheels(["Wheel_BL", "Wheel_BR"])
-	for wheel in _front_wheels + _rear_wheels:
-		_wheel_rest.append(wheel.transform.basis)
-
-	_prepare_materials()
-	_build_headlights()
-	_steering_wheel = find_child("SteeringWheel", true, false) as Node3D
-	if _steering_wheel:
-		_wheel_rest_basis = _steering_wheel.transform.basis
-	else:
-		push_warning("Car: no SteeringWheel in the model")
+	# The shell has already taken up the model it was authored with - children
+	# are readied first - so all that is left is to hand it the paint, which is
+	# the one thing about the way this car looks that it cannot know on its own.
+	_shell.repaint(body_color)
 
 	# Courses have climbs, and a body that only zeroes its vertical velocity on
 	# the floor launches off every crest. Snapping keeps it on the surface.
@@ -241,112 +182,39 @@ func _ready() -> void:
 ## knowing what the sky is doing, and a level can just as well come from a
 ## tunnel or from a player pressing a button later.
 func set_headlights(level: float) -> void:
-	level = clampf(level, 0.0, 1.0)
-	for light in _headlights:
-		light.light_energy = headlight_energy * level
-		# A light at zero energy still costs something to render, so the beams
-		# are switched off outright rather than merely turned down.
-		light.visible = level > 0.01
-	if _lamp_material:
-		_lamp_material.emission_energy_multiplier = lamp_glow * level
-
-
-## A beam either side of the nose. They are built here rather than placed in
-## the scene so the offsets sit next to the measurement they came from, and so
-## both cars cannot drift apart.
-##
-## No shadows: two cars, two beams each, in two split-screen views is eight
-## shadow-casting spot lights for something that is meant to be decoration.
-func _build_headlights() -> void:
-	for side in [-1.0, 1.0]:
-		var light := SpotLight3D.new()
-		light.position = Vector3(
-			headlight_offset.x * side, headlight_offset.y, headlight_offset.z)
-		light.rotation = Vector3(deg_to_rad(-headlight_dip), 0.0, 0.0)
-		light.spot_angle = headlight_angle
-		light.spot_range = headlight_range
-		light.spot_attenuation = 0.9
-		light.spot_angle_attenuation = 0.6
-		light.light_color = headlight_color
-		light.shadow_enabled = false
-		light.visible = false
-		# On the shell, not on the body: headlights that stayed level while
-		# the car pitched would light the sky on a ramp and the road at their
-		# feet on the way down.
-		_body.add_child(light)
-		_headlights.append(light)
+	_shell.set_headlights(level)
 
 
 ## Where the driver's eye sits, in world space.
 func eye_transform() -> Transform3D:
-	return Transform3D(_body.global_transform.basis, _body.global_transform * eye_point)
+	return _shell.eye_transform()
 
 
-## Give this car its own copy of the materials it needs changed.
+## Whether this car has an interior for the first person camera to sit in.
 ##
-## The imported materials are shared between both car instances, so editing
-## one in place would change the other. Three need changing: the paint, which
-## carries the player's colour; the glass, which the model exports fully opaque
-## and which therefore walls the driver in; and the lamp panels, which are
-## authored permanently emissive and have to start off. Everything else is left
-## as authored, including the double-sided faces - this car has a real interior,
-## so the shell reading solid from within is what encloses the cockpit.
-func _prepare_materials() -> void:
-	var copies: Dictionary = {}
-	for node in find_children("*", "MeshInstance3D", true, false):
-		var mesh_instance := node as MeshInstance3D
-		for surface in mesh_instance.get_surface_override_material_count():
-			var source := mesh_instance.get_active_material(surface) as StandardMaterial3D
-			if source == null:
-				continue
-			var key := source.resource_name
-			if key != PAINT_MATERIAL and key != GLASS_MATERIAL \
-					and key != LAMP_MATERIAL:
-				continue
-			if not copies.has(key):
-				var copy := source.duplicate() as StandardMaterial3D
-				if key == PAINT_MATERIAL:
-					copy.albedo_color = body_color
-					_paint_material = copy
-				elif key == LAMP_MATERIAL:
-					# Authored permanently lit; off until switched on.
-					copy.emission_energy_multiplier = 0.0
-					_lamp_material = copy
-				else:
-					copy.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-					copy.albedo_color.a = glass_opacity
-					# Glass casting a solid shadow would put a dark slab over
-					# the cabin from inside.
-					copy.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-				copies[key] = copy
-			mesh_instance.set_surface_override_material(surface, copies[key])
-	if not copies.has(PAINT_MATERIAL):
-		push_warning("Car: no '%s' material found to paint" % PAINT_MATERIAL)
-	if _lamp_material == null:
-		push_warning("Car: no '%s' material, so the headlights cannot light up"
-				% LAMP_MATERIAL)
+## A model a player brought from outside has no cabin and no windows, so a
+## camera put inside one is a camera looking at the back of a solid shell.
+## The view is refused rather than handed over broken.
+func has_cockpit() -> bool:
+	return _shell.has_cockpit()
+
+
+## Put a different model on the car.
+##
+## Nothing about how it drives changes. The collision box is a sibling of the
+## shell rather than a child of it, so a car wearing somebody else's model
+## still has exactly the same corners in exactly the same places, and still
+## drives on the tuning above rather than on whatever it now looks like.
+func set_model(model: Node3D, stock := false) -> void:
+	_shell.set_model(model, stock)
 
 
 ## Paint the car a different colour, after it has already been built. The
-## material is the car's own copy rather than the one the model shipped with,
+## material is this car's own copy rather than the one the model shipped with,
 ## so this repaints one car and not both.
 func repaint(colour: Color) -> void:
 	body_color = colour
-	if _paint_material != null:
-		_paint_material.albedo_color = colour
-
-
-## Found by name rather than by path: the glTF importer decides how deeply it
-## nests the model, and that should not break the wheels.
-func _collect_wheels(names: Array[String]) -> Array[Node3D]:
-	var found: Array[Node3D] = []
-	for name in names:
-		var wheel := find_child(name, true, false) as Node3D
-		if wheel:
-			found.append(wheel)
-		else:
-			push_warning("Car: wheel '%s' not found in the model" % name)
-	return found
+	_shell.repaint(colour)
 
 
 func _physics_process(delta: float) -> void:
@@ -371,7 +239,7 @@ func _physics_process(delta: float) -> void:
 	_apply_steering(steer, delta)
 	_drive(delta)
 	_tilt(delta)
-	_animate_wheels(steer, delta)
+	_shell.animate_wheels(steer, _speed, wheel_radius, delta)
 
 
 ## Stop dead and forget any slipstream. Used when the track is replaced.
@@ -384,8 +252,8 @@ func reset_motion() -> void:
 	_climb = 0.0
 	_last_height = global_position.y
 	_pitch = 0.0
-	if _body != null:
-		_body.rotation.x = 0.0
+	if _shell != null:
+		_shell.rotation.x = 0.0
 	velocity = Vector3.ZERO
 
 
@@ -605,32 +473,4 @@ func _tilt(delta: float) -> void:
 	var limit := deg_to_rad(max_pitch)
 	target = clampf(target, -limit, limit)
 	_pitch = lerpf(_pitch, target, 1.0 - exp(-pitch_ease * delta))
-	_body.rotation.x = _pitch
-
-
-## Purely cosmetic: turn the front wheels and roll all four.
-func _animate_wheels(steer: float, delta: float) -> void:
-	_wheel_steer = move_toward(
-		_wheel_steer, steer * max_wheel_steer, wheel_steer_speed * delta
-	)
-	# wrap so the angle cannot grow without bound over a long race
-	_wheel_roll = fposmod(_wheel_roll - _speed * delta / wheel_radius, TAU)
-
-	for i in _front_wheels.size():
-		_set_wheel(_front_wheels[i], _wheel_rest[i], _wheel_steer)
-	for i in _rear_wheels.size():
-		_set_wheel(_rear_wheels[i], _wheel_rest[_front_wheels.size() + i], 0.0)
-
-	if _steering_wheel:
-		# The wheel's disc lies in its own XZ plane, so local Y is the column
-		# it turns about. Post-multiplying keeps the model's column tilt.
-		_steering_wheel.transform.basis = _wheel_rest_basis * Basis(
-			Vector3.UP, _wheel_steer * wheel_turn_ratio)
-
-
-## Roll about the wheel's own lateral axis, then yaw it for steering.
-func _set_wheel(wheel: Node3D, rest: Basis, steer_angle: float) -> void:
-	var spin := Basis.from_euler(
-		Vector3(_wheel_roll, steer_angle, 0.0), EULER_ORDER_YXZ
-	)
-	wheel.transform.basis = rest * spin
+	_shell.rotation.x = _pitch

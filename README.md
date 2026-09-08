@@ -114,6 +114,31 @@ authored, including the double-sided faces: with a real interior, the shell
 reading solid from within is what encloses the cockpit rather than leaving the
 first person view open to the sky.
 
+### The shell
+
+Everything about a car that is looked at rather than driven on - the model, its
+paint, its wheels, its headlights and the point the driver's eye sits at - lives
+in `scripts/car_shell.gd`, on the `Body` node under the car. What is left in
+`car.gd` is the speed, the steering and the box the car actually collides with.
+
+The split is there so that a player can one day bring their own model.
+`Car.set_model()` swaps what is in the shell and touches nothing else: the
+collision box is a *sibling* of the shell rather than a child of it, so a car
+wearing somebody else's model has exactly the same corners in exactly the same
+places and drives on exactly the same tuning. That is not an argument, it is a
+check - `tools/checks/car_shell.gd` swaps a bare box onto a car in the middle of
+a race and then measures the box, the tuning and the metres it covers
+afterwards.
+
+The shell expects nothing of a model. One with no wheels simply has no wheels
+turning. One with no `Paint` material has its biggest panel painted instead, the
+colour multiplying whatever texture it arrived with, so a textured model keeps
+its texture and wears the player's colour over it. One with no materials at all
+is given one, because two cars nobody can tell apart is not a split screen
+anybody can read. And its headlights are placed off the shape itself - out to
+29% of its width, 47% up its height, on its front face - rather than off the
+numbers measured from the JDM model.
+
 ## Views
 
 Each player can switch between the chase camera and the driver's eye - C for
@@ -121,6 +146,12 @@ player one, L for player two. The first person camera is bolted rigidly to the
 car rather than smoothed: lagging a first person view behind the steering reads
 as the whole world sliding about. The model's own steering wheel turns with the
 front wheels, three times as far, about the column its disc sits on.
+
+A car brought in from outside has no interior, so it does not get the first
+person view at all: the camera would be sitting in the middle of a solid shell
+looking at the back of it. `ChaseCamera.set_inside` refuses it, rather than the
+key being disabled where it is read - the race and the solo run press the same
+button, and neither should have to remember.
 
 ## Split screen
 
