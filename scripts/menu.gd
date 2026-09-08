@@ -1,8 +1,9 @@
 class_name Menu
 extends Control
 
-## The title screen: the name of the game, a button to start it and a button
-## to change the settings, over the game itself.
+## The title screen: the name of the game, a button to start it, a button to
+## pick what to drive and a button to change the settings, over the game
+## itself.
 ##
 ## Play does not drop straight into a race. It opens one page that asks two
 ## things in order, without ever becoming a second page.
@@ -47,6 +48,14 @@ extends Control
 ##
 ## What chaos actually does lives in `Chaos`; all that is settled here is
 ## which of the two the players picked.
+##
+## The garage is on this screen as well as on the pause menu, and it is the
+## same screen either way: it writes the choice to `GameSettings` and whatever
+## is watching dresses from it. Here what is watching is the backdrop, so the
+## two cars parked under the title change as a car is picked - which is the
+## whole premise of the screen, and it happens to be truer on the title than
+## in a race, where a player is looking at the back of their own car and can
+## see the other one only in the mirror of the split.
 ##
 ## The backdrop is a real instance of the race scene in attract mode - the same
 ## generated course, scenery and day/night cycle the players are about to
@@ -112,6 +121,8 @@ extends Control
 
 @onready var _title: Label = $TitleSlot/Title
 @onready var _play: Button = $Play
+@onready var _garage_button: Button = $Garage
+@onready var _garage_screen: GarageMenu = $GarageScreen
 @onready var _settings_button: Button = $Settings
 @onready var _settings_screen: SettingsMenu = $SettingsScreen
 @onready var _account_button: Button = $Account
@@ -147,6 +158,8 @@ var _modes_open := false
 
 func _ready() -> void:
 	_play.pressed.connect(_on_play_pressed)
+	_garage_button.pressed.connect(_on_garage_pressed)
+	_garage_screen.closed.connect(_on_garage_closed)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	_settings_screen.closed.connect(_on_settings_closed)
 	_alone_button.pressed.connect(_choose_players.bind(true))
@@ -227,6 +240,18 @@ func _turn_the_backdrop() -> void:
 	_orbit.global_position = centre + Vector3(
 		sin(angle) * orbit_radius, orbit_height, cos(angle) * orbit_radius)
 	_orbit.look_at(centre + Vector3.UP * look_height, Vector3.UP)
+
+
+## As many columns as the last race was played with. Nobody has said how many
+## are playing yet on this screen - that question is asked inside Play - so the
+## garage asks the same thing every other screen asks when it needs to know:
+## how the game was left.
+func _on_garage_pressed() -> void:
+	_garage_screen.open(1 if GameSettings.solo else 2)
+
+
+func _on_garage_closed() -> void:
+	_garage_button.grab_focus()
 
 
 ## Play opens the mode choice over the title rather than starting a race, so
@@ -571,12 +596,12 @@ func _close_mode_choice() -> void:
 	_play.grab_focus()
 
 
-## Escape backs out of whichever page is open. The settings screen handles its
-## own, and it lies over these, so it gets first refusal on the key.
+## Escape backs out of whichever page is open. The screens that lie over these
+## handle their own, so they get first refusal on the key.
 func _input(event: InputEvent) -> void:
 	if _settings_screen.visible or _account_screen.visible:
 		return
-	if _boards_screen.visible:
+	if _boards_screen.visible or _garage_screen.visible:
 		return
 	if not event.is_action_pressed("ui_cancel"):
 		return

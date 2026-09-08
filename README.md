@@ -38,6 +38,13 @@ the title and a Play button that swaps in `main.tscn`. The button takes
 keyboard focus on its own, so Enter or Space starts the race - both players are
 already on one keyboard and neither should have to reach for the mouse.
 
+PLAY, GARAGE, SETTINGS and, where there is a server, ACCOUNT sit under the
+title. The garage is on this screen as well as on the pause menu, and it is the
+same screen either way - it writes the choice to `GameSettings` and whatever is
+watching dresses from it. Here what is watching is the backdrop, so the two
+cars parked under the title change as a car is picked, which makes the title
+screen the best place in the game to look at one.
+
 Behind the title is not a picture but the game itself: a real instance of
 `main.tscn` in **attract mode**, with its own generated course, scenery and
 day/night cycle, and the two cars parked on the grid. The camera turns slowly
@@ -241,8 +248,14 @@ own garage somewhere else; see `Sandbox`.
 Nothing about it needs an account, a network or a `backend.cfg`. A car somebody
 adds is theirs, on their machine, and stays there until they say otherwise.
 
-The garage screen sits on the pause menu beside PAINT and is shaped like it: a
-column of tiles per player, the stock car first. Pressing a tile puts that
+The garage screen sits on the pause menu beside PAINT, and on the title screen
+under PLAY, and is shaped like the paint screen: a
+row of tiles per player, player one above and player two below. Each row is
+split in two - OFFICIAL on the left, the cars the game came with, and
+UNOFFICIAL on the right, the ones anybody added, whether off this machine or
+off the server. A player who has added nothing sees an empty right half saying
+so rather than one list where a car that arrived over the network sits
+indistinguishable from the one that shipped. Pressing a tile puts that
 player in that car immediately, because the race is right there behind the panel
 and a car you can see on the road is the only way to find out whether it is the
 one you wanted. ADD A CAR, TURN and REMOVE act on whichever tile the cursor is
