@@ -135,12 +135,55 @@ func add(path: String) -> Dictionary:
 	# strictly needed on the one action a person is waiting on anyway.
 	(read.model as Node3D).queue_free()
 
-	var bytes := FileAccess.get_file_as_bytes(source)
-	var id := _id_for(bytes)
+	# Named after what the player actually picked, not after the .glb a
+	# .blend was turned into on the way in - "converted.glb" tells nobody
+	# anything.
+	return _keep(FileAccess.get_file_as_bytes(source),
+			_name_from(path), path.get_file(), int(read.vertices))
+
+
+## Take a model somebody else shared and put it in this garage.
+##
+## It goes through exactly the checks a file off the disk goes through, because
+## a model that arrived over the network is a model written by a stranger and
+## is the last thing that should be trusted further than one the player picked
+## themselves.
+func adopt(bytes: PackedByteArray, called: String) -> Dictionary:
+	var read := CarImport.from_bytes(bytes)
+	if not read.ok:
+		return {"ok": false, "id": "", "error": str(read.error)}
+	(read.model as Node3D).queue_free()
+	return _keep(bytes, called.substr(0, NAME_LIMIT), "shared",
+			int(read.vertices))
+
+
+## The model itself, as it was written down. What gets uploaded when a player
+## shares a car, and what its id is the hash of.
+func bytes_of(id: String) -> PackedByteArray:
+	if not has(id):
+		return PackedByteArray()
+	return FileAccess.get_file_as_bytes(_file(id, MODEL))
+
+
+func vertices_in(id: String) -> int:
+	var details := _details(id)
+	return int(details.get("vertices", 0)) if not details.is_empty() else 0
+
+
+## Write a checked model down under its own name, or answer with the car that
+## is already there.
+##
+## Both ways in end here - a file the player picked and a model somebody else
+## shared - so there is one place that decides what a car on this machine looks
+## like, and no way for one of them to write a folder the other cannot read.
+func _keep(bytes: PackedByteArray, called: String, came_from: String,
+		vertices: int) -> Dictionary:
+	var id := id_for(bytes)
 	if has(id):
-		# The same model, added again. Nothing to write and nothing wrong -
-		# the player gets the car they already had, which is the car they
-		# asked for.
+		# The same model again. Nothing to write and nothing wrong - the
+		# player gets the car they already had, which is the car they asked
+		# for. It is also what makes downloading a car somebody shared from
+		# a file you already added a no-op rather than a duplicate.
 		return {"ok": true, "id": id, "error": ""}
 
 	var folder := Sandbox.folder("%s/%s" % [CARS, id])
@@ -151,14 +194,11 @@ func add(path: String) -> Dictionary:
 	file.close()
 
 	var details := ConfigFile.new()
-	details.set_value("car", "name", _name_from(path))
+	details.set_value("car", "name", called)
 	details.set_value("car", "added_at", Time.get_unix_time_from_system())
 	details.set_value("car", "quarter_turns", 0)
-	details.set_value("car", "vertices", read.vertices)
-	# Named after what the player actually picked, not after the .glb it
-	# was turned into on the way in - "converted.glb" tells nobody
-	# anything.
-	details.set_value("car", "came_from", path.get_file())
+	details.set_value("car", "vertices", vertices)
+	details.set_value("car", "came_from", came_from)
 	details.save("%s/%s" % [folder, DETAILS])
 
 	changed.emit()
@@ -258,7 +298,10 @@ func dress(car: Car, id: String) -> void:
 
 ## The id of a model is the model itself, shortened. Two players who add the
 ## same file have the same car, and a car keeps its id wherever it travels.
-func _id_for(bytes: PackedByteArray) -> String:
+##
+## Public because it is also how a car that came down off the server is
+## weighed against the id it was asked for.
+func id_for(bytes: PackedByteArray) -> String:
 	var hashing := HashingContext.new()
 	hashing.start(HashingContext.HASH_SHA256)
 	hashing.update(bytes)

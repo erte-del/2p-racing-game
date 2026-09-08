@@ -239,7 +239,7 @@ will carry the same name on every machine it ever reaches. A test run keeps its
 own garage somewhere else; see `Sandbox`.
 
 Nothing about it needs an account, a network or a `backend.cfg`. A car somebody
-adds is theirs, on their machine, and stays there.
+adds is theirs, on their machine, and stays there until they say otherwise.
 
 The garage screen sits on the pause menu beside PAINT and is shaped like it: a
 column of tiles per player, the stock car first. Pressing a tile puts that
@@ -261,6 +261,56 @@ The pictures are drawn once, when a car is first seen, into a world of their own
 so the course and the sky are not in the shot, and kept beside the model. A
 garage of a dozen cars should not be a dozen models rendered every time the
 screen opens.
+
+### Sharing
+
+A private car has no row, no object and no presence on the server at all.
+Nothing is uploaded until a player presses SHARE, which is why there is no
+`shared` column in `backend/schema.sql` - being in the `cars` table *is* being
+shared. That is a much easier promise to keep than a boolean somebody has to
+remember to check, and it is why unsharing takes the car back down rather than
+hiding it.
+
+`scripts/car_library.gd` is the layer over `Backend`, exactly as `Leaderboard`
+is over `TrackTimes`: the garage is the truth the game is played against and
+works with the network unplugged, and this sends a car up, brings other people's
+down, and asks nothing of the rest of the game in return. Browsing works signed
+out - somebody deciding whether an account is worth making should be able to see
+what they would be joining - and sharing is a thing done as somebody.
+
+The order of the two requests is the whole safety of it. Going up, the model
+goes first and the row second, because the storage policy makes an object
+readable only when a row points at it: a half-finished share is a private car
+rather than a leak. Coming down, the row goes first, so the car stops being
+shared on the first request rather than the second. If the row fails to insert,
+the orphaned model is deleted rather than left sitting in somebody's project.
+
+**A model that comes back down is a model written by a stranger.** It goes
+through `Garage.adopt`, which puts it through the same `CarImport` reader a file
+off the disk goes through - and before any of that, its bytes are weighed
+against the id they were asked for. The id is the SHA-256 of the model, so a
+server handing back something else is a server handing back a different car, and
+that is the one check which says the bytes on the wire are what the list
+described.
+
+Objects live at `<owner>/<id>.glb` and the storage policies are what hold that
+shape: a player may only write inside the folder named after them, so one cannot
+write over another's model and leave the row pointing at it. There is
+deliberately no update policy on either the object or the model's bytes - a car
+is named by the hash of itself, so changing the bytes makes a different car, and
+overwriting one in place would leave everybody who downloaded it holding
+something the id no longer describes.
+
+Two players who independently add the same file hold the same car, so the second
+to share it is told it is already shared rather than making a duplicate. Whether
+it was them or somebody else who put it up is not something a 409 says, and
+guessing would mean telling half of them the wrong thing.
+
+Requests made from the garage keep running while the game is paused. An
+`HTTPRequest` polls in `_process` and a paused tree stops that, so a request
+would set off and never finish. It cost nothing while every screen that asked
+the server anything was a menu screen, and everything once the garage started
+sitting over a stopped race.
 
 ## Views
 

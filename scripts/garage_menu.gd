@@ -45,9 +45,15 @@ const TILE := Vector2(212, 172)
 @onready var _remove_button: Button = $Page/Panel/Margin/Box/Actions/Remove
 @onready var _message: Label = $Page/Panel/Margin/Box/Message
 @onready var _back_button: Button = $Page/Panel/Margin/Box/Back
+@onready var _share_button: Button = $Page/Panel/Margin/Box/Actions/Share
+@onready var _browse_button: Button = $Page/Panel/Margin/Box/Actions/Browse
 @onready var _find_button: Button = $Page/Panel/Margin/Box/Actions/Find
 @onready var _picker: FileDialog = $Picker
 @onready var _finder: FileDialog = $Finder
+@onready var _shared_page: Control = $Shared
+@onready var _shared_list: VBoxContainer = $Shared/Page/Panel/Margin/Box/Scroll/List
+@onready var _shared_message: Label = $Shared/Page/Panel/Margin/Box/Message
+@onready var _shared_back: Button = $Shared/Page/Panel/Margin/Box/Back
 
 ## How many cars are on the road: one column of tiles, or two.
 var _players := 1
@@ -81,6 +87,13 @@ func _ready() -> void:
 	_finder.title = "Where is Blender?"
 	_finder.file_selected.connect(_on_blender_picked)
 	_find_button.pressed.connect(_on_find_pressed)
+	_share_button.pressed.connect(_on_share_pressed)
+	_browse_button.pressed.connect(_on_browse_pressed)
+	_shared_back.pressed.connect(_close_shared)
+	# The list arrives whenever it arrives, and the Share button reads
+	# differently once it has - so the screen follows it rather than
+	# waiting on it.
+	CarLibrary.catalogue_arrived.connect(_on_catalogue_arrived)
 	hide()
 
 
@@ -96,7 +109,17 @@ func open(players: int) -> void:
 	# and been told there is no Blender, so the button is not standing
 	# there on a machine where it would never be pressed.
 	_find_button.visible = not Blender.here()
+	# A build with no server in it does not grow buttons that cannot do
+	# anything, the same as the Account and Leaderboard buttons.
+	_share_button.visible = CarLibrary.available()
+	_browse_button.visible = CarLibrary.available()
+	_shared_page.hide()
 	_rebuild()
+	# Asked for in the background. Nothing on this screen waits on it;
+	# what it changes is whether Share reads SHARE or UNSHARE, and that
+	# is put right when the answer lands.
+	if CarLibrary.available():
+		CarLibrary.catalogue()
 	show()
 	_focus_chosen(0)
 	_draw_what_has_no_picture()
@@ -115,9 +138,13 @@ func close() -> void:
 func _input(event: InputEvent) -> void:
 	if not visible or not event.is_action_pressed("ui_cancel"):
 		return
-	if _picker.visible:
+	if _picker.visible or _finder.visible:
 		return
 	get_viewport().set_input_as_handled()
+	# One step at a time: off the shared cars, then off the garage.
+	if _shared_page.visible:
+		_close_shared()
+		return
 	close()
 
 
@@ -192,6 +219,16 @@ func _show_what_can_be_done() -> void:
 	var why := "" if mine else "The car the game came with cannot be changed."
 	_turn_button.tooltip_text = why
 	_remove_button.tooltip_text = why
+	if not _share_button.visible:
+		return
+	# Sharing is a thing done as somebody, and taking a car back down is
+	# a thing only the person who put it up may do. The button says which
+	# of the two it currently is rather than trying both and failing.
+	var ours := mine and CarLibrary.is_mine(_under_the_cursor)
+	_share_button.text = "UNSHARE" if ours else "SHARE"
+	_share_button.disabled = not mine or not CarLibrary.can_share()
+	_share_button.tooltip_text = ("" if CarLibrary.can_share()
+			else "Sign in from the title screen to share a car.") if mine else why
 
 
 ## The chosen tile is marked with a thick pale border rather than with a tick,
@@ -240,6 +277,127 @@ func _on_file_picked(path: String) -> void:
 	_draw_what_has_no_picture()
 
 
+## Put this car up for everybody, or take it back down.
+##
+## Which of the two it is comes from the list rather than from a flag kept
+## here: the server is the one that knows what is shared, and a button reading
+## off anything else would be wrong the moment somebody unshared a car on
+## another machine.
+func _on_share_pressed() -> void:
+	var id := _under_the_cursor
+	if not Garage.has(id):
+		return
+	var taking_down := CarLibrary.is_mine(id)
+	_say("Taking %s down…" % Garage.name_of(id) if taking_down
+		else "Sharing %s…" % Garage.name_of(id))
+	_working(true)
+	# Written out rather than as one awaited ternary: the branches of a
+	# ternary are called before the await ever sees them.
+	var answer: Dictionary
+	if taking_down:
+		answer = await CarLibrary.unpublish(id)
+	else:
+		answer = await CarLibrary.publish(id)
+	_working(false)
+	if not answer.ok:
+		_say(str(answer.error))
+		return
+	_say("%s is no longer shared." % Garage.name_of(id) if taking_down
+		else "%s is shared. Anybody can drive it now." % Garage.name_of(id))
+	# The list in hand is now the list as it was before this happened.
+	await CarLibrary.catalogue(true)
+	_show_what_can_be_done()
+
+
+func _on_browse_pressed() -> void:
+	_shared_page.show()
+	_say_on_the_list("Looking…")
+	_shared_back.grab_focus()
+	_fill_shared(await CarLibrary.catalogue(true))
+
+
+func _close_shared() -> void:
+	_shared_page.hide()
+	_browse_button.grab_focus()
+
+
+## Anything that arrives while the page is up goes onto it. Nothing on the page
+## waits for this; it draws whatever it has and is redrawn when there is more.
+func _on_catalogue_arrived(rows: Array) -> void:
+	if _shared_page.visible:
+		_fill_shared(rows)
+	_show_what_can_be_done()
+
+
+## One row per shared car: what it is, who put it up, and how big it is.
+##
+## A car this machine already has is shown as had rather than hidden. Seeing
+## your own car on the list is how a player knows sharing worked, and a list
+## that quietly dropped everything you own would be a list that got shorter the
+## more you used it.
+func _fill_shared(rows: Array) -> void:
+	for old in _shared_list.get_children():
+		_shared_list.remove_child(old)
+		old.queue_free()
+
+	if rows.is_empty():
+		if not CarLibrary.available():
+			_say_on_the_list("This copy of the game has no server set up.")
+		elif not CarLibrary.answered():
+			_say_on_the_list("The server did not answer. The rest of the game "
+				+ "carries on without it.")
+		else:
+			_say_on_the_list("Nobody has shared a car yet.")
+		return
+	_say_on_the_list("")
+
+	for row: Dictionary in rows:
+		var id := str(row["id"])
+		var here: bool = bool(row["here"])
+		var line := Button.new()
+		line.custom_minimum_size = Vector2(580, 44)
+		line.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		line.text = "%s      by %s      %s      %s" % [
+			str(row["name"]), str(row["by"]), _thousands(int(row["vertices"])),
+			"IN YOUR GARAGE" if here else "GET",
+		]
+		line.disabled = here
+		line.tooltip_text = ("You already have this one."
+			if here else "Bring it down into your garage.")
+		if not here:
+			line.pressed.connect(_on_get_pressed.bind(id))
+		_shared_list.add_child(line)
+
+
+## Bring somebody else's car down. It arrives as bytes and goes through the
+## same reader a file off the disk goes through, because a model that came over
+## the network is the last thing that should be trusted further than one the
+## player picked themselves.
+func _on_get_pressed(id: String) -> void:
+	_say_on_the_list("Fetching…")
+	var answer: Dictionary = await CarLibrary.fetch(id)
+	if not answer.ok:
+		_say_on_the_list(str(answer.error))
+		return
+	_say_on_the_list("It is in your garage.")
+	_rebuild()
+	_fill_shared(await CarLibrary.catalogue())
+	_draw_what_has_no_picture()
+
+
+## Vertex counts read better round than exact - nobody is comparing them, they
+## are deciding whether a car is going to cost them a frame rate.
+func _thousands(count: int) -> String:
+	if count < 1000:
+		return "%d verts" % count
+	return "%dk verts" % roundi(count / 1000.0)
+
+
+func _say_on_the_list(what: String) -> void:
+	_shared_message.text = what
+	_shared_message.visible = not what.is_empty()
+
+
 ## A player who has Blender somewhere the game did not think to look can say
 ## where it is. Checked by name before it is written down: running an arbitrary
 ## file somebody pointed at to find out what it is would be the whole problem.
@@ -263,7 +421,10 @@ func _on_blender_picked(path: String) -> void:
 func _working(busy: bool) -> void:
 	_add_button.disabled = busy
 	_find_button.disabled = busy
+	_browse_button.disabled = busy
 	_back_button.disabled = busy
+	if busy:
+		_share_button.disabled = true
 	if busy:
 		_turn_button.disabled = true
 		_remove_button.disabled = true

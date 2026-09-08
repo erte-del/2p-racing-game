@@ -68,6 +68,36 @@ func _init() -> void:
 		await process_frame
 	await _shoot(out, "on_the_road")
 
+# And once more with a server in the picture, so the sharing half of the
+	# screen is in the shot. The address is deliberately one that cannot
+	# resolve: what is wanted is a build that *has* a backend, not a build
+	# that can reach one, and a check must not be able to touch anything
+	# real. Every request made against it fails the way a request made on a
+	# train fails, which is a path worth photographing too.
+	var backend: Node = root.get_node(^"/root/Backend")
+	backend.url = "https://nowhere.invalid"
+	backend.anon_key = "not-a-key"
+	pause.open("ENDLESS COURSE", "NEXT COURSE")
+	screen.open(2)
+	for i in 30:
+		await process_frame
+	await _shoot(out, "garage_with_a_server")
+
+	screen._on_browse_pressed()
+	# Waited out rather than counted out. The request has to actually
+	# fail before the page says anything worth photographing, and how
+	# long a name that cannot resolve takes to not resolve is not
+	# something to guess at.
+	var message: Label = screen.get_node(
+			"Shared/Page/Panel/Margin/Box/Message")
+	for i in 900:
+		await process_frame
+		if message.text != "Looking…":
+			break
+	await _shoot(out, "shared_cars")
+	screen.close()
+	pause.close()
+
 	for id: String in ids:
 		garage.remove(id)
 	print("wrote three shots to %s" % out)

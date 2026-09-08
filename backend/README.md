@@ -58,6 +58,26 @@ name, and a key that belongs to you.
 
 That is the whole setup. Run the game and the Account button appears.
 
+## What the schema builds
+
+Three tables and a bucket. `racers` is an account with a name on it, `times` is
+one row per racer per version of a track, and `cars` is the models people have
+chosen to share, with the models themselves in a private `cars` bucket.
+
+Pasting `schema.sql` in again is safe: everything in it is `if not exists`,
+`create or replace` or `drop policy if exists` first, so it is the file you
+re-run rather than a migration you have to track.
+
+The bucket is private on purpose. In a public bucket an object is readable by
+URL the moment it is written, which would make a car shared a second before its
+row said so and possibly a while after the row was deleted. Being private ties
+readability to a policy, and that policy ties it to the row - so the table stays
+the one place that decides what is shared.
+
+Nothing is uploaded until a player shares a car. A car somebody keeps to
+themselves never reaches your project at all, so the storage it uses is the
+storage of things people deliberately put up.
+
 ## Sending your own email
 
 Everything above works on Supabase's built-in email sender, and that sender is

@@ -5,8 +5,8 @@ extends Node
 ## Everything that talks to the server goes through here, so there is exactly
 ## one place that knows the address, holds the signed-in player's token and
 ## decides what to do when the network is not there. What sits on top of this
-## - `Leaderboard` - is written as if the server always answers, because this
-## is where it is made true.
+## - `Leaderboard`, and `CarLibrary` - is written as if the server always
+## answers, because this is where it is made true.
 ##
 ## The rule the whole thing is built on is that nothing here may ever stop the
 ## game. Every call can be awaited, every call comes back with something even
@@ -40,6 +40,11 @@ const REFRESH_MARGIN := 60.0
 ## How long any one request may take before we stop waiting on it. Short
 ## enough that a dead network is a pause rather than a hang.
 const TIMEOUT := 10.0
+
+## And how long one carrying a file may take. A model is megabytes rather than
+## a row, and a player on a slow line should not be told their car failed to
+## upload because it was taking as long as a car takes.
+const FILE_TIMEOUT := 120.0
 
 ## Emitted when a player signs in or out, so a screen showing who they are can
 ## follow it without asking every frame.
@@ -189,6 +194,84 @@ func rest(method: int, path: String, body: Variant = null,
 	return await _call(method, "/rest/v1" + path, body, true, prefer)
 
 
+## Put a file in a bucket. `path` is everything after the bucket name.
+##
+## Storage is not the database and does not go through `rest`: what travels is
+## the file itself rather than a row, so nothing is stringified on the way out
+## and nothing is parsed on the way back.
+func upload(bucket: String, path: String, bytes: PackedByteArray,
+		kind: String) -> Dictionary:
+	if not configured():
+		return _problem("No server.")
+	return await _send_bytes(HTTPClient.METHOD_POST,
+			"/storage/v1/object/%s/%s" % [bucket, path], bytes, kind)
+
+
+## Fetch a file out of a bucket, as bytes.
+##
+## Read as the signed-in player where there is one and as nobody where there is
+## not, the same as everything else here - which is what lets somebody look at
+## what other people have shared before deciding an account is worth making.
+func download(bucket: String, path: String) -> Dictionary:
+	if not configured():
+		return _problem("No server.")
+	return await _send_bytes(HTTPClient.METHOD_GET,
+			"/storage/v1/object/%s/%s" % [bucket, path], PackedByteArray(), "")
+
+
+## Take a file back out of a bucket.
+func erase(bucket: String, path: String) -> Dictionary:
+	if not configured():
+		return _problem("No server.")
+	return await _send_bytes(HTTPClient.METHOD_DELETE,
+			"/storage/v1/object/%s/%s" % [bucket, path], PackedByteArray(), "")
+
+
+## The same request as `_call`, carrying bytes instead of a row.
+##
+## It is a second function rather than a flag on the first because almost
+## everything about it differs: what goes out is not JSON, what comes back is
+## not JSON, and the only interesting thing about the answer is the file. What
+## it does share is the token - a storage request is as much this player as any
+## other, and it is refreshed the same way before it is sent.
+func _send_bytes(method: int, path: String, bytes: PackedByteArray,
+		kind: String) -> Dictionary:
+	await _fresh_token()
+
+	var headers := PackedStringArray(["apikey: " + anon_key])
+	if not kind.is_empty():
+		headers.append("Content-Type: " + kind)
+	if not _access_token.is_empty():
+		headers.append("Authorization: Bearer " + _access_token)
+	else:
+		headers.append("Authorization: Bearer " + anon_key)
+
+	var http := HTTPRequest.new()
+	# A model is megabytes rather than a row, so it gets longer than the ten
+	# seconds a request for a board is allowed.
+	http.timeout = FILE_TIMEOUT
+	_keep_running(http)
+
+	var started := http.request_raw(url + path, headers, method, bytes)
+	if started != OK:
+		http.queue_free()
+		return _problem("Could not reach the server.")
+
+	var result: Array = await http.request_completed
+	http.queue_free()
+
+	if int(result[0]) != HTTPRequest.RESULT_SUCCESS:
+		return _problem("No connection.")
+	var code := int(result[1])
+	var body: PackedByteArray = result[3]
+	if code < 200 or code >= 300:
+		# A storage error is JSON even though nothing else about this is, so
+		# the human half of it can still be dug out the usual way.
+		return _problem(_message_in(
+			JSON.parse_string(body.get_string_from_utf8()), code), code)
+	return _fine(body)
+
+
 ## The one request, and the only place in the game that touches HTTP.
 ##
 ## `authorised` asks for the player's token to be used if there is one. The
@@ -219,7 +302,7 @@ func _call(method: int, path: String, body: Variant, authorised: bool,
 	# One node per request rather than one shared node, so two things asking
 	# at once do not cancel each other - which is exactly what happens on the
 	# track screen, where a board is fetched while a time is being sent.
-	add_child(http)
+	_keep_running(http)
 
 	var payload := "" if body == null else JSON.stringify(body)
 	var started := http.request(url + path, headers, method, payload)
@@ -244,6 +327,22 @@ func _call(method: int, path: String, body: Variant, authorised: bool,
 	if code < 200 or code >= 300:
 		return _problem(_message_in(parsed, code), code)
 	return _fine(parsed if parsed != null else {})
+
+
+## Hang a request off this node in a way that survives the game being paused.
+##
+## An HTTPRequest polls in `_process`, and a paused tree stops that: the
+## request sets off and then simply never finishes. That cost nothing while
+## every screen that asked the server anything was a menu screen, and costs
+## everything now that the garage sits over a paused race - sharing a car,
+## taking one down and fetching one all happen with the tree stopped.
+##
+## Set on the request rather than on this node, because it is the request that
+## is not part of the game: whether a player has stopped the race has nothing
+## to do with whether some bytes already on the wire should keep moving.
+func _keep_running(http: HTTPRequest) -> void:
+	http.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(http)
 
 
 ## Make sure the token in hand will still be good when the request lands, and
