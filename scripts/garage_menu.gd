@@ -41,7 +41,7 @@ extends Control
 ## Emitted when the screen closes, so whoever opened it can take focus back.
 signal closed
 
-const TILE := Vector2(200, 134)
+const TILE := Vector2(236, 134)
 
 @onready var _player_boxes: Array[VBoxContainer] = [
 	$Page/Panel/Margin/Box/Rows/P1, $Page/Panel/Margin/Box/Rows/P2,
@@ -228,7 +228,7 @@ func _fill(grid: GridContainer, player: int, listing: Array,
 func _nothing_here(what: String) -> Label:
 	var label := Label.new()
 	label.text = what
-	label.custom_minimum_size = Vector2(TILE.x * 2, 0)
+	label.custom_minimum_size = Vector2(TILE.x * 3, 0)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_color_override("font_color", Color(0.72, 0.76, 0.86))
