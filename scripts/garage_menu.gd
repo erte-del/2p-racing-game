@@ -40,11 +40,15 @@ signal closed
 
 ## One tile: the portrait over the name. Two rows of players have to fit a
 ## window 720 tall with BACK still on it, and this is the height that allows.
-const TILE_SIZE := Vector2(200.0, 134.0)
-## How many tiles go across the unofficial half before it wraps. The official
-## half is one wide: it is one car today, and the day there is a second it goes
-## underneath.
-const UNOFFICIAL_COLUMNS := 2
+## The width is what there was room for once the height was settled: at 1280
+## wide a panel of narrower tiles left a third of the window dark on either
+## side, on a screen whose whole job is showing pictures of cars.
+const TILE_SIZE := Vector2(236.0, 134.0)
+## How many tiles go across the unofficial half before it wraps. Three, so the
+## cars a player has added sit on one line without a scroll bar until there are
+## more than three of them. The official half is one wide: it is one car today,
+## and the day there is a second it goes underneath.
+const UNOFFICIAL_COLUMNS := 3
 
 ## How wide a line on the page of shared cars is, always. A name is whatever
 ## somebody typed, and a line that grew to fit it would resize the whole page

@@ -150,6 +150,35 @@ func _report(screen: Control) -> void:
 	print("panel %s at %s, inside the window: %s"
 		% [panel.size, panel.position, window.encloses(panel.get_global_rect())])
 	print("BACK visible on the screen: %s" % window.encloses(back.get_global_rect()))
+
+	# Everything on the panel, not just the panel: a button or a label can hang
+	# out past the edge of a panel that is itself inside the window. What a
+	# scroll holds is left out, since being cut off is what a scroll is for.
+	var edge := panel.get_global_rect().grow(0.5)
+	var escaped := PackedStringArray()
+	for node in panel.find_children("*", "Control", true, false):
+		var control := node as Control
+		if not control.is_visible_in_tree() or _in_a_scroll(control, panel):
+			continue
+		var rect := control.get_global_rect()
+		if not edge.encloses(rect) or not window.encloses(rect):
+			escaped.append("%s at %s" % [control.name, rect])
+	print("anything over the edge of the panel or the window: %s"
+		% ("nothing" if escaped.is_empty() else ", ".join(escaped)))
+
+	var official: Control = screen.get("_official_grids")[0].get_parent().get_parent()
+	var unofficial: ScrollContainer = screen.get("_unofficial_scrolls")[0]
+	var whole := 0
+	var tiles: Array = screen.call("_tiles_of", 0)
+	for tile: Control in tiles:
+		var holder := official if tile.get_parent() == screen.get("_official_grids")[0] \
+			else unofficial
+		if holder.get_global_rect().grow(0.5).encloses(tile.get_global_rect()):
+			whole += 1
+	print("official scroll %s, unofficial scroll %s; %d of player one's %d tiles "
+		% [official.size, unofficial.size, whole, tiles.size()]
+		+ "are wholly on the screen without scrolling")
+
 	for player in 2:
 		if not screen.get("_player_rows")[player].visible:
 			continue
@@ -158,6 +187,15 @@ func _report(screen: Control) -> void:
 			line.append("%s%s%s" % [tile.text, " [held]" if tile.button_pressed else "",
 				"" if tile.icon != null else " (no picture)"])
 		print("P%d: %s" % [player + 1, ", ".join(line)])
+
+
+func _in_a_scroll(control: Control, top: Control) -> bool:
+	var at := control.get_parent()
+	while at != null and at != top:
+		if at is ScrollContainer:
+			return true
+		at = at.get_parent()
+	return false
 
 
 # --- three cars ---------------------------------------------------------

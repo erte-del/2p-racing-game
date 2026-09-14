@@ -280,7 +280,16 @@ to draw.
 Two rows of tiles, the buttons and BACK all have to fit a 720-tall window, and
 that is the whole budget the page is laid out to. The heading's two notes are
 one line, each half's heading and what it means are one line, and the tiles are
-200 by 134.
+134 tall.
+
+The width was never the problem, and at first it went unspent: tiles 200 wide,
+two across, made a panel 750 wide on a 1280 screen, with a third of the window
+dark on either side of a page whose whole job is showing pictures of cars. The
+unofficial half is three across now, in a 738 by 148 scroll, with tiles 236 wide
+and the official half beside it at 216 by 148. Three added cars sit on each
+player's row without a scroll bar - six on the screen at once across two
+players, where it used to be four and a scroll. The height is deliberately the
+same as it was, because the height was already all used.
 
 ADD A CAR, TURN and REMOVE all act on whichever tile the cursor or the keyboard
 is on. There is exactly one car being talked about on the screen at a time, so

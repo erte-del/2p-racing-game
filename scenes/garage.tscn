@@ -134,7 +134,7 @@ theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
 theme_override_font_sizes/font_size = 16
 
 [node name="Scroll" type="ScrollContainer" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial"]
-custom_minimum_size = Vector2(424, 148)
+custom_minimum_size = Vector2(738, 148)
 layout_mode = 2
 horizontal_scroll_mode = 0
 
@@ -146,7 +146,7 @@ size_flags_horizontal = 3
 layout_mode = 2
 theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 14
-columns = 2
+columns = 3
 
 [node name="Nothing" type="Label" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial/Scroll/List"]
 visible = false
@@ -230,7 +230,7 @@ theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
 theme_override_font_sizes/font_size = 16
 
 [node name="Scroll" type="ScrollContainer" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial"]
-custom_minimum_size = Vector2(424, 148)
+custom_minimum_size = Vector2(738, 148)
 layout_mode = 2
 horizontal_scroll_mode = 0
 
@@ -242,7 +242,7 @@ size_flags_horizontal = 3
 layout_mode = 2
 theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 14
-columns = 2
+columns = 3
 
 [node name="Nothing" type="Label" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial/Scroll/List"]
 visible = false
