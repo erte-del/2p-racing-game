@@ -132,6 +132,18 @@ layout_mode = 2
 text = "FIND BLENDER"
 theme_override_font_sizes/font_size = 22
 
+[node name="Share" type="Button" parent="Page/Panel/Margin/Box/Actions"]
+visible = false
+layout_mode = 2
+text = "SHARE"
+theme_override_font_sizes/font_size = 22
+
+[node name="Browse" type="Button" parent="Page/Panel/Margin/Box/Actions"]
+visible = false
+layout_mode = 2
+text = "BROWSE"
+theme_override_font_sizes/font_size = 22
+
 [node name="Status" type="Label" parent="Page/Panel/Margin/Box"]
 custom_minimum_size = Vector2(0, 26)
 layout_mode = 2

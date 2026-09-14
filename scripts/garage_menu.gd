@@ -21,6 +21,11 @@ extends Control
 ## the one thing here that takes long enough to notice, so the page says it is
 ## happening before it starts, and nothing on it can be pressed until it has
 ## finished.
+##
+## Where there is a server, a car can be shared and other people's cars
+## browsed. Neither button exists without one: a build with no `backend.cfg`
+## is a garage that works entirely on this machine, and a button that can only
+## ever say "no server" is a button that should not be there.
 
 ## Emitted when the screen closes, so whoever opened it can take focus back.
 signal closed
@@ -52,6 +57,8 @@ const RIGHT := Color(0.6, 0.9, 0.68)
 @onready var _turn_button: Button = $Page/Panel/Margin/Box/Actions/Turn
 @onready var _remove_button: Button = $Page/Panel/Margin/Box/Actions/Remove
 @onready var _find_blender_button: Button = $Page/Panel/Margin/Box/Actions/FindBlender
+@onready var _share_button: Button = $Page/Panel/Margin/Box/Actions/Share
+@onready var _browse_button: Button = $Page/Panel/Margin/Box/Actions/Browse
 @onready var _status: Label = $Page/Panel/Margin/Box/Status
 @onready var _back_button: Button = $Page/Panel/Margin/Box/Back
 
@@ -71,6 +78,18 @@ var _drawing := false
 var _draw_again := false
 var _pick_file: FileDialog
 var _pick_blender: FileDialog
+## True while a car is going up or coming down. Only sharing waits on it: the
+## rest of the garage is on this machine and has no reason to.
+var _sending := false
+
+## The page of other people's cars, which lies over this one.
+var _browse: Control
+var _shared_rows: VBoxContainer
+var _shared_note: Label
+var _browse_back: Button
+## Bumped every time the list is asked for, so an answer that arrives after the
+## page was closed and opened again is dropped rather than drawn.
+var _asked := 0
 
 
 func _ready() -> void:
@@ -79,13 +98,21 @@ func _ready() -> void:
 	_turn_button.pressed.connect(_on_turn_pressed)
 	_remove_button.pressed.connect(_on_remove_pressed)
 	_find_blender_button.pressed.connect(_on_find_blender_pressed)
+	_share_button.pressed.connect(_on_share_pressed)
+	_browse_button.pressed.connect(_open_the_shared_cars)
 	for grid in _grids:
 		grid.columns = COLUMNS
 	# A car added, turned or removed from anywhere - this page, or a download
 	# landing while it is open - is a page showing the old garage.
 	Garage.changed.connect(_on_garage_changed)
+	# Signing in or out changes whether SHARE can be pressed, and the list
+	# arriving changes whether it says SHARE or UNSHARE.
+	Backend.signed_in.connect(_update_actions)
+	Backend.signed_out.connect(_update_actions)
+	CarLibrary.catalogue_arrived.connect(_on_catalogue_arrived)
 	_build_the_file_picker()
 	_build_the_blender_picker()
+	_build_the_shared_cars_page()
 	hide()
 
 
@@ -99,8 +126,13 @@ func open(players: int) -> void:
 	# Only offered to a player who needs it. Asked every time the page opens
 	# rather than once, since Blender may have been installed in the meantime.
 	_find_blender_button.visible = not Blender.here()
+	_browse.hide()
 	if not _busy:
 		_say("", QUIET)
+	# Set going rather than waited on. It is what tells this page which cars
+	# the player has already shared, and the page is drawn either way.
+	if CarLibrary.can_share():
+		CarLibrary.catalogue()
 	_subject = _driven(0)
 	_fill()
 	show()
@@ -123,12 +155,15 @@ func close() -> void:
 
 ## Escape backs out of the screen. The file pickers are windows of their own and
 ## take their own Escape, so this only ever sees the ones meant for the page.
-## Not while a car is coming in, for the reason BACK is refused then too.
+## Not while a car is coming in, for the reason BACK is refused then too. The
+## shared cars lie over the garage, so they are backed out of first.
 func _input(event: InputEvent) -> void:
 	if not visible or not event.is_action_pressed("ui_cancel"):
 		return
 	get_viewport().set_input_as_handled()
-	if not _busy:
+	if _browse.visible:
+		_close_the_shared_cars()
+	elif not _busy:
 		close()
 
 
@@ -273,6 +308,27 @@ func _update_actions() -> void:
 	_remove_button.tooltip_text = ("Take %s out of the garage." % named
 		if theirs else "The stock car cannot be taken out.")
 
+	var server := CarLibrary.available()
+	_share_button.visible = server
+	_browse_button.visible = server
+	_browse_button.disabled = _busy
+	if not server:
+		return
+	# UNSHARE only on a car this player put up. Somebody else sharing the same
+	# file does not make it theirs to take down.
+	_share_button.text = "UNSHARE" if CarLibrary.is_mine(_subject) else "SHARE"
+	_share_button.disabled = _busy or _sending or not theirs or not CarLibrary.can_share()
+	if not theirs:
+		_share_button.tooltip_text = "The stock car is already everybody's."
+	elif not CarLibrary.can_share():
+		# Still there, and saying why it cannot be pressed, rather than gone -
+		# a button that appears on signing in is one nobody knew to look for.
+		_share_button.tooltip_text = "Sign in to share"
+	elif CarLibrary.is_mine(_subject):
+		_share_button.tooltip_text = "Stop sharing %s." % named
+	else:
+		_share_button.tooltip_text = "Put %s up for anybody to get." % named
+
 
 # --- the actions --------------------------------------------------------
 
@@ -358,6 +414,39 @@ func _on_garage_changed() -> void:
 		_fill()
 
 
+## Share the car being talked about, or take it back down.
+##
+## Only this button waits on the server. The player goes on picking and turning
+## cars while a car goes up, because nothing else on the page has anything to
+## do with it.
+func _on_share_pressed() -> void:
+	if _busy or _sending or not Garage.has(_subject) or not CarLibrary.can_share():
+		return
+	var id := _subject
+	var named := Garage.name_of(id)
+	var taking_down := CarLibrary.is_mine(id)
+	_sending = true
+	_update_actions()
+	_say(("Taking %s down…" if taking_down else "Sharing %s…") % named, QUIET)
+	var answer: Dictionary
+	if taking_down:
+		answer = await CarLibrary.unpublish(id)
+	else:
+		answer = await CarLibrary.publish(id)
+	_sending = false
+	_update_actions()
+	if not answer.ok:
+		_say(str(answer.error), WRONG)
+	elif taking_down:
+		_say("%s is not shared any more." % named, QUIET)
+	else:
+		_say("Shared %s. Anybody can get it now." % named, RIGHT)
+
+
+func _on_catalogue_arrived(_rows: Array) -> void:
+	_update_actions()
+
+
 ## For a player whose Blender is somewhere this game did not think to look.
 func _on_find_blender_pressed() -> void:
 	if _busy:
@@ -378,6 +467,197 @@ func _on_blender_picked(path: String) -> void:
 	_find_blender_button.visible = not Blender.here()
 	_say("Found Blender. A .blend can be added now.", RIGHT)
 	_add_button.grab_focus()
+
+
+# --- other people's cars ------------------------------------------------
+
+## The page of shared cars. Built here rather than in the scene, the way the
+## boards are, because every line on it is whatever the server sent.
+func _build_the_shared_cars_page() -> void:
+	_browse = Control.new()
+	_browse.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_browse.hide()
+	add_child(_browse)
+
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0, 0, 0, 0.5)
+	_browse.add_child(dim)
+
+	var page := CenterContainer.new()
+	page.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_browse.add_child(page)
+
+	var panel := PanelContainer.new()
+	page.add_child(panel)
+	var margin := MarginContainer.new()
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 34)
+	for side in ["top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 24)
+	panel.add_child(margin)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	margin.add_child(box)
+
+	var title := VBoxContainer.new()
+	title.add_theme_constant_override("separation", 0)
+	box.add_child(title)
+	var heading := Label.new()
+	heading.text = "SHARED CARS"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_size_override("font_size", 40)
+	title.add_child(heading)
+	var subline := Label.new()
+	subline.text = "what other people have put up"
+	subline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subline.add_theme_font_size_override("font_size", 18)
+	subline.add_theme_color_override("font_color", QUIET)
+	title.add_child(subline)
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(760.0, 400.0)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+	_shared_rows = VBoxContainer.new()
+	_shared_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_shared_rows.add_theme_constant_override("separation", 8)
+	scroll.add_child(_shared_rows)
+
+	_shared_note = Label.new()
+	_shared_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_shared_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_shared_note.custom_minimum_size = Vector2(760.0, 26.0)
+	_shared_note.add_theme_font_size_override("font_size", 18)
+	_shared_note.add_theme_color_override("font_color", QUIET)
+	box.add_child(_shared_note)
+
+	_browse_back = Button.new()
+	_browse_back.text = "BACK"
+	_browse_back.pressed.connect(_close_the_shared_cars)
+	box.add_child(_browse_back)
+
+
+func _open_the_shared_cars() -> void:
+	if _busy:
+		return
+	_browse.show()
+	_browse_back.grab_focus()
+	_fetch_the_shared_cars(false)
+
+
+func _close_the_shared_cars() -> void:
+	_browse.hide()
+	# Anything still on its way is for a page that is not there any more.
+	_asked += 1
+	_browse_button.grab_focus()
+
+
+## Ask for the list and put it up when it lands.
+func _fetch_the_shared_cars(force: bool) -> void:
+	_asked += 1
+	var asked := _asked
+	_clear_the_shared_cars()
+	if not CarLibrary.available():
+		_show_the_shared_cars([])
+		return
+	_shared_note.text = "Loading…"
+	var rows: Array = await CarLibrary.catalogue(force)
+	if asked != _asked or not _browse.visible:
+		return
+	_show_the_shared_cars(rows)
+
+
+## Put the list up, or say which kind of empty it is. An empty page means three
+## different things - there is no server, the server did not answer, nobody has
+## shared anything - and a player told the wrong one goes and does the wrong
+## thing about it.
+func _show_the_shared_cars(rows: Array) -> void:
+	_clear_the_shared_cars()
+	if not CarLibrary.available():
+		_shared_note.text = ("This copy of the game has no server set up, so there "
+			+ "are no shared cars. Your own garage works as it always did.")
+		return
+	if rows.is_empty():
+		_shared_note.text = ("The server did not answer, so the shared cars cannot "
+			+ "be shown. Every car in your garage is still here."
+			if not CarLibrary.answered() else "Nobody has shared a car yet.")
+		return
+	for row: Dictionary in rows:
+		_shared_rows.add_child(_shared_line(row))
+	_shared_note.text = ("" if CarLibrary.answered()
+		else "The server did not answer. This is the list as it was.")
+
+
+## One shared car: its name, who put it up, and GET - or a word saying it is
+## already here, rather than a button that would fetch a car the player has.
+func _shared_line(row: Dictionary) -> Control:
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 14)
+	line.set_meta("car", row.id)
+
+	var name := Label.new()
+	name.text = str(row.name)
+	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name.clip_text = true
+	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name.add_theme_font_size_override("font_size", 24)
+	line.add_child(name)
+
+	var by := Label.new()
+	by.text = "by %s" % row.by
+	by.clip_text = true
+	by.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	by.custom_minimum_size.x = 210.0
+	by.add_theme_font_size_override("font_size", 18)
+	by.add_theme_color_override("font_color", QUIET)
+	line.add_child(by)
+
+	if bool(row.get("here", false)):
+		var here := Label.new()
+		here.text = "IN YOUR GARAGE"
+		here.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		here.custom_minimum_size.x = 170.0
+		here.add_theme_font_size_override("font_size", 16)
+		here.add_theme_color_override("font_color", RIGHT)
+		line.add_child(here)
+	else:
+		var get_it := Button.new()
+		get_it.text = "GET"
+		get_it.custom_minimum_size.x = 170.0
+		get_it.add_theme_font_size_override("font_size", 20)
+		get_it.pressed.connect(_on_get_pressed.bind(str(row.id), get_it))
+		line.add_child(get_it)
+	return line
+
+
+func _on_get_pressed(id: String, button: Button) -> void:
+	button.disabled = true
+	button.text = "GETTING…"
+	var answer: Dictionary = await CarLibrary.fetch(id)
+	if not is_instance_valid(button) or not _browse.visible:
+		return
+	if not answer.ok:
+		button.disabled = false
+		button.text = "GET"
+		_shared_note.add_theme_color_override("font_color", WRONG)
+		_shared_note.text = str(answer.error)
+		return
+	_shared_note.add_theme_color_override("font_color", RIGHT)
+	_shared_note.text = "Got %s. It is in your garage now." % Garage.name_of(id)
+	# The line swaps GET for IN YOUR GARAGE without asking the server again:
+	# nothing about the list has changed but what is on this machine.
+	_show_the_shared_cars(await CarLibrary.catalogue())
+	_draw_missing_portraits()
+
+
+func _clear_the_shared_cars() -> void:
+	for line in _shared_rows.get_children():
+		_shared_rows.remove_child(line)
+		line.queue_free()
+	_shared_note.text = ""
+	_shared_note.add_theme_color_override("font_color", QUIET)
 
 
 # --- portraits ----------------------------------------------------------

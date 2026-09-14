@@ -5,8 +5,8 @@ extends Node
 ## Everything that talks to the server goes through here, so there is exactly
 ## one place that knows the address, holds the signed-in player's token and
 ## decides what to do when the network is not there. What sits on top of this
-## - `Leaderboard` - is written as if the server always answers, because this
-## is where it is made true.
+## - `Leaderboard` and `CarLibrary` - is written as if the server always
+## answers, because this is where it is made true.
 ##
 ## The rule the whole thing is built on is that nothing here may ever stop the
 ## game. Every call can be awaited, every call comes back with something even
@@ -40,6 +40,10 @@ const REFRESH_MARGIN := 60.0
 ## How long any one request may take before we stop waiting on it. Short
 ## enough that a dead network is a pause rather than a hang.
 const TIMEOUT := 10.0
+
+## How long a file may take to go up or come down. Longer than a request that
+## only carries a few rows, because a car is megabytes on somebody's upstream.
+const FILE_TIMEOUT := 120.0
 
 ## Emitted when a player signs in or out, so a screen showing who they are can
 ## follow it without asking every frame.
@@ -189,6 +193,40 @@ func rest(method: int, path: String, body: Variant = null,
 	return await _call(method, "/rest/v1" + path, body, true, prefer)
 
 
+## Put a file in a storage bucket, as the signed-in player.
+##
+## Never over the top of one already there: a file whose name is the hash of
+## its contents must not become different contents under the same name. What
+## is in the way comes back as a 409.
+func upload(bucket: String, path: String, bytes: PackedByteArray,
+		kind: String) -> Dictionary:
+	if not configured():
+		return _problem("No server.")
+	return await _send_bytes(HTTPClient.METHOD_POST,
+		"/storage/v1/object/%s/%s" % [bucket, path], bytes, kind)
+
+
+## Bring a file down out of a storage bucket. `data` is its bytes.
+##
+## `limit` is the most bytes that will be taken, and a response that runs past
+## it is cut off rather than read to the end. Whatever is at the other end
+## decides how much it sends, and a car that could be a gigabyte is not a car
+## anybody should be made to wait for.
+func download(bucket: String, path: String, limit: int = -1) -> Dictionary:
+	if not configured():
+		return _problem("No server.")
+	return await _send_bytes(HTTPClient.METHOD_GET,
+		"/storage/v1/object/%s/%s" % [bucket, path], PackedByteArray(), "", limit)
+
+
+## Take a file out of a storage bucket.
+func erase(bucket: String, path: String) -> Dictionary:
+	if not configured():
+		return _problem("No server.")
+	return await _send_bytes(HTTPClient.METHOD_DELETE,
+		"/storage/v1/object/%s/%s" % [bucket, path], PackedByteArray(), "")
+
+
 ## The one request, and the only place in the game that touches HTTP.
 ##
 ## `authorised` asks for the player's token to be used if there is one. The
@@ -244,6 +282,60 @@ func _call(method: int, path: String, body: Variant, authorised: bool,
 	if code < 200 or code >= 300:
 		return _problem(_message_in(parsed, code), code)
 	return _fine(parsed if parsed != null else {})
+
+
+## The other kind of request: raw bytes out and raw bytes back, for files.
+##
+## Kept apart from `_call` rather than folded into it, because nothing about a
+## file is JSON. A model sent through a function that stringifies its body is a
+## model mangled on the way out, and one that parses what comes back is a model
+## read as text. Everything else is the same - the project's key, the player's
+## token refreshed first, one node per request, and every outcome answered as
+## `{ok, code, data, error}`.
+func _send_bytes(method: int, path: String, bytes: PackedByteArray, kind: String,
+		limit: int = -1) -> Dictionary:
+	await _fresh_token()
+
+	var headers := PackedStringArray(["apikey: " + anon_key])
+	if not _access_token.is_empty():
+		headers.append("Authorization: Bearer " + _access_token)
+	else:
+		headers.append("Authorization: Bearer " + anon_key)
+	if not kind.is_empty():
+		headers.append("Content-Type: " + kind)
+	if method == HTTPClient.METHOD_POST:
+		headers.append("x-upsert: false")
+
+	var http := HTTPRequest.new()
+	http.timeout = FILE_TIMEOUT
+	if limit >= 0:
+		http.body_size_limit = limit
+	_keep_running(http)
+
+	var started := http.request_raw(url + path, headers, method, bytes)
+	if started != OK:
+		http.queue_free()
+		return _problem("Could not reach the server.")
+
+	var result: Array = await http.request_completed
+	http.queue_free()
+
+	var outcome := int(result[0])
+	var code := int(result[1])
+	var body: PackedByteArray = result[3]
+
+	if outcome == HTTPRequest.RESULT_BODY_SIZE_LIMIT_EXCEEDED:
+		return _problem("What came back was bigger than a car can be.")
+	if outcome != HTTPRequest.RESULT_SUCCESS:
+		return _problem("No connection.")
+
+	if code < 200 or code >= 300:
+		# Only a complaint is ever read as text. A file that arrived is handed
+		# on exactly as it arrived.
+		var parsed: Variant = _parsed_body(body)
+		var meant := _code_in(parsed, code)
+		return _problem(_message_in(parsed, meant), meant)
+	return _fine(body)
 
 
 ## Hang a request off this node in a way that survives the game being paused.
@@ -375,6 +467,33 @@ func _message_in(parsed: Variant, code: int) -> String:
 	if code == 401 or code == 403:
 		return "Signed out. Sign in again."
 	return "The server said no (%d)." % code
+
+
+## What a complaint says, as JSON, or null when it is not JSON at all.
+##
+## Looked at before it is parsed. A proxy or a gateway in the way answers with
+## a page of HTML, and handing that to the JSON parser prints an engine error
+## for every one - on a player's console, about a server they cannot fix.
+func _parsed_body(body: PackedByteArray) -> Variant:
+	var text := body.get_string_from_utf8().strip_edges()
+	if not (text.begins_with("{") or text.begins_with("[")):
+		return null
+	return JSON.parse_string(text)
+
+
+## The status a response actually means.
+##
+## Storage puts the real one in the body, as a string, and a blunter one on
+## the response itself: a missing object is a 400 whose body says 404, and a
+## file already in the way is a 400 whose body says 409. Everything that decides
+## what to do next is deciding on the one in the body, so that is the one
+## returned wherever there is one.
+func _code_in(parsed: Variant, code: int) -> int:
+	if typeof(parsed) == TYPE_DICTIONARY:
+		var named := str((parsed as Dictionary).get("statusCode", ""))
+		if named.is_valid_int():
+			return int(named)
+	return code
 
 
 func _fine(data: Variant) -> Dictionary:

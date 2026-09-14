@@ -367,6 +367,98 @@ not exist there.
 Godot --path . --headless --fixed-fps 60 --script tools/checks/blend_import.gd
 ```
 
+### Sharing
+
+Where there is a server, a car can be shared and other people's cars brought
+down. `CarLibrary` sits over `Backend` the way `Leaderboard` sits over
+`TrackTimes`: `Garage` is what is on this machine and stays the truth the game
+is played against, and all this does is send a car up and bring one down. With
+no `backend.cfg` there is no SHARE button and no BROWSE button at all, rather
+than two buttons that can only ever say there is no server.
+
+Sharing is something a player does to one car, on purpose. The server has a
+`cars` table and a private `cars` storage bucket, and there is no "shared"
+column anywhere: being in the table is being shared, so a car nobody shared has
+no row, no model on the server and no presence there at all. SHARE is on the
+tile under the cursor like everything else on the page, refused on the stock
+car, and still there but refused with "Sign in to share" when signed out - a
+button that only appears after signing in is one nobody knew to go and look
+for. On a car the player has shared it reads UNSHARE. Browsing needs no
+account, so somebody can see what there is before deciding to make one.
+
+The order of the requests is the whole of what makes it safe. Sharing sends the
+model first and the row second. Nobody can read a model until a row points at
+it, so a share that falls over halfway is a private file in the player's own
+folder, not a car on the list with nothing behind it - and a row the server
+refuses has its model taken straight back down. Unsharing goes the other way:
+the row first, so the car stops being shared on the very first request, and
+then the model, without waiting on the answer to decide anything. A model with
+no row is unreadable to everyone else. The name a car is shared under is read
+from the garage rather than handed in, so there is only ever one name.
+
+A 409 on the row means the car is already shared. Two players who added the
+same file hold the same car, and the table is keyed on the car, so a 409 cannot
+say which of them put it up - the game says it is already shared and does not
+guess. A 409 on the upload is different: something is already at the path, and
+it can only be this same model, because the path is the hash in the player's
+own folder. It is what an unfinished share leaves. So the server is asked -
+not the list in hand, which can be a minute old - whether any row points at the
+car. If one does, the model is left exactly where it is, since somebody may be
+downloading it; if the row is the player's own, the page learns that and says
+UNSHARE from then on. If none does, the old model is erased and the upload goes
+again.
+
+A downloaded car is a stranger's file and is treated as one. Its bytes are
+hashed before they are so much as parsed, and must come out as the id that was
+asked for: a server handing back different bytes is handing back a different
+car, however it came to be doing that. Then they go through `Garage.adopt`, and
+so through `CarImport` - the same door as a file off the player's own disk,
+with the same limits, the same stripping and the same fit. A download is also
+cut off at 8 MB rather than read to the end, since whatever is at the other end
+decides how much it sends. Rows off the server are checked before anything is
+built out of them: an id that is not sixteen hex characters, or an owner that
+is not a uuid, is dropped rather than put into a path. A model the server says
+is not there is "not on the server. Only whoever shared it can put that right."
+
+The storage policies have one trap that fails silently, and it is in
+`backend/README.md` with the rest of what the schema builds: the read policy
+has to say `storage.objects.name` in full, because a bare `name` inside its
+subquery means the car's display name, every read is denied, and Storage
+reports a denied read as "Object not found". Storage also puts the status that
+means something in the body of its responses, as a string, and a blunter one on
+the response itself - a missing object is a 400 whose body says 404 - so
+`Backend._code_in` reads the one in the body, and that is what everything above
+it decides on.
+
+Files go through `Backend.upload`, `download` and `erase`, over their own
+`_send_bytes` rather than `rest`: raw bytes out and raw bytes back, because a
+model sent through something that turns its body into JSON is a model mangled
+on the way. Every request, of either kind, is set to keep running while the
+game is paused. The garage is opened over a paused race, an `HTTPRequest` polls
+in `_process`, and a paused tree stops `_process` - so without that, a car sent
+from the pause screen would set off and never arrive.
+
+BROWSE opens SHARED CARS - "what other people have put up" - over the garage:
+the newest sixty, each line the car's name, who shared it and GET, or IN YOUR
+GARAGE for one already here. An empty page says which kind of empty it is,
+because each asks the player to do something different: there is no server;
+the server did not answer, and every car in the garage is still here; or
+nobody has shared a car yet. The list is kept for a minute, so opening and
+closing the page is not a request each time.
+
+`tools/checks/sharing.gd` runs with no server, because a check must never touch
+a live one. It checks that every call with nothing to talk to comes back as a
+sentence, and then checks for real everything that does not need a server:
+`adopt` refusing noise and a file over 8 MB, fitting a good one and keeping its
+name, the same bytes twice being one car, the id being stable and changing
+when one bit of the model does, rows shaped wrong being dropped, and
+`_code_in` reading a 400 that says 409 as 409, one that says 404 as 404, a 403
+with no JSON as 403, and an empty 500 as 500.
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/sharing.gd
+```
+
 ## Views
 
 Each player can switch between the chase camera and the driver's eye - C for

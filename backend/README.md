@@ -58,6 +58,61 @@ name, and a key that belongs to you.
 
 That is the whole setup. Run the game and the Account button appears.
 
+## What the schema builds
+
+`schema.sql` is written to be pasted in and run again whenever it changes.
+Tables and indexes are made only if they are not there, every policy is
+dropped before it is made, and the bucket is updated in place if it already
+exists - so running the whole file on a project that has an older version of
+it brings that project up to this one rather than failing halfway.
+
+**`racers`** is an account with a name on it. It is kept apart from Supabase's
+own `auth.users`, because that table holds the email address, and a board has
+to be able to show who set a time without showing everyone's email. Names are
+unique regardless of case.
+
+**`times`** is one row per racer per version of a track: their best. A trigger
+keeps the better of an old and a new time, so the game can send every finish
+as an upsert without knowing whether it is an improvement. Nobody may delete a
+time.
+
+**`cars`** is the cars players have shared. There is no "shared" column - being
+in the table is being shared, and a car nobody shared has no row, no model and
+no presence on the server at all. The id is the first sixteen hex characters of
+the sha256 of the model, and a constraint holds the model's path to
+`<owner>/<id>.glb`, so a row can only ever point at its owner's own file.
+Anybody may read the table, signed in or not, so a player can browse before
+making an account. Only the owner may insert or delete a row, and the only
+column anybody may update is the name: the id is the hash of what was shared,
+and nothing may drift away from it.
+
+**The `cars` bucket** holds the models: private, 8 MB a file, and nothing but
+`model/gltf-binary`. It is private because in a public bucket an object is
+readable by anyone with its path - before its row exists and after it has gone
+- and what makes sharing safe is that a model is readable exactly while a row
+points at it. Uploads go only into the uploader's own folder, under a name that
+is a car's id. There is no update policy, because overwriting a model in place
+would leave its id describing something else.
+
+Two things about the storage policies are easy to get wrong, and both fail
+quietly:
+
+- **The read policy spells out `storage.objects.name`.** Inside the subquery a
+  bare `name` binds to `cars.name`, the car's display name, which never equals
+  a path - so every read is denied. Storage reports a denied read as "Object not
+  found", which sends you looking for a missing file instead of a policy.
+- **An owner can always read their own folder.** Storage will not delete an
+  object its caller cannot see. Without this, the model of a car whose row has
+  been deleted could never be cleared away, and a player who unshared a car
+  could never share it again: the upload would find the old model still at the
+  path and be unable to remove it. Nobody else can read anything more than
+  before.
+
+If a project already has a `cars` table from an earlier version of this game's
+schema, running the file adds the constraint on the model path to it. That
+fails if any existing row points somewhere other than `<owner>/<id>.glb`;
+delete those rows first.
+
 ## Sending your own email
 
 Everything above works on Supabase's built-in email sender, and that sender is
