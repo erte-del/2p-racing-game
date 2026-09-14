@@ -53,6 +53,13 @@ extends Control
 ## drive, with two cars parked on the grid - turning slowly under the title.
 ## Being the real thing rather than a picture means it can never go stale.
 ##
+## GARAGE sits under PLAY, and opens the same garage the pause menu does. The
+## title is the best place there is to look at a car: the camera is already
+## turning slowly round the two parked on the grid, and they are dressed from
+## the same setting a race reads, so picking a car changes the one being
+## circled. It is under PLAY rather than behind it because which car to drive
+## is a choice made before a race, not one of the questions about it.
+##
 ## The title never sits perfectly still either. It rocks and bobs gently, which
 ## is what keeps a screen that is doing nothing from looking frozen.
 
@@ -112,6 +119,8 @@ extends Control
 
 @onready var _title: Label = $TitleSlot/Title
 @onready var _play: Button = $Play
+@onready var _garage_button: Button = $Garage
+@onready var _garage_screen: GarageMenu = $GarageScreen
 @onready var _settings_button: Button = $Settings
 @onready var _settings_screen: SettingsMenu = $SettingsScreen
 @onready var _account_button: Button = $Account
@@ -147,6 +156,8 @@ var _modes_open := false
 
 func _ready() -> void:
 	_play.pressed.connect(_on_play_pressed)
+	_garage_button.pressed.connect(_on_garage_pressed)
+	_garage_screen.closed.connect(_on_garage_closed)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	_settings_screen.closed.connect(_on_settings_closed)
 	_alone_button.pressed.connect(_choose_players.bind(true))
@@ -574,7 +585,7 @@ func _close_mode_choice() -> void:
 ## Escape backs out of whichever page is open. The screens that lie over these
 ## handle their own, so they get first refusal on the key.
 func _input(event: InputEvent) -> void:
-	if _settings_screen.visible or _account_screen.visible:
+	if _settings_screen.visible or _account_screen.visible or _garage_screen.visible:
 		return
 	if _boards_screen.visible:
 		return
@@ -599,6 +610,17 @@ func _input(event: InputEvent) -> void:
 	elif _mode_choice.visible:
 		get_viewport().set_input_as_handled()
 		_close_mode_choice()
+
+
+## The garage lies over the title the way it lies over a paused race, and asks
+## the question the pause menu asks it: how many cars there are to put somebody
+## in. On the title that is however the last race was played.
+func _on_garage_pressed() -> void:
+	_garage_screen.open(1 if GameSettings.solo else 2)
+
+
+func _on_garage_closed() -> void:
+	_garage_button.grab_focus()
 
 
 ## The settings lie over the title screen rather than replacing it, so the

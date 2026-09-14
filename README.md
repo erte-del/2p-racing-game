@@ -61,10 +61,17 @@ nobody would cost as much as the menu itself. The rival arrows have their
 processing stopped rather than being hidden, because each decides for itself
 every frame whether it should be visible and would simply turn itself back on.
 
-Under Play and Settings sits Account, and it is there only when there is a
-server to talk to. A build with no `backend.cfg` in it does not grow a button
-that cannot do anything - the same reason the Leaderboard button on the track
-page is not always there either.
+Under Play sit Garage, Settings and Account, and Account is there only when
+there is a server to talk to. A build with no `backend.cfg` in it does not grow
+a button that cannot do anything - the same reason the Leaderboard button on
+the track page is not always there either. The four are stacked from 60% of the
+way down, so all of them are above the bottom edge of a 720-tall window when
+Account is showing.
+
+Garage opens the same garage the pause menu does, lying over the title. The
+title is the best place there is to look at a car: the two on the grid are
+dressed from the same setting a race reads, and the camera is already turning
+slowly round them, so picking a car changes the one being circled.
 
 A light shade sits between the world and the text. The backdrop is meant to
 show through, but a white title over a bright noon sky is a coin toss, and the
@@ -250,12 +257,30 @@ which is what gives it back its cockpit. Chaos leaves all of this alone: it
 rolls how a car handles and what colour it is, never what it is.
 
 The garage screen opens from the pause menu, as GARAGE between PAINT and
-SETTINGS. Unlike PAINT it is not refused under chaos, for the same reason chaos
-leaves the model alone. It is the paint screen's shape - a column of tiles per
-player, over the race - and like the paint screen a tile puts the player in its
-car the moment it is pressed, because the car is right there on the road behind
-the panel and seeing it is the only way to know it is the one you wanted. The
-car each player is in is held down.
+SETTINGS, and from the title, as GARAGE under PLAY. Unlike PAINT it is not
+refused under chaos, for the same reason chaos leaves the model alone. Like the
+paint screen a tile puts the player in its car the moment it is pressed,
+because the car is right there on the road behind the panel and seeing it is
+the only way to know it is the one you wanted. The car each player is in is
+held down, with the same thick pale border the paint screen puts round a
+chosen paint.
+
+Each player has a row - player one above, player two below, and one row when
+driving alone - and each row is split by where a car came from. OFFICIAL, on
+the left, is the cars the game came with: one column wide, centred under its
+heading, and built from a single `_official_listing()`, so a second shipped car
+is a second line there and nothing else changes. UNOFFICIAL, on the right, is
+every car anybody has added, whether it was picked off this disk or downloaded
+from someone else. The line is drawn where it can be trusted: what ships is in
+the build and everything else is in `user://`, and nothing a stranger shares
+can put a car on the official side. An unofficial half with nothing in it says
+nothing has been added yet, rather than sitting empty like a half that failed
+to draw.
+
+Two rows of tiles, the buttons and BACK all have to fit a 720-tall window, and
+that is the whole budget the page is laid out to. The heading's two notes are
+one line, each half's heading and what it means are one line, and the tiles are
+200 by 134.
 
 ADD A CAR, TURN and REMOVE all act on whichever tile the cursor or the keyboard
 is on. There is exactly one car being talked about on the screen at a time, so

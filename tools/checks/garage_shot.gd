@@ -4,11 +4,18 @@ extends SceneTree
 #   Godot --path . --fixed-fps 60 --script tools/checks/garage_shot.gd -- <out_dir>
 #
 # Three cars go in, built here out of boxes and wheels, and the garage is
-# opened from the pause menu the way a player opens it. Saves garage.png, and
-# garage_turned.png after one of them has been given a quarter turn.
+# opened from the pause menu the way a player opens it. Saves garage.png,
+# garage_turned.png after one of them has been given a quarter turn, and
+# garage_with_a_server.png with the sharing buttons showing. Then it looks at
+# the title screen, where GARAGE is one of four buttons that all have to fit.
 #
 # Sandboxed, like everything in tools/: the cars go into a garage of their
 # own, which is emptied again at the end.
+#
+# The shot with a server is taken with `Backend` pointed at a name under
+# `.invalid`, which by definition resolves to nothing anywhere. That is enough
+# to make the game believe a server is set up, and nothing in the shot presses
+# anything that would ask it a question.
 
 
 func _init() -> void:
@@ -67,12 +74,57 @@ func _init() -> void:
 			screen.get_node("Page/Panel/Margin/Box/Status").text])
 	root.get_texture().get_image().save_png("%s/garage_turned.png" % out)
 
+	var backend: Node = root.get_node("/root/Backend")
+	backend.url = "https://garage-check.invalid"
+	backend.anon_key = "not-a-key"
+	screen.call("close")
+	await process_frame
+	screen.call("open", 2)
+	await _portraits(garage, ids)
+	var share: Button = screen.get_node("Page/Panel/Margin/Box/Actions/Share")
+	var browse: Button = screen.get_node("Page/Panel/Margin/Box/Actions/Browse")
+	print("with a server: SHARE shown %s, refused %s ('%s'), BROWSE shown %s"
+		% [share.visible, share.disabled, share.tooltip_text, browse.visible])
+	_report(screen)
+	root.get_texture().get_image().save_png("%s/garage_with_a_server.png" % out)
+
+	# One player: one row, and no room wasted on a second.
+	screen.call("close")
+	await process_frame
+	screen.call("open", 1)
+	for frame in 4:
+		await process_frame
+	print("alone:")
+	_report(screen)
+
 	# Both players back in the stock car before the screen writes the settings
 	# out on its way closed, so nothing run after this opens in a car that is
 	# about to be thrown away.
 	settings.car_ids = PackedStringArray(["", ""])
 	screen.call("close")
 	await process_frame
+
+	# The title, with a server set up, which is when all four buttons are there.
+	change_scene_to_file("res://scenes/menu.tscn")
+	for frame in 10:
+		await process_frame
+	var window := Rect2(Vector2.ZERO, Vector2(root.size))
+	var stack := PackedStringArray()
+	var all_in := true
+	for name in ["Play", "Garage", "Settings", "Account"]:
+		var button: Button = current_scene.get_node(name)
+		var rect := button.get_global_rect()
+		stack.append("%s %d-%d%s" % [name.to_upper(), rect.position.y, rect.end.y,
+			"" if button.visible else " (hidden)"])
+		all_in = all_in and (not button.visible or window.encloses(rect))
+	print("title buttons: %s; all inside the window: %s" % [", ".join(stack), all_in])
+	current_scene.call("_on_garage_pressed")
+	for frame in 6:
+		await process_frame
+	root.get_texture().get_image().save_png("%s/title_garage.png" % out)
+	current_scene.get_node("GarageScreen").call("close")
+	backend.url = ""
+	backend.anon_key = ""
 	_empty(garage)
 	quit()
 
@@ -98,13 +150,14 @@ func _report(screen: Control) -> void:
 	print("panel %s at %s, inside the window: %s"
 		% [panel.size, panel.position, window.encloses(panel.get_global_rect())])
 	print("BACK visible on the screen: %s" % window.encloses(back.get_global_rect()))
-	for player in ["P1", "P2"]:
-		var grid: Node = screen.get_node("Page/Panel/Margin/Box/Columns/%s/Scroll/Grid" % player)
+	for player in 2:
+		if not screen.get("_player_rows")[player].visible:
+			continue
 		var line := PackedStringArray()
-		for tile: Button in grid.get_children():
+		for tile: Button in screen.call("_tiles_of", player):
 			line.append("%s%s%s" % [tile.text, " [held]" if tile.button_pressed else "",
 				"" if tile.icon != null else " (no picture)"])
-		print("%s: %s" % [player, ", ".join(line)])
+		print("P%d: %s" % [player + 1, ", ".join(line)])
 
 
 # --- three cars ---------------------------------------------------------

@@ -33,14 +33,14 @@ layout_mode = 2
 
 [node name="Margin" type="MarginContainer" parent="Page/Panel"]
 layout_mode = 2
-theme_override_constants/margin_left = 36
-theme_override_constants/margin_top = 22
-theme_override_constants/margin_right = 36
-theme_override_constants/margin_bottom = 22
+theme_override_constants/margin_left = 30
+theme_override_constants/margin_top = 14
+theme_override_constants/margin_right = 30
+theme_override_constants/margin_bottom = 16
 
 [node name="Box" type="VBoxContainer" parent="Page/Panel/Margin"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 8
 
 [node name="Title" type="VBoxContainer" parent="Page/Panel/Margin/Box"]
 layout_mode = 2
@@ -59,52 +59,201 @@ horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
 theme_override_font_sizes/font_size = 18
 
-[node name="Columns" type="HBoxContainer" parent="Page/Panel/Margin/Box"]
+[node name="Rows" type="VBoxContainer" parent="Page/Panel/Margin/Box"]
 layout_mode = 2
-theme_override_constants/separation = 40
-alignment = 1
+theme_override_constants/separation = 6
 
-[node name="P1" type="VBoxContainer" parent="Page/Panel/Margin/Box/Columns"]
+[node name="P1" type="VBoxContainer" parent="Page/Panel/Margin/Box/Rows"]
 layout_mode = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 2
 
-[node name="Name" type="Label" parent="Page/Panel/Margin/Box/Columns/P1"]
+[node name="Name" type="Label" parent="Page/Panel/Margin/Box/Rows/P1"]
 layout_mode = 2
 text = "PLAYER 1"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 24
 
-[node name="Scroll" type="ScrollContainer" parent="Page/Panel/Margin/Box/Columns/P1"]
-custom_minimum_size = Vector2(446, 356)
+[node name="Halves" type="HBoxContainer" parent="Page/Panel/Margin/Box/Rows/P1"]
 layout_mode = 2
+theme_override_constants/separation = 24
+alignment = 1
+
+[node name="Official" type="VBoxContainer" parent="Page/Panel/Margin/Box/Rows/P1/Halves"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Heading" type="HBoxContainer" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Official"]
+layout_mode = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="Name" type="Label" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Official/Heading"]
+layout_mode = 2
+text = "OFFICIAL"
+theme_override_font_sizes/font_size = 18
+
+[node name="About" type="Label" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Official/Heading"]
+layout_mode = 2
+text = "· the cars the game came with"
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 16
+
+[node name="Scroll" type="ScrollContainer" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Official"]
+custom_minimum_size = Vector2(216, 148)
+layout_mode = 2
+size_flags_horizontal = 4
 horizontal_scroll_mode = 0
 
-[node name="Grid" type="GridContainer" parent="Page/Panel/Margin/Box/Columns/P1/Scroll"]
+[node name="Centre" type="CenterContainer" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Official/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Grid" type="GridContainer" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Official/Scroll/Centre"]
 layout_mode = 2
 theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 10
+
+[node name="Unofficial" type="VBoxContainer" parent="Page/Panel/Margin/Box/Rows/P1/Halves"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Heading" type="HBoxContainer" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial"]
+layout_mode = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="Name" type="Label" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial/Heading"]
+layout_mode = 2
+text = "UNOFFICIAL"
+theme_override_font_sizes/font_size = 18
+
+[node name="About" type="Label" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial/Heading"]
+layout_mode = 2
+text = "· cars anybody can add"
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 16
+
+[node name="Scroll" type="ScrollContainer" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial"]
+custom_minimum_size = Vector2(424, 148)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="List" type="VBoxContainer" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Grid" type="GridContainer" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial/Scroll/List"]
+layout_mode = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 14
 columns = 2
 
-[node name="P2" type="VBoxContainer" parent="Page/Panel/Margin/Box/Columns"]
+[node name="Nothing" type="Label" parent="Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial/Scroll/List"]
+visible = false
+custom_minimum_size = Vector2(0, 134)
 layout_mode = 2
-theme_override_constants/separation = 8
+text = "Nothing has been added yet. ADD A CAR brings one in."
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 18
 
-[node name="Name" type="Label" parent="Page/Panel/Margin/Box/Columns/P2"]
+[node name="P2" type="VBoxContainer" parent="Page/Panel/Margin/Box/Rows"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Name" type="Label" parent="Page/Panel/Margin/Box/Rows/P2"]
 layout_mode = 2
 text = "PLAYER 2"
 horizontal_alignment = 1
-theme_override_font_sizes/font_size = 26
+theme_override_font_sizes/font_size = 24
 
-[node name="Scroll" type="ScrollContainer" parent="Page/Panel/Margin/Box/Columns/P2"]
-custom_minimum_size = Vector2(446, 356)
+[node name="Halves" type="HBoxContainer" parent="Page/Panel/Margin/Box/Rows/P2"]
 layout_mode = 2
+theme_override_constants/separation = 24
+alignment = 1
+
+[node name="Official" type="VBoxContainer" parent="Page/Panel/Margin/Box/Rows/P2/Halves"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Heading" type="HBoxContainer" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Official"]
+layout_mode = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="Name" type="Label" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Official/Heading"]
+layout_mode = 2
+text = "OFFICIAL"
+theme_override_font_sizes/font_size = 18
+
+[node name="About" type="Label" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Official/Heading"]
+layout_mode = 2
+text = "· the cars the game came with"
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 16
+
+[node name="Scroll" type="ScrollContainer" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Official"]
+custom_minimum_size = Vector2(216, 148)
+layout_mode = 2
+size_flags_horizontal = 4
 horizontal_scroll_mode = 0
 
-[node name="Grid" type="GridContainer" parent="Page/Panel/Margin/Box/Columns/P2/Scroll"]
+[node name="Centre" type="CenterContainer" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Official/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Grid" type="GridContainer" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Official/Scroll/Centre"]
 layout_mode = 2
 theme_override_constants/h_separation = 10
 theme_override_constants/v_separation = 10
+
+[node name="Unofficial" type="VBoxContainer" parent="Page/Panel/Margin/Box/Rows/P2/Halves"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Heading" type="HBoxContainer" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial"]
+layout_mode = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="Name" type="Label" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial/Heading"]
+layout_mode = 2
+text = "UNOFFICIAL"
+theme_override_font_sizes/font_size = 18
+
+[node name="About" type="Label" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial/Heading"]
+layout_mode = 2
+text = "· cars anybody can add"
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 16
+
+[node name="Scroll" type="ScrollContainer" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial"]
+custom_minimum_size = Vector2(424, 148)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="List" type="VBoxContainer" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Grid" type="GridContainer" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial/Scroll/List"]
+layout_mode = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 14
 columns = 2
+
+[node name="Nothing" type="Label" parent="Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial/Scroll/List"]
+visible = false
+custom_minimum_size = Vector2(0, 134)
+layout_mode = 2
+text = "Nothing has been added yet. ADD A CAR brings one in."
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 18
 
 [node name="Actions" type="HBoxContainer" parent="Page/Panel/Margin/Box"]
 layout_mode = 2
@@ -145,7 +294,7 @@ text = "BROWSE"
 theme_override_font_sizes/font_size = 22
 
 [node name="Status" type="Label" parent="Page/Panel/Margin/Box"]
-custom_minimum_size = Vector2(0, 26)
+custom_minimum_size = Vector2(0, 22)
 layout_mode = 2
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)

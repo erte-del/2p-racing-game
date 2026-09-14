@@ -1,12 +1,20 @@
 class_name GarageMenu
 extends Control
 
-## The garage: every car there is to drive, a tile each, over a paused race.
+## The garage: every car there is to drive, a tile each, over a paused race or
+## over the title screen.
 ##
 ## Pressing a tile puts the player in that car immediately rather than on the
 ## way out, for the same reason the paint screen repaints immediately. The race
 ## is right there behind the panel with the cars parked on it, and seeing the
 ## car on the road is the only way to know it is the one you wanted.
+##
+## Each player has a row, split in two by where a car came from. OFFICIAL is
+## the cars the game came with; UNOFFICIAL is everything anybody has added,
+## whether it was picked off this disk or downloaded from someone else. The
+## line is drawn where it can be trusted: what shipped is in the build, and
+## everything else is in `user://`, and nothing a stranger can do moves a car
+## from one side of it to the other.
 ##
 ## Nothing here touches a car. Picking one writes the choice to `GameSettings`
 ## and the race dresses the car from that, which is the same path the choice
@@ -30,28 +38,40 @@ extends Control
 ## Emitted when the screen closes, so whoever opened it can take focus back.
 signal closed
 
-## One tile: the portrait over the name.
-const TILE_SIZE := Vector2(208.0, 170.0)
-const COLUMNS := 2
+## One tile: the portrait over the name. Two rows of players have to fit a
+## window 720 tall with BACK still on it, and this is the height that allows.
+const TILE_SIZE := Vector2(200.0, 134.0)
+## How many tiles go across the unofficial half before it wraps. The official
+## half is one wide: it is one car today, and the day there is a second it goes
+## underneath.
+const UNOFFICIAL_COLUMNS := 2
 
 const QUIET := Color(0.72, 0.76, 0.86)
 const WRONG := Color(0.98, 0.55, 0.5)
 const RIGHT := Color(0.6, 0.9, 0.68)
 
-@onready var _player_boxes: Array[VBoxContainer] = [
-	$Page/Panel/Margin/Box/Columns/P1, $Page/Panel/Margin/Box/Columns/P2,
+@onready var _player_rows: Array[VBoxContainer] = [
+	$Page/Panel/Margin/Box/Rows/P1, $Page/Panel/Margin/Box/Rows/P2,
 ]
 @onready var _names: Array[Label] = [
-	$Page/Panel/Margin/Box/Columns/P1/Name,
-	$Page/Panel/Margin/Box/Columns/P2/Name,
+	$Page/Panel/Margin/Box/Rows/P1/Name,
+	$Page/Panel/Margin/Box/Rows/P2/Name,
 ]
-@onready var _scrolls: Array[ScrollContainer] = [
-	$Page/Panel/Margin/Box/Columns/P1/Scroll,
-	$Page/Panel/Margin/Box/Columns/P2/Scroll,
+@onready var _official_grids: Array[GridContainer] = [
+	$Page/Panel/Margin/Box/Rows/P1/Halves/Official/Scroll/Centre/Grid,
+	$Page/Panel/Margin/Box/Rows/P2/Halves/Official/Scroll/Centre/Grid,
 ]
-@onready var _grids: Array[GridContainer] = [
-	$Page/Panel/Margin/Box/Columns/P1/Scroll/Grid,
-	$Page/Panel/Margin/Box/Columns/P2/Scroll/Grid,
+@onready var _unofficial_scrolls: Array[ScrollContainer] = [
+	$Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial/Scroll,
+	$Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial/Scroll,
+]
+@onready var _unofficial_grids: Array[GridContainer] = [
+	$Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial/Scroll/List/Grid,
+	$Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial/Scroll/List/Grid,
+]
+@onready var _nothing_added: Array[Label] = [
+	$Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial/Scroll/List/Nothing,
+	$Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial/Scroll/List/Nothing,
 ]
 @onready var _add_button: Button = $Page/Panel/Margin/Box/Actions/Add
 @onready var _turn_button: Button = $Page/Panel/Margin/Box/Actions/Turn
@@ -100,8 +120,9 @@ func _ready() -> void:
 	_find_blender_button.pressed.connect(_on_find_blender_pressed)
 	_share_button.pressed.connect(_on_share_pressed)
 	_browse_button.pressed.connect(_open_the_shared_cars)
-	for grid in _grids:
-		grid.columns = COLUMNS
+	for player in _player_rows.size():
+		_official_grids[player].columns = 1
+		_unofficial_grids[player].columns = UNOFFICIAL_COLUMNS
 	# A car added, turned or removed from anywhere - this page, or a download
 	# landing while it is open - is a page showing the old garage.
 	Garage.changed.connect(_on_garage_changed)
@@ -116,11 +137,11 @@ func _ready() -> void:
 	hide()
 
 
-## Show the screen, with as many columns as there are players.
+## Show the screen, with a row for each player.
 func open(players: int) -> void:
-	_players = clampi(players, 1, _grids.size())
-	for player in _player_boxes.size():
-		_player_boxes[player].visible = player < _players
+	_players = clampi(players, 1, _player_rows.size())
+	for player in _player_rows.size():
+		_player_rows[player].visible = player < _players
 	# Nobody is player one when they are the only car on the road.
 	_names[0].text = "PLAYER 1" if _players > 1 else "YOUR CAR"
 	# Only offered to a player who needs it. Asked every time the page opens
@@ -169,9 +190,15 @@ func _input(event: InputEvent) -> void:
 
 # --- the tiles ----------------------------------------------------------
 
-## Every car there is to drive, stock car first.
+## The cars the game came with. One today; a second shipped car is a second
+## entry here, and nothing else on the page has to know.
+func _official_listing() -> Array:
+	return [{"id": Garage.STOCK, "name": Garage.name_of(Garage.STOCK)}]
+
+
+## Every car there is to drive, official first.
 func _listing() -> Array:
-	return [{"id": Garage.STOCK, "name": Garage.name_of(Garage.STOCK)}] + Garage.cars()
+	return _official_listing() + Garage.cars()
 
 
 ## Lay out a tile per car per player. Built here rather than in the scene
@@ -183,13 +210,19 @@ func _listing() -> Array:
 ## dozen buttons again.
 func _fill() -> void:
 	var focused := _focused_tile()
-	for player in _grids.size():
-		var grid := _grids[player]
-		for tile in grid.get_children():
-			grid.remove_child(tile)
-			tile.queue_free()
-		for car: Dictionary in _listing():
-			grid.add_child(_tile(player, car.id, car.name))
+	var added := Garage.cars()
+	for player in _player_rows.size():
+		for grid in _grids_of(player):
+			for tile in grid.get_children():
+				grid.remove_child(tile)
+				tile.queue_free()
+		for car: Dictionary in _official_listing():
+			_official_grids[player].add_child(_tile(player, car.id, car.name))
+		for car: Dictionary in added:
+			_unofficial_grids[player].add_child(_tile(player, car.id, car.name))
+		# An empty half says so. Left blank, it reads as a half that failed to
+		# draw rather than a garage nobody has put anything in yet.
+		_nothing_added[player].visible = added.is_empty()
 	if not Garage.known(_subject):
 		_subject = Garage.STOCK
 	_show_the_choices()
@@ -269,11 +302,21 @@ func _choose(player: int, id: String) -> void:
 
 ## Hold down the tile each player is sitting in, and let every other one up.
 func _show_the_choices() -> void:
-	for player in _grids.size():
+	for player in _player_rows.size():
 		var driven := _driven(player)
-		for tile in _grids[player].get_children():
+		for tile in _tiles_of(player):
 			(tile as Button).set_pressed_no_signal(tile.get_meta("car") == driven)
 	_update_actions()
+
+
+## Both halves of a player's row.
+func _grids_of(player: int) -> Array[GridContainer]:
+	return [_official_grids[player], _unofficial_grids[player]]
+
+
+## Every tile in a player's row, official first.
+func _tiles_of(player: int) -> Array:
+	return _official_grids[player].get_children() + _unofficial_grids[player].get_children()
 
 
 ## The car a player is actually driving: the one they picked, or the stock car
@@ -299,8 +342,8 @@ func _update_actions() -> void:
 	_back_button.disabled = _busy
 	_turn_button.disabled = _busy or not theirs
 	_remove_button.disabled = _busy or not theirs
-	for grid in _grids:
-		for tile in grid.get_children():
+	for player in _player_rows.size():
+		for tile in _tiles_of(player):
 			(tile as Button).disabled = _busy
 	var named := Garage.name_of(_subject)
 	_turn_button.tooltip_text = ("Turn %s a quarter of the way round." % named
@@ -690,8 +733,8 @@ func _draw_missing_portraits() -> void:
 
 func _show_portrait(id: String) -> void:
 	var picture := Garage.portrait(id)
-	for grid in _grids:
-		for tile in grid.get_children():
+	for player in _player_rows.size():
+		for tile in _tiles_of(player):
 			if tile.get_meta("car") == id:
 				(tile as Button).icon = picture
 
@@ -701,14 +744,20 @@ func _show_portrait(id: String) -> void:
 ## Which player's tile, and which car, the keyboard is on - or nothing.
 func _focused_tile() -> Array:
 	var focused := get_viewport().gui_get_focus_owner()
-	for player in _grids.size():
-		if focused != null and focused.get_parent() == _grids[player]:
+	if focused == null:
+		return []
+	# Compared with each grid rather than looked up in the typed list of them,
+	# which refuses to be asked about anything that is not a grid - and the
+	# keyboard is on a button in an ordinary row most of the time.
+	var parent := focused.get_parent()
+	for player in _player_rows.size():
+		if parent == _official_grids[player] or parent == _unofficial_grids[player]:
 			return [player, str(focused.get_meta("car"))]
 	return []
 
 
 func _tile_for(player: int, id: String) -> Button:
-	for tile in _grids[player].get_children():
+	for tile in _tiles_of(player):
 		if tile.get_meta("car") == id:
 			return tile as Button
 	return null
@@ -725,10 +774,12 @@ func _focus_car(player: int, id: String) -> void:
 	_back_button.grab_focus()
 
 
+## Only the unofficial half ever has more than fits; the official one is a
+## single car.
 func _scroll_to(player: int, id: String) -> void:
 	var tile := _tile_for(player, id)
-	if tile != null:
-		_scrolls[player].ensure_control_visible(tile)
+	if tile != null and tile.get_parent() == _unofficial_grids[player]:
+		_unofficial_scrolls[player].ensure_control_visible(tile)
 
 
 func _say(what: String, colour: Color) -> void:
