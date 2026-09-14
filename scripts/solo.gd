@@ -119,12 +119,7 @@ func _ready() -> void:
 	# screen writes to the setting rather than reaching in here, so a swatch
 	# pressed mid-run lands on the car through the same path the saved choice
 	# takes at the start of one.
-	_apply_cars()
 	_apply_paint()
-	GameSettings.changed.connect(_apply_cars)
-	# And the garage itself, so a car turned or thrown away while the
-	# race is paused behind the panel lands on the road at once.
-	Garage.changed.connect(_apply_cars)
 	GameSettings.changed.connect(_apply_paint)
 	_lines.watch(_car)
 	_place_on_the_line()
@@ -195,13 +190,6 @@ func _apply_paint() -> void:
 	if _chaos != null:
 		return
 	_car.repaint(GameSettings.car_colour(0))
-
-
-## And put them in the car they chose. Not overruled by chaos: chaos rolls how
-## a car drives and what colour it is, and never what model it is - a run under
-## it in a car somebody brought is still that car.
-func _apply_cars() -> void:
-	Garage.dress(_car, GameSettings.car_id(0))
 
 
 

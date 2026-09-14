@@ -5,8 +5,7 @@ A split-screen two-player racing game, built in Godot 4.7 (GDScript).
 ## Requirements
 
 - Godot 4.7.2 (standard build, not .NET)
-- Blender 5.2 LTS — only needed to re-export the car models, and by players
-  who want to add a car as a `.blend` rather than a `.glb`
+- Blender 5.2 LTS — only needed to re-export the car models
 - A Supabase project — only needed for accounts and leaderboards, and only
   if you want them. Without one the game runs exactly as it did before any of
   that existed: `backend/README.md` is the setup, and the whole of the server
@@ -23,9 +22,6 @@ tools/            Blender export scripts and the checks (not shipped)
 backend/          the server side: the schema, the setup, the emails
 ```
 
-Cars a player adds go to `user://cars/`, not into the project. They are
-theirs rather than the game's; see **Custom cars**.
-
 `backend/` holds no code that runs in the game. It is the SQL that builds the
 two tables the leaderboards live in, the notes for standing a project up, and
 the two pages a confirmation email needs. The game's half of that is three
@@ -37,13 +33,6 @@ scripts in `scripts/` like any other.
 the title and a Play button that swaps in `main.tscn`. The button takes
 keyboard focus on its own, so Enter or Space starts the race - both players are
 already on one keyboard and neither should have to reach for the mouse.
-
-PLAY, GARAGE, SETTINGS and, where there is a server, ACCOUNT sit under the
-title. The garage is on this screen as well as on the pause menu, and it is the
-same screen either way - it writes the choice to `GameSettings` and whatever is
-watching dresses from it. Here what is watching is the backdrop, so the two
-cars parked under the title change as a car is picked, which makes the title
-screen the best place in the game to look at one.
 
 Behind the title is not a picture but the game itself: a real instance of
 `main.tscn` in **attract mode**, with its own generated course, scenery and
@@ -146,209 +135,9 @@ turning. One with no `Paint` material has its biggest panel painted instead, the
 colour multiplying whatever texture it arrived with, so a textured model keeps
 its texture and wears the player's colour over it. One with no materials at all
 is given one, because two cars nobody can tell apart is not a split screen
-anybody can read. That last one is not a nicety: the paint is what
-tells two brought-in cars apart, since the model no longer does. And its headlights are placed off the shape itself - out to
+anybody can read. And its headlights are placed off the shape itself - out to
 29% of its width, 47% up its height, on its front face - rather than off the
 numbers measured from the JDM model.
-
-## Custom cars
-
-A player can point the game at a model and drive it: `.glb`, `.gltf`, or a
-`.blend` on a machine that has Blender. Models are read at run time through
-`GLTFDocument` rather than imported, which is what makes any of this possible in
-a shipped build at all.
-
-Everything comes in through `scripts/car_import.gd`, and so will everything
-downloaded from anybody else, because one door is the only kind that holds.
-It reads with no base path on purpose: a `.gltf` that keeps its meshes and
-textures in files beside it cannot reach them and fails, which is the wanted
-answer rather than a limitation - a car has to be one file, because one file is
-what can be handed to somebody else and still be the same car when it arrives.
-Then a size cap (8 MB), a vertex cap and a surface cap, and everything that is
-not a mesh is thrown out: a camera in the file would fight the two the split
-screen already has, and a light would be a second sun bolted to somebody's
-bumper.
-
-### Fitting
-
-What comes in is scaled by **one** number on all three axes, never three.
-Fitting each axis separately would make every model exactly car-shaped, which
-is to say it would flatten a motorbike and stretch a rubber duck, and the whole
-appeal of bringing your own car is that it still looks like the thing you
-brought.
-
-The **length** is what is matched, because length is what a person means by how
-big a car is: a model that is already roughly car-shaped comes out at exactly
-the 4.87 m of the car the game ships with, and looks like it belongs on the road
-beside it. Width and height are not matched, only capped, at 15% over the
-collision box - a wing mirror reaching a little past the box is a wing mirror
-and not a fault. Whichever of the three bites first is the one that decides, so
-a lorry is brought down by its height rather than stretched to fill the road,
-and something tall and thin comes out small. A lamp post scaled until it fits
-under 1.7 m of car is a short lamp post, and the alternative is a car whose
-corners are nowhere near it.
-
-Then it is centred across the road and stood on the ground rather than left at
-whatever height it was modelled at. Nothing can work out which end of an
-arbitrary model is the front, so the game guesses - the long way round is the
-length - and TURN in the garage is how a player says it guessed wrong. The turn
-is stored rather than applied, because the fit is worked out again on the other
-side of it: a quarter turn swaps a car's length for its width, and it has to be
-scaled against a different limit afterwards.
-
-The hitbox never moves. A brought-in car keeps the same 2.06 x 1.45 x 4.87 box,
-the same tuning and the same road, so it is a different thing to look at and not
-a different thing to race - which is also why a lap set in one is comparable
-with a lap set in any other, and why none of this reaches the leaderboards.
-
-### Blender
-
-Godot imports a `.blend` by handing it to Blender, and only in the editor. A
-game somebody is playing has no editor, so `scripts/blender.gd` does the same
-thing the editor does: finds Blender, runs it headless on the file with a
-script, and reads the `.glb` that comes out. Everything after that is the path a
-`.glb` already took, so a car that arrives this way is fitted, painted and
-checked exactly like one somebody exported themselves - and what is kept is
-always the `.glb`, so a car carries the same id and the same bytes however it
-happened to arrive.
-
-Blender is looked for in the usual places per platform, and a player whose copy
-is somewhere else can point at it; that choice wins, because on a machine with
-three of them the one they went and found is the one they meant. It is checked
-by name before it is ever run - running an arbitrary file somebody pointed at to
-find out what it is would be the whole problem.
-
-It is run with `--factory-startup`, so a player's own preferences and add-ons
-cannot change what comes out, and `--disable-autoexec`, because **a `.blend` can
-carry Python that runs when it is opened**. This is a file that may have come
-from a stranger, and none of it is ours to run.
-
-Blender is not shipped with the game and cannot be - it is a separate program.
-A player who has not got it is told so and pointed at `.glb`, which the rest of
-the game reads perfectly well. This is a convenience, not a dependency.
-
-The converter itself lives as a string in `blender.gd` rather than as a file in
-`tools/` beside the other Blender scripts. Those are run by hand on this machine
-and are deliberately not shipped; this one has to be there on the machine of
-somebody playing the game, and the surest way to ship a file is not to have one.
-
-The wait is timed against the clock rather than by adding up frame deltas. A
-frame delta is what the game thinks a frame took, which is not the same thing
-when frames are not being paced: a headless run gets through thousands a second,
-and a timeout counted that way kills Blender before it has finished starting up.
-
-### The garage
-
-`user://cars/<id>/`, holding the model as it arrived, a small config beside it
-and a picture of it. The id is the SHA-256 of the model itself, shortened, so
-adding the same file twice is the same car rather than two of it - and so a car
-will carry the same name on every machine it ever reaches. A test run keeps its
-own garage somewhere else; see `Sandbox`.
-
-Nothing about it needs an account, a network or a `backend.cfg`. A car somebody
-adds is theirs, on their machine, and stays there until they say otherwise.
-
-The garage screen sits on the pause menu beside PAINT, and on the title screen
-under PLAY, and is shaped like the paint screen: a
-row of tiles per player, player one above and player two below. Each row is
-split in two - OFFICIAL on the left, the cars the game came with, and
-UNOFFICIAL on the right, the ones anybody added, whether off this machine or
-off the server. A player who has added nothing sees an empty right half saying
-so rather than one list where a car that arrived over the network sits
-indistinguishable from the one that shipped. Pressing a tile puts that
-player in that car immediately, because the race is right there behind the panel
-and a car you can see on the road is the only way to find out whether it is the
-one you wanted. ADD A CAR, TURN and REMOVE act on whichever tile the cursor is
-on - there is exactly one thing on the screen that is "the car being talked
-about", and it is the one the player is looking at.
-
-Unlike the paint, it is not disabled under chaos. Chaos rolls how a car drives
-and what colour it is, and never what model it is.
-
-The heading says a car you add has no first person view, because that is a fact
-about the choice rather than about the keypress - a player deciding between the
-stock car and something they brought should know before they pick, not by
-pressing C afterwards and having nothing happen.
-
-The pictures are drawn once, when a car is first seen, into a world of their own
-so the course and the sky are not in the shot, and kept beside the model. A
-garage of a dozen cars should not be a dozen models rendered every time the
-screen opens.
-
-### Sharing
-
-A private car has no row, no object and no presence on the server at all.
-Nothing is uploaded until a player presses SHARE, which is why there is no
-`shared` column in `backend/schema.sql` - being in the `cars` table *is* being
-shared. That is a much easier promise to keep than a boolean somebody has to
-remember to check, and it is why unsharing takes the car back down rather than
-hiding it.
-
-Pressing SHARE asks what the car is called before it sends anything. A name
-that was fine on this machine - whatever the file happened to be called, upper
-cased - is about to be the only thing anybody else has to go on, and the moment
-a player decides to put a car up is the one moment they are actually thinking
-about that. What they type is the car's name in their own garage as well as on
-the list: `publish` reads the name out of the garage rather than taking one
-passed alongside it, so there is one name and no way for the two to disagree.
-Backing out changes nothing, and taking a car down asks nothing - that is a
-thing a player has already decided by the time they press the button.
-
-`scripts/car_library.gd` is the layer over `Backend`, exactly as `Leaderboard`
-is over `TrackTimes`: the garage is the truth the game is played against and
-works with the network unplugged, and this sends a car up, brings other people's
-down, and asks nothing of the rest of the game in return. Browsing works signed
-out - somebody deciding whether an account is worth making should be able to see
-what they would be joining - and sharing is a thing done as somebody.
-
-The browse page can be searched, and says how many are up there. Typing
-narrows the rows already in hand rather than asking the server on every
-keystroke - the catalogue is capped at `CarLibrary.CATALOGUE_SIZE`, so the
-whole of what the page can show is on this machine already, and a request per
-character would be a request per character for nothing. It matches on the name
-and on who shared it, because a player typing has one of the two in mind and
-the page cannot know which.
-
-The count is what came down rather than what exists. A page filled to the cap
-says `60+` instead of claiming a number it has no way to know, and while a
-search is on it reads `3 of 60` - a count that silently became the number of
-matches would read as cars disappearing off the server. Matching nothing is
-also said differently from nobody having shared anything, because with a car on
-the list the second sentence is a lie.
-
-The order of the two requests is the whole safety of it. Going up, the model
-goes first and the row second, because the storage policy makes an object
-readable only when a row points at it: a half-finished share is a private car
-rather than a leak. Coming down, the row goes first, so the car stops being
-shared on the first request rather than the second. If the row fails to insert,
-the orphaned model is deleted rather than left sitting in somebody's project.
-
-**A model that comes back down is a model written by a stranger.** It goes
-through `Garage.adopt`, which puts it through the same `CarImport` reader a file
-off the disk goes through - and before any of that, its bytes are weighed
-against the id they were asked for. The id is the SHA-256 of the model, so a
-server handing back something else is a server handing back a different car, and
-that is the one check which says the bytes on the wire are what the list
-described.
-
-Objects live at `<owner>/<id>.glb` and the storage policies are what hold that
-shape: a player may only write inside the folder named after them, so one cannot
-write over another's model and leave the row pointing at it. There is
-deliberately no update policy on either the object or the model's bytes - a car
-is named by the hash of itself, so changing the bytes makes a different car, and
-overwriting one in place would leave everybody who downloaded it holding
-something the id no longer describes.
-
-Two players who independently add the same file hold the same car, so the second
-to share it is told it is already shared rather than making a duplicate. Whether
-it was them or somebody else who put it up is not something a 409 says, and
-guessing would mean telling half of them the wrong thing.
-
-Requests made from the garage keep running while the game is paused. An
-`HTTPRequest` polls in `_process` and a paused tree stops that, so a request
-would set off and never finish. It cost nothing while every screen that asked
-the server anything was a menu screen, and everything once the garage started
-sitting over a stopped race.
 
 ## Views
 

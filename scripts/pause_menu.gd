@@ -39,24 +39,20 @@ signal quit_requested
 @onready var _resume_button: Button = $Page/Panel/Margin/Box/Resume
 @onready var _restart_button: Button = $Page/Panel/Margin/Box/Restart
 @onready var _paint_button: Button = $Page/Panel/Margin/Box/Paint
-@onready var _garage_button: Button = $Page/Panel/Margin/Box/Garage
 @onready var _settings_button: Button = $Page/Panel/Margin/Box/Settings
 @onready var _quit_button: Button = $Page/Panel/Margin/Box/Quit
 @onready var _settings_screen: SettingsMenu = $SettingsScreen
 @onready var _paint_screen: PaintMenu = $PaintScreen
-@onready var _garage_screen: GarageMenu = $GarageScreen
 
 
 func _ready() -> void:
 	_resume_button.pressed.connect(close)
 	_restart_button.pressed.connect(_on_restart_pressed)
 	_paint_button.pressed.connect(_on_paint_pressed)
-	_garage_button.pressed.connect(_on_garage_pressed)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	_quit_button.pressed.connect(_on_quit_pressed)
 	_settings_screen.closed.connect(_on_settings_closed)
 	_paint_screen.closed.connect(_on_paint_closed)
-	_garage_screen.closed.connect(_on_garage_closed)
 	hide()
 
 
@@ -79,7 +75,6 @@ func open(where: String, restart_text: String, quit_text := "QUIT TO MENU") -> v
 	# Always opens on the pause page itself, however it was left last time.
 	_settings_screen.hide()
 	_paint_screen.hide()
-	_garage_screen.hide()
 	# Chaos repaints both cars for every race, so a paint chosen under it
 	# would be gone by the next course. The button stays where it is and says
 	# why rather than disappearing: a row that changes shape between modes is
@@ -141,18 +136,6 @@ func _on_quit_pressed() -> void:
 ## asked on the way in.
 func _on_paint_pressed() -> void:
 	_paint_screen.open(1 if GameSettings.solo else 2)
-
-
-## The garage is deliberately not disabled under chaos the way the paint is.
-## Chaos rolls how a car drives and what colour it is, and never what model it
-## is, so a car picked here is still the car being driven when the next course
-## lands - which is exactly what a paint chosen under chaos would not be.
-func _on_garage_pressed() -> void:
-	_garage_screen.open(1 if GameSettings.solo else 2)
-
-
-func _on_garage_closed() -> void:
-	_garage_button.grab_focus()
 
 
 func _on_paint_closed() -> void:

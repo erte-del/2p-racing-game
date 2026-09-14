@@ -58,21 +58,6 @@ static func path(wanted: String) -> String:
 	return "%s/%s" % [FOLDER, wanted.get_file()]
 
 
-## Where a whole folder of files goes. `path` flattens what it is given into
-## one directory, which is right for the handful of single files that were all
-## there was when it was written, and wrong for anything that keeps a folder
-## per thing - the garage keeps a folder per car. This relocates the folder
-## instead and leaves what is under it alone.
-##
-## It makes the folder as well, because every caller wants it to be there.
-static func folder(wanted: String) -> String:
-	var made := wanted
-	if on():
-		made = "%s/%s" % [FOLDER, wanted.trim_prefix("user://")]
-	DirAccess.make_dir_recursive_absolute(made)
-	return made
-
-
 static func _asked_for() -> bool:
 	return FLAG in OS.get_cmdline_args() or FLAG in OS.get_cmdline_user_args()
 

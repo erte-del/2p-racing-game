@@ -20,8 +20,6 @@ GameSettings="*res://scripts/game_settings.gd"
 TrackTimes="*res://scripts/track_times.gd"
 Backend="*res://scripts/backend.gd"
 Leaderboard="*res://scripts/leaderboard.gd"
-Garage="*res://scripts/garage.gd"
-CarLibrary="*res://scripts/car_library.gd"
 
 [display]
 

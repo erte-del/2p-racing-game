@@ -156,12 +156,7 @@ func _ready() -> void:
 	# pause screen writes to the setting rather than reaching in here, so a
 	# swatch pressed mid-race lands on the car through the same path the
 	# saved choice takes at the start of one.
-	_apply_cars()
 	_apply_paint()
-	GameSettings.changed.connect(_apply_cars)
-	# And the garage itself, so a car turned or thrown away while the
-	# race is paused behind the panel lands on the road at once.
-	Garage.changed.connect(_apply_cars)
 	GameSettings.changed.connect(_apply_paint)
 
 	# Show everything except the rival's private layer. Subtracting one layer
@@ -298,18 +293,6 @@ func _restart() -> void:
 
 func _on_pause_quit() -> void:
 	get_tree().change_scene_to_file(menu_scene)
-
-
-## Put each player in the car they chose.
-##
-## Only the model changes: `Garage.dress` swaps what hangs off the collision
-## box and touches nothing else, so a race with two brought-in cars in it is
-## the same race on the same road with the same tuning. It goes through the
-## settings for the same reason the paint does - the garage screen writes the
-## choice down and the race reads it, which is one way in rather than two.
-func _apply_cars() -> void:
-	Garage.dress(_car1, GameSettings.car_id(0))
-	Garage.dress(_car2, GameSettings.car_id(1))
 
 
 ## Put the players' colours on the cars, and on the arrows that point at them.

@@ -4,7 +4,6 @@
 [ext_resource type="Theme" path="res://scenes/menu_theme.tres" id="2_theme"]
 [ext_resource type="PackedScene" path="res://scenes/settings.tscn" id="3_settings"]
 [ext_resource type="PackedScene" path="res://scenes/paint.tscn" id="4_paint"]
-[ext_resource type="PackedScene" path="res://scenes/garage.tscn" id="5_garage"]
 
 [node name="Pause" type="Control"]
 process_mode = 2
@@ -76,10 +75,6 @@ text = "RESTART"
 layout_mode = 2
 text = "PAINT"
 
-[node name="Garage" type="Button" parent="Page/Panel/Margin/Box"]
-layout_mode = 2
-text = "GARAGE"
-
 [node name="Settings" type="Button" parent="Page/Panel/Margin/Box"]
 layout_mode = 2
 text = "SETTINGS"
@@ -92,7 +87,4 @@ text = "QUIT TO MENU"
 visible = false
 
 [node name="PaintScreen" parent="." instance=ExtResource("4_paint")]
-visible = false
-
-[node name="GarageScreen" parent="." instance=ExtResource("5_garage")]
 visible = false
