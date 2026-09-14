@@ -40,7 +40,7 @@ func _init() -> void:
 	var faults := 0
 	faults += _check_the_fit()
 	faults += _check_what_is_kept()
-	faults += _check_the_door(garage)
+	faults += await _check_the_door(garage)
 	faults += await _check_the_road(garage, settings)
 
 	_empty(garage)
@@ -184,7 +184,7 @@ func _check_the_door(garage: Node) -> int:
 	_write(text, "not a car".to_utf8_buffer())
 
 	for path in [garbage, text]:
-		var answer: Dictionary = garage.add(path)
+		var answer: Dictionary = await garage.add(path)
 		print("%s: %s" % [path.get_file(), answer.error if not answer.ok else "TAKEN"])
 		if answer.ok:
 			print("  %s was taken as a car" % path.get_file())
@@ -199,7 +199,7 @@ func _check_the_door(garage: Node) -> int:
 	document.append_from_scene(scene, state)
 	scene.free()
 	document.write_to_filesystem(state, loose + "/loose.gltf")
-	var answer: Dictionary = garage.add(loose + "/loose.gltf")
+	var answer: Dictionary = await garage.add(loose + "/loose.gltf")
 	print("loose.gltf: %s" % (answer.error if not answer.ok else "TAKEN"))
 	if answer.ok:
 		print("  a .gltf with its buffer in another file was taken")
@@ -213,8 +213,8 @@ func _check_the_door(garage: Node) -> int:
 
 	var wedge := Sandbox.path("user://wedge.glb")
 	_write(wedge, _model(Vector3(1.9, 1.2, 4.3)))
-	var first: Dictionary = garage.add(wedge)
-	var second: Dictionary = garage.add(wedge)
+	var first: Dictionary = await garage.add(wedge)
+	var second: Dictionary = await garage.add(wedge)
 	print("wedge.glb added twice: %s then %s, %d car(s) in the garage"
 		% ["new" if first.new else "known", "new" if second.new else "known",
 			garage.cars().size()])
@@ -252,7 +252,7 @@ func _check_the_road(garage: Node, settings: Node) -> int:
 	# the strip ever let that through, the rays would find it.
 	var cluttered := Sandbox.path("user://cluttered_car.glb")
 	_write(cluttered, _model(Vector3(1.8, 1.3, 4.1), true))
-	var added: Dictionary = garage.add(cluttered)
+	var added: Dictionary = await garage.add(cluttered)
 	DirAccess.remove_absolute(cluttered)
 	if not added.ok:
 		print("  the cluttered car was refused: %s" % added.error)

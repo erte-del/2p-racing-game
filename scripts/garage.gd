@@ -30,6 +30,11 @@ const STOCK_NAME := "THE STOCK CAR"
 ## under a tile without being cut off halfway through a word most of the time.
 const NAME_LIMIT := 24
 
+## A file that has to be handed to Blender before it is a model at all, and
+## where what Blender makes of it is put down on the way through.
+const BLEND := "blend"
+const CONVERTED := "user://converted.glb"
+
 const FOLDER := "user://cars"
 ## Where the stock car's portrait is kept. Not an id, so it can never be taken
 ## for a car that somebody added.
@@ -45,6 +50,11 @@ const ID_LENGTH := 16
 ## Where the cars actually are. A test run is sent somewhere else; see
 ## `Sandbox`.
 var folder := Sandbox.folder(FOLDER)
+
+## True while Blender is working on a file. There is one place its output goes,
+## and two conversions at once would be two Blenders writing over each other's
+## car.
+var _converting := false
 
 
 ## Every car in the garage, as `{id, name}`, oldest first.
@@ -158,18 +168,41 @@ static func clean_name(called: String) -> String:
 
 ## Bring a car in from a file on the disk.
 ##
-## Always awaited by whoever calls it, even though a .glb or a .gltf comes in on
-## the spot: some kinds of file have to be handed to another program first, and
-## every caller already waiting means none of them has to change the day that
-## is so.
+## Always awaited by whoever calls it. A .glb or a .gltf comes in on the spot,
+## but a .blend has to be handed to Blender first, and that takes seconds.
 ##
 ## Answers `{ok, error, id, name, new}`. `new` is false when the car was already
 ## here, which is not a failure - it is the same car - but is worth saying.
 func add(path: String) -> Dictionary:
 	var extension := path.get_extension().to_lower()
+	if extension == BLEND:
+		return await _add_blend(path)
 	if not extension in CarImport.EXTENSIONS:
-		return _problem("A car has to be a .glb or a .gltf file.")
+		return _problem("A car has to be a .glb, a .gltf or a .blend file.")
 	var loaded := CarImport.bytes_at(path)
+	if not loaded.ok:
+		return _problem(loaded.error)
+	return adopt(loaded.bytes, path.get_file().get_basename())
+
+
+## A .blend comes in as whatever Blender turns it into.
+##
+## What is kept is the .glb, never the .blend, and it goes through `adopt` like
+## a file picked off the disk. So the car's id is the hash of the model rather
+## than of the file it was made from, and the same car arrives under the same id
+## however it got here - which is what lets it be shared with somebody who has
+## no Blender at all.
+func _add_blend(path: String) -> Dictionary:
+	if _converting:
+		return _problem("Blender is still busy with another car.")
+	_converting = true
+	var converted := Sandbox.path(CONVERTED)
+	var answer: Dictionary = await Blender.convert(self, path, converted)
+	_converting = false
+	if not answer.ok:
+		return _problem(str(answer.error))
+	var loaded := CarImport.bytes_at(converted)
+	DirAccess.remove_absolute(converted)
 	if not loaded.ok:
 		return _problem(loaded.error)
 	return adopt(loaded.bytes, path.get_file().get_basename())

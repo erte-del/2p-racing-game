@@ -16,6 +16,11 @@ extends Control
 ## on whichever tile the cursor or the keyboard is on. There is only ever one
 ## car being talked about, so a button never has to ask which car it means,
 ## and a player never has to wonder.
+##
+## A .blend can be added as well as a .glb, by handing it to Blender. That is
+## the one thing here that takes long enough to notice, so the page says it is
+## happening before it starts, and nothing on it can be pressed until it has
+## finished.
 
 ## Emitted when the screen closes, so whoever opened it can take focus back.
 signal closed
@@ -46,6 +51,7 @@ const RIGHT := Color(0.6, 0.9, 0.68)
 @onready var _add_button: Button = $Page/Panel/Margin/Box/Actions/Add
 @onready var _turn_button: Button = $Page/Panel/Margin/Box/Actions/Turn
 @onready var _remove_button: Button = $Page/Panel/Margin/Box/Actions/Remove
+@onready var _find_blender_button: Button = $Page/Panel/Margin/Box/Actions/FindBlender
 @onready var _status: Label = $Page/Panel/Margin/Box/Status
 @onready var _back_button: Button = $Page/Panel/Margin/Box/Back
 
@@ -54,14 +60,17 @@ var _players := 1
 ## The car the page is talking about: the tile the cursor or the keyboard was
 ## last on. Every action on the page means this car.
 var _subject := Garage.STOCK
-## True while a car is being brought in, so a second one cannot be started on
-## top of it.
+## True while a car is being brought in. Everything on the page is refused
+## while it is, not just ADD: a second file would mean two Blenders writing over
+## each other's output, and a car removed or a screen closed halfway through is
+## a status line with nobody left to read it.
 var _busy := false
 ## True while portraits are being drawn, and whether something asked for more
 ## to be drawn while they were.
 var _drawing := false
 var _draw_again := false
 var _pick_file: FileDialog
+var _pick_blender: FileDialog
 
 
 func _ready() -> void:
@@ -69,12 +78,14 @@ func _ready() -> void:
 	_add_button.pressed.connect(_on_add_pressed)
 	_turn_button.pressed.connect(_on_turn_pressed)
 	_remove_button.pressed.connect(_on_remove_pressed)
+	_find_blender_button.pressed.connect(_on_find_blender_pressed)
 	for grid in _grids:
 		grid.columns = COLUMNS
 	# A car added, turned or removed from anywhere - this page, or a download
 	# landing while it is open - is a page showing the old garage.
 	Garage.changed.connect(_on_garage_changed)
 	_build_the_file_picker()
+	_build_the_blender_picker()
 	hide()
 
 
@@ -85,7 +96,11 @@ func open(players: int) -> void:
 		_player_boxes[player].visible = player < _players
 	# Nobody is player one when they are the only car on the road.
 	_names[0].text = "PLAYER 1" if _players > 1 else "YOUR CAR"
-	_say("", QUIET)
+	# Only offered to a player who needs it. Asked every time the page opens
+	# rather than once, since Blender may have been installed in the meantime.
+	_find_blender_button.visible = not Blender.here()
+	if not _busy:
+		_say("", QUIET)
 	_subject = _driven(0)
 	_fill()
 	show()
@@ -106,13 +121,15 @@ func close() -> void:
 	closed.emit()
 
 
-## Escape backs out of the screen. The file picker is a window of its own and
-## takes its own Escape, so this only ever sees the ones meant for the page.
+## Escape backs out of the screen. The file pickers are windows of their own and
+## take their own Escape, so this only ever sees the ones meant for the page.
+## Not while a car is coming in, for the reason BACK is refused then too.
 func _input(event: InputEvent) -> void:
 	if not visible or not event.is_action_pressed("ui_cancel"):
 		return
 	get_viewport().set_input_as_handled()
-	close()
+	if not _busy:
+		close()
 
 
 # --- the tiles ----------------------------------------------------------
@@ -162,6 +179,7 @@ func _tile(player: int, id: String, called: String) -> Button:
 	tile.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tile.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
 	tile.add_theme_font_size_override("font_size", 18)
+	tile.disabled = _busy
 	for state in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
 		tile.add_theme_stylebox_override(state, _tight(state))
 	tile.set_meta("car", id)
@@ -242,8 +260,13 @@ func _talk_about(id: String) -> void:
 func _update_actions() -> void:
 	var theirs := Garage.has(_subject)
 	_add_button.disabled = _busy
+	_find_blender_button.disabled = _busy
+	_back_button.disabled = _busy
 	_turn_button.disabled = _busy or not theirs
 	_remove_button.disabled = _busy or not theirs
+	for grid in _grids:
+		for tile in grid.get_children():
+			(tile as Button).disabled = _busy
 	var named := Garage.name_of(_subject)
 	_turn_button.tooltip_text = ("Turn %s a quarter of the way round." % named
 		if theirs else "The stock car already faces the right way.")
@@ -260,10 +283,20 @@ func _build_the_file_picker() -> void:
 	# The whole disk, not the game's own folders: the car is wherever the
 	# player saved it.
 	_pick_file.access = FileDialog.ACCESS_FILESYSTEM
-	_pick_file.filters = PackedStringArray(["*.glb, *.gltf ; Car models"])
+	_pick_file.filters = PackedStringArray(["*.glb, *.gltf, *.blend ; Car models"])
 	_pick_file.use_native_dialog = true
 	_pick_file.file_selected.connect(_on_file_picked)
 	add_child(_pick_file)
+
+
+func _build_the_blender_picker() -> void:
+	_pick_blender = FileDialog.new()
+	_pick_blender.title = "Where is Blender?"
+	_pick_blender.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	_pick_blender.access = FileDialog.ACCESS_FILESYSTEM
+	_pick_blender.use_native_dialog = true
+	_pick_blender.file_selected.connect(_on_blender_picked)
+	add_child(_pick_blender)
 
 
 func _on_add_pressed() -> void:
@@ -275,6 +308,10 @@ func _on_add_pressed() -> void:
 func _on_file_picked(path: String) -> void:
 	if _busy:
 		return
+	# Said before the wait rather than after it. A page that goes quiet for five
+	# seconds with every button greyed out reads as a page that has hung.
+	if path.get_extension().to_lower() == Garage.BLEND and Blender.here():
+		_say("Handing %s to Blender. This takes a few seconds…" % path.get_file(), QUIET)
 	_busy = true
 	_update_actions()
 	var answer: Dictionary = await Garage.add(path)
@@ -319,6 +356,28 @@ func _on_remove_pressed() -> void:
 func _on_garage_changed() -> void:
 	if visible:
 		_fill()
+
+
+## For a player whose Blender is somewhere this game did not think to look.
+func _on_find_blender_pressed() -> void:
+	if _busy:
+		return
+	_pick_blender.popup_centered(Vector2i(900, 560))
+
+
+## Judged by its name before anything is remembered, and long before anything
+## is run: what the player picked might be anything at all.
+func _on_blender_picked(path: String) -> void:
+	if not Blender.looks_right(path):
+		_say("That does not look like Blender. Look for the program called Blender.",
+			WRONG)
+		return
+	if not Blender.remember(path):
+		_say("Blender is not there.", WRONG)
+		return
+	_find_blender_button.visible = not Blender.here()
+	_say("Found Blender. A .blend can be added now.", RIGHT)
+	_add_button.grab_focus()
 
 
 # --- portraits ----------------------------------------------------------

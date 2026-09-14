@@ -54,7 +54,7 @@ theme_override_font_sizes/font_size = 44
 
 [node name="Note" type="Label" parent="Page/Panel/Margin/Box/Title"]
 layout_mode = 2
-text = "the car changes as you pick"
+text = "the car changes as you pick · a car you add has no first person view"
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
 theme_override_font_sizes/font_size = 18
@@ -124,6 +124,12 @@ theme_override_font_sizes/font_size = 22
 [node name="Remove" type="Button" parent="Page/Panel/Margin/Box/Actions"]
 layout_mode = 2
 text = "REMOVE"
+theme_override_font_sizes/font_size = 22
+
+[node name="FindBlender" type="Button" parent="Page/Panel/Margin/Box/Actions"]
+visible = false
+layout_mode = 2
+text = "FIND BLENDER"
 theme_override_font_sizes/font_size = 22
 
 [node name="Status" type="Label" parent="Page/Panel/Margin/Box"]

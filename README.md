@@ -5,7 +5,8 @@ A split-screen two-player racing game, built in Godot 4.7 (GDScript).
 ## Requirements
 
 - Godot 4.7.2 (standard build, not .NET)
-- Blender 5.2 LTS — only needed to re-export the car models
+- Blender 5.2 LTS — only needed to re-export the game's own models, and on a
+  player's machine only to add a car that is still a `.blend`
 - A Supabase project — only needed for accounts and leaderboards, and only
   if you want them. Without one the game runs exactly as it did before any of
   that existed: `backend/README.md` is the setup, and the whole of the server
@@ -290,6 +291,80 @@ what the physics world sees. It will not run outside the sandbox.
 ```
 Godot --path . --headless --fixed-fps 60 --script tools/checks/garage.gd
 Godot --path . --script tools/checks/garage_shot.gd -- /tmp/shots
+```
+
+### Blender
+
+A car can also be added as a `.blend`, which is the file most people making a
+car actually have. Godot only reads a `.blend` in the editor, and even there it
+does not read it itself: it hands the file to the Blender on the machine and
+imports the glTF that comes back. A shipped game has no editor, so it does what
+the editor does. `Blender` finds Blender, hands it the file, and takes the .glb
+it makes through `CarImport` like any other.
+
+Finding it starts with a Blender the player went and found, remembered in
+`user://blender.cfg`, because the one they pointed at is the one they meant.
+After that it looks where Blender usually is: `/Applications` and
+`~/Applications` on a Mac, `/usr/bin`, `/usr/local/bin`, snap and flatpak on
+Linux, and every version folder under `Blender Foundation` on Windows, newest
+first. A player whose Blender is anywhere else gets a FIND BLENDER button,
+which is only there when nothing was found. What they pick is judged by its
+name before it is remembered - a program called blender something, not a
+`.blend` - and it is never run to find out what it is, because running an
+arbitrary file to see what it does would be the whole of the problem. Picking
+`Blender.app` on a Mac is picking the right thing, and the program inside it is
+what is remembered.
+
+Blender is run as
+
+```
+Blender -b --factory-startup --disable-autoexec <file> --python-exit-code 1 --python <converter> -- <out>
+```
+
+and every switch there is doing something. `--factory-startup` keeps the
+player's own add-ons and preferences from changing what comes out.
+`--disable-autoexec` matters most: a `.blend` can carry Python that runs the
+moment it is opened, and this one may have come from a stranger. Nothing in the
+file is ever run, only Blender's own exporter, told what to do by a converter
+this game wrote. `--python-exit-code` makes a converter that fails part way say
+so rather than exit as though it had finished. The file is only ever handed
+over as a full path, since Blender takes anything starting with a dash as one
+of its own switches.
+
+The converter is a string in `blender.gd`, written out to
+`user://blend_to_glb.py` before each use, rather than a file in `tools/` - which
+does not ship, and a converter the shipped game cannot find converts nothing.
+It deletes the cameras and lights, exits with 2 if nothing is left that could be
+a car, and exports a GLB with modifiers applied and Y up.
+
+What is kept in the garage is the .glb, never the .blend. So a car's id is the
+hash of its model rather than of the file it was made from, and a car arrives
+under the same id however it got here.
+
+Blender runs as a separate program and the game goes on drawing while it
+works. How long it has been going is measured on the clock rather than by
+adding up frames: a headless run does thousands of frames a second, and a
+three-minute timeout counted in frame time kills Blender before it has opened.
+Past three minutes it is stopped, and each way it can go wrong - not found,
+would not start, took too long, made nothing - is its own sentence on the
+screen. The screen says it is handing the file to Blender before the wait
+rather than after it, and refuses every button while it waits: a second file
+would mean two Blenders writing over each other's output. The garage refuses a
+second conversion too, whoever asks for it.
+
+A player without Blender who picks a `.blend` is told so, and told to export a
+`.glb` instead. And the line under the heading says the one thing about a car
+they add that they cannot see from its tile: it has no first person view.
+
+`tools/checks/blend_import.gd` has Blender build a box the rough shape of a car,
+with a camera and a light beside it, save it as a real `.blend`, and then adds
+that to the garage exactly as a player would - checking the fit, the name, that
+what was kept is a .glb whose hash is its id, and the car it makes on the road.
+On a machine with no Blender it says so and passes, since what it covers does
+not exist there.
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/blend_import.gd
 ```
 
 ## Views
