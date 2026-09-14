@@ -46,6 +46,11 @@ const TILE_SIZE := Vector2(200.0, 134.0)
 ## underneath.
 const UNOFFICIAL_COLUMNS := 2
 
+## How wide a line on the page of shared cars is, always. A name is whatever
+## somebody typed, and a line that grew to fit it would resize the whole page
+## under the player's hands as a search narrowed down to it.
+const ROW_WIDTH := 760.0
+
 const QUIET := Color(0.72, 0.76, 0.86)
 const WRONG := Color(0.98, 0.55, 0.5)
 const RIGHT := Color(0.6, 0.9, 0.68)
@@ -110,6 +115,19 @@ var _browse_back: Button
 ## Bumped every time the list is asked for, so an answer that arrives after the
 ## page was closed and opened again is dropped rather than drawn.
 var _asked := 0
+## The search over the shared cars, how many it is showing, and every row the
+## list last brought - so a search is a filter over what is already in hand
+## rather than a request per keystroke. The list is capped, so it is all here.
+var _search: LineEdit
+var _count: Label
+var _all_shared: Array = []
+
+## The panel SHARE opens first, and the car it is asking about.
+var _naming: Control
+var _name_edit: LineEdit
+var _share_it: Button
+var _cancel_naming: Button
+var _naming_for := ""
 
 
 func _ready() -> void:
@@ -134,6 +152,7 @@ func _ready() -> void:
 	_build_the_file_picker()
 	_build_the_blender_picker()
 	_build_the_shared_cars_page()
+	_build_the_naming_panel()
 	hide()
 
 
@@ -148,6 +167,7 @@ func open(players: int) -> void:
 	# rather than once, since Blender may have been installed in the meantime.
 	_find_blender_button.visible = not Blender.here()
 	_browse.hide()
+	_naming.hide()
 	if not _busy:
 		_say("", QUIET)
 	# Set going rather than waited on. It is what tells this page which cars
@@ -177,12 +197,15 @@ func close() -> void:
 ## Escape backs out of the screen. The file pickers are windows of their own and
 ## take their own Escape, so this only ever sees the ones meant for the page.
 ## Not while a car is coming in, for the reason BACK is refused then too. The
-## shared cars lie over the garage, so they are backed out of first.
+## naming panel and the shared cars lie over the garage, so they are backed out
+## of first, innermost first.
 func _input(event: InputEvent) -> void:
 	if not visible or not event.is_action_pressed("ui_cancel"):
 		return
 	get_viewport().set_input_as_handled()
-	if _browse.visible:
+	if _naming.visible:
+		_on_cancel_naming()
+	elif _browse.visible:
 		_close_the_shared_cars()
 	elif not _busy:
 		close()
@@ -459,15 +482,27 @@ func _on_garage_changed() -> void:
 
 ## Share the car being talked about, or take it back down.
 ##
-## Only this button waits on the server. The player goes on picking and turning
-## cars while a car goes up, because nothing else on the page has anything to
-## do with it.
+## Sharing asks what the car is called first. A file's name is whatever it was
+## saved as on somebody's desktop, and it is about to be the name everyone else
+## sees it under. Unsharing asks nothing: the player has already decided, and a
+## question standing in the way of taking something down is a question standing
+## in the way of changing your mind.
 func _on_share_pressed() -> void:
 	if _busy or _sending or not Garage.has(_subject) or not CarLibrary.can_share():
 		return
-	var id := _subject
+	if CarLibrary.is_mine(_subject):
+		_send(_subject, true)
+	else:
+		_ask_for_a_name(_subject)
+
+
+## Put a car up or take it down, and say how it went.
+##
+## Only this waits on the server. The player goes on picking and turning cars
+## while a car goes up, because nothing else on the page has anything to do
+## with it.
+func _send(id: String, taking_down: bool) -> void:
 	var named := Garage.name_of(id)
-	var taking_down := CarLibrary.is_mine(id)
 	_sending = true
 	_update_actions()
 	_say(("Taking %s down…" if taking_down else "Sharing %s…") % named, QUIET)
@@ -488,6 +523,123 @@ func _on_share_pressed() -> void:
 
 func _on_catalogue_arrived(_rows: Array) -> void:
 	_update_actions()
+
+
+# --- what a car is called -----------------------------------------------
+
+func _build_the_naming_panel() -> void:
+	_naming = Control.new()
+	_naming.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_naming.hide()
+	add_child(_naming)
+
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0, 0, 0, 0.5)
+	_naming.add_child(dim)
+
+	var page := CenterContainer.new()
+	page.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_naming.add_child(page)
+	var panel := PanelContainer.new()
+	page.add_child(panel)
+	var margin := MarginContainer.new()
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 36)
+	for side in ["top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 26)
+	panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 14)
+	margin.add_child(box)
+
+	var title := VBoxContainer.new()
+	title.add_theme_constant_override("separation", 0)
+	box.add_child(title)
+	var heading := Label.new()
+	heading.text = "WHAT IS IT CALLED?"
+	heading.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	heading.add_theme_font_size_override("font_size", 40)
+	title.add_child(heading)
+	var subline := Label.new()
+	subline.text = ("the name everybody will see it under, and the name it keeps "
+		+ "in your garage")
+	subline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subline.add_theme_font_size_override("font_size", 18)
+	subline.add_theme_color_override("font_color", QUIET)
+	title.add_child(subline)
+
+	_name_edit = LineEdit.new()
+	_name_edit.max_length = Garage.NAME_LIMIT
+	_name_edit.custom_minimum_size = Vector2(460.0, 52.0)
+	_name_edit.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_name_edit.add_theme_font_size_override("font_size", 24)
+	_name_edit.text_changed.connect(_on_name_changed)
+	# Enter accepts, so a player who is happy with the name, or has just typed
+	# a better one, never has to leave the keyboard.
+	_name_edit.text_submitted.connect(func(_text: String) -> void: _on_share_it_pressed())
+	box.add_child(_name_edit)
+
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	box.add_child(row)
+	_share_it = Button.new()
+	_share_it.text = "SHARE IT"
+	_share_it.pressed.connect(_on_share_it_pressed)
+	row.add_child(_share_it)
+	_cancel_naming = Button.new()
+	_cancel_naming.text = "CANCEL"
+	_cancel_naming.pressed.connect(_on_cancel_naming)
+	row.add_child(_cancel_naming)
+
+
+## Ask what a car should be called, opening on what it is called now.
+##
+## All of it selected, so typing replaces it and Enter keeps it: the two things
+## a player at this box most likely wants are both one key away.
+func _ask_for_a_name(id: String) -> void:
+	if not Garage.has(id):
+		return
+	_naming_for = id
+	_name_edit.text = Garage.name_of(id)
+	_on_name_changed(_name_edit.text)
+	_naming.show()
+	_name_edit.grab_focus()
+	_name_edit.select_all()
+
+
+## A name with nothing in it once it is tidied is not a name, and a car cannot
+## go up under one.
+func _on_name_changed(text: String) -> void:
+	_share_it.disabled = Garage.clean_name(text).is_empty()
+
+
+## Keep the name, then share the car under it. The name goes into the garage
+## rather than straight into the request, because the garage's name is the only
+## one there is - `CarLibrary.publish` reads it from there.
+func _on_share_it_pressed() -> void:
+	if _naming_for.is_empty() or _share_it.disabled:
+		return
+	var id := _naming_for
+	var wanted := Garage.clean_name(_name_edit.text)
+	_close_the_naming()
+	if wanted != Garage.name_of(id):
+		Garage.rename(id, wanted)
+	await _send(id, false)
+
+
+## Nothing typed is kept and nothing is sent.
+func _on_cancel_naming() -> void:
+	_close_the_naming()
+
+
+func _close_the_naming() -> void:
+	_naming.hide()
+	_naming_for = ""
+	if _share_button.is_visible_in_tree():
+		_share_button.grab_focus()
 
 
 ## For a player whose Blender is somewhere this game did not think to look.
@@ -559,8 +711,30 @@ func _build_the_shared_cars_page() -> void:
 	subline.add_theme_color_override("font_color", QUIET)
 	title.add_child(subline)
 
+	var looking := HBoxContainer.new()
+	looking.add_theme_constant_override("separation", 12)
+	box.add_child(looking)
+	_search = LineEdit.new()
+	_search.placeholder_text = "search by name or who shared it"
+	_search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_search.custom_minimum_size.y = 44.0
+	_search.clear_button_enabled = true
+	_search.add_theme_font_size_override("font_size", 20)
+	_search.text_changed.connect(func(_text: String) -> void: _filter())
+	looking.add_child(_search)
+	_count = Label.new()
+	_count.custom_minimum_size.x = 110.0
+	_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_count.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_count.add_theme_font_size_override("font_size", 18)
+	_count.add_theme_color_override("font_color", QUIET)
+	looking.add_child(_count)
+
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(760.0, 400.0)
+	# The lines are a fixed 760, and the scroll bar gets room of its own beside
+	# them rather than eating into them the moment the list is long enough to
+	# need one.
+	scroll.custom_minimum_size = Vector2(ROW_WIDTH + 16.0, 350.0)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	box.add_child(scroll)
 	_shared_rows = VBoxContainer.new()
@@ -571,7 +745,7 @@ func _build_the_shared_cars_page() -> void:
 	_shared_note = Label.new()
 	_shared_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_shared_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_shared_note.custom_minimum_size = Vector2(760.0, 26.0)
+	_shared_note.custom_minimum_size = Vector2(ROW_WIDTH, 26.0)
 	_shared_note.add_theme_font_size_override("font_size", 18)
 	_shared_note.add_theme_color_override("font_color", QUIET)
 	box.add_child(_shared_note)
@@ -585,8 +759,11 @@ func _build_the_shared_cars_page() -> void:
 func _open_the_shared_cars() -> void:
 	if _busy:
 		return
+	_search.text = ""
 	_browse.show()
-	_browse_back.grab_focus()
+	# On the search box, so a player looking for something types it straight
+	# in. Down from there is the list, and Escape still backs out.
+	_search.grab_focus()
 	_fetch_the_shared_cars(false)
 
 
@@ -617,20 +794,59 @@ func _fetch_the_shared_cars(force: bool) -> void:
 ## shared anything - and a player told the wrong one goes and does the wrong
 ## thing about it.
 func _show_the_shared_cars(rows: Array) -> void:
+	_all_shared = []
 	_clear_the_shared_cars()
+	_count.text = ""
 	if not CarLibrary.available():
 		_shared_note.text = ("This copy of the game has no server set up, so there "
 			+ "are no shared cars. Your own garage works as it always did.")
 		return
-	if rows.is_empty():
+	if rows.is_empty() and not CarLibrary.answered():
 		_shared_note.text = ("The server did not answer, so the shared cars cannot "
-			+ "be shown. Every car in your garage is still here."
-			if not CarLibrary.answered() else "Nobody has shared a car yet.")
+			+ "be shown. Every car in your garage is still here.")
 		return
-	for row: Dictionary in rows:
+	_list_the_shared_cars(rows)
+
+
+## Take a list of shared cars as the list in hand, and show as much of it as
+## the search lets through.
+func _list_the_shared_cars(rows: Array) -> void:
+	_all_shared = rows
+	_filter()
+
+
+## Narrow the list to what the search asks for, on the name or on who shared
+## it, whichever way round it was typed.
+##
+## The count says how many of how many while a search is on, so a list getting
+## shorter reads as a search narrowing rather than as cars vanishing off the
+## server. And it never claims a number it cannot know: a list as long as the
+## list is allowed to be is the newest sixty of however many there are.
+func _filter() -> void:
+	_clear_the_shared_cars()
+	var query := _search.text.strip_edges().to_lower()
+	var shown := []
+	for row: Dictionary in _all_shared:
+		if query.is_empty() or str(row.name).to_lower().contains(query) \
+				or str(row.by).to_lower().contains(query):
+			shown.append(row)
+	for row: Dictionary in shown:
 		_shared_rows.add_child(_shared_line(row))
-	_shared_note.text = ("" if CarLibrary.answered()
-		else "The server did not answer. This is the list as it was.")
+
+	if _all_shared.is_empty():
+		_count.text = ""
+		_shared_note.text = "Nobody has shared a car yet."
+		return
+	var total := str(_all_shared.size())
+	if _all_shared.size() >= CarLibrary.CATALOGUE_SIZE:
+		total = "%d+" % CarLibrary.CATALOGUE_SIZE
+	_count.text = total if query.is_empty() else "%d of %s" % [shown.size(), total]
+	if shown.is_empty():
+		# Its own sentence. "Nobody has shared a car yet" would be a lie about
+		# the server, told because of something the player typed.
+		_shared_note.text = "Nothing matches that."
+	elif CarLibrary.available() and not CarLibrary.answered():
+		_shared_note.text = "The server did not answer. This is the list as it was."
 
 
 ## One shared car: its name, who put it up, and GET - or a word saying it is
@@ -638,6 +854,9 @@ func _show_the_shared_cars(rows: Array) -> void:
 func _shared_line(row: Dictionary) -> Control:
 	var line := HBoxContainer.new()
 	line.add_theme_constant_override("separation", 14)
+	line.custom_minimum_size.x = ROW_WIDTH
+	line.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	line.clip_contents = true
 	line.set_meta("car", row.id)
 
 	var name := Label.new()

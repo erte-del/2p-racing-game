@@ -463,6 +463,18 @@ game is paused. The garage is opened over a paused race, an `HTTPRequest` polls
 in `_process`, and a paused tree stops `_process` - so without that, a car sent
 from the pause screen would set off and never arrive.
 
+SHARE asks what the car is called before anything goes anywhere. A car's name
+is whatever its file happened to be saved as on somebody's desktop, and it is
+about to be the name everyone else sees it under. WHAT IS IT CALLED? opens on
+the name it has now, all of it selected, so typing replaces it and Enter keeps
+it - the two things a player at that box most likely wants are one key each.
+SHARE IT is refused while the box holds nothing but spaces. Confirming renames
+the car in the garage if the name changed and then shares it, so the name on
+the server and the name on the tile are the same name, read from the one place.
+CANCEL changes nothing. UNSHARE asks nothing at all: the player has already
+decided, and a question in the way of taking something down is a question in
+the way of changing your mind.
+
 BROWSE opens SHARED CARS - "what other people have put up" - over the garage:
 the newest sixty, each line the car's name, who shared it and GET, or IN YOUR
 GARAGE for one already here. An empty page says which kind of empty it is,
@@ -470,6 +482,19 @@ because each asks the player to do something different: there is no server;
 the server did not answer, and every car in the garage is still here; or
 nobody has shared a car yet. The list is kept for a minute, so opening and
 closing the page is not a request each time.
+
+The page can be searched, by a car's name or by who shared it, and the search
+opens with the cursor in it. It filters the rows already in hand, without
+asking the server anything per keystroke - the list is capped at sixty, so
+everything it could find is already here. Beside it a count says how many cars
+there are, or "60+" when the page is full, because a full page is the newest
+sixty of a number the game does not know and it does not pretend to. While a
+search is on it says "3 of 6", so a list getting shorter reads as a search
+narrowing rather than cars vanishing off the server, and a search that finds
+nothing says "Nothing matches that." - which is not the same sentence as nobody
+having shared anything, and must not be. Every line is exactly 760 pixels wide,
+with a long name cut off in an ellipsis, so the page does not change shape
+under the player's hands as a search narrows onto one.
 
 `tools/checks/sharing.gd` runs with no server, because a check must never touch
 a live one. It checks that every call with nothing to talk to comes back as a
@@ -479,6 +504,13 @@ name, the same bytes twice being one car, the id being stable and changing
 when one bit of the model does, rows shaped wrong being dropped, and
 `_code_in` reading a 400 that says 409 as 409, one that says 404 as 404, a 403
 with no JSON as 403, and an empty 500 as 500.
+
+It drives the real screens too, made without `open`, which would set portraits
+drawing with nothing headless to draw them. The name box opens on the car's
+name, selected; emptying it refuses SHARE IT; a typed name lands in the garage;
+cancelling changes nothing. The search narrows six cars to three and counts
+"3 of 6", says "Nothing matches that." for nothing, counts a full page as
+"60+", and a long name does not widen its line.
 
 ```
 Godot --path . --headless --fixed-fps 60 --script tools/checks/sharing.gd

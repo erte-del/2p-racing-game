@@ -58,6 +58,13 @@ func _init() -> void:
 
 	var garage: Node = root.get_node("/root/Garage")
 	var settings: Node = root.get_node("/root/GameSettings")
+	# An autoload whose script failed to compile is still in the tree, as a bare
+	# node, and every call into it is an error that counts as no fault at all.
+	if not garage.has_method("add") or not settings.has_method("set_car_id"):
+		print("  the garage or the settings came up without a script")
+		print("%d faults" % (faults + 1))
+		quit(1)
+		return
 	_empty(garage)
 	settings.car_ids = PackedStringArray(["", ""])
 	settings.track_file = ""
