@@ -27,6 +27,12 @@ two tables the leaderboards live in, the notes for standing a project up, and
 the two pages a confirmation email needs. The game's half of that is three
 scripts in `scripts/` like any other.
 
+Nothing a player brings into the game is in the repo. Cars they add live in
+`user://cars/`, a folder per car, beside the settings and the times - see
+[Custom cars](#custom-cars). Anything under `tools/` that runs the game keeps
+its files in `user://sandbox/` instead, so a check can never touch a real
+garage.
+
 ## Menu
 
 `scenes/menu.tscn` is the game's main scene now, so it is what opens on launch:
@@ -138,6 +144,153 @@ is given one, because two cars nobody can tell apart is not a split screen
 anybody can read. And its headlights are placed off the shape itself - out to
 29% of its width, 47% up its height, on its front face - rather than off the
 numbers measured from the JDM model.
+
+## Custom cars
+
+A player can bring their own car into the game and drive it. It changes what
+the car looks like and nothing else, which is the shell split above doing the
+job it was built for - and `tools/checks/garage.gd` is what keeps that true.
+
+Every model comes in through one door, `CarImport`, whether it was picked off
+the player's own disk or downloaded from a stranger. There is no second way in
+that skips the checks, so there is no second way in for a bad file to find.
+It reads the file at run time with `GLTFDocument` - a shipped game has no
+import step, because the editor that turns a .glb into a resource is not on
+the player's machine - and turns away, in a sentence rather than a crash,
+anything that:
+
+- is not a glTF at all, or is bigger than 8 MB;
+- keeps its geometry or its textures in files beside it. A car has to be one
+  self-contained file, so it is still the same car when it is handed to
+  someone else. The glTF's description is read and judged before the model is,
+  and the reader is given no base path, so even a file that slipped past could
+  not go and find anything beside it;
+- has more than 250,000 vertices or 96 surfaces, counted per instance rather
+  than per mesh, because a wheel used four times is drawn four times;
+- has nothing in it to see.
+
+What is left is stripped down to its meshes. A camera in a model would fight
+the split-screen cameras for the view, a light would be a second sun bolted to
+the bumper, an animation player would run the thing about, and a physics body
+would be worst of all: a box of somebody else's size hung off the car and
+colliding with the road, which is the one thing a model must never change. What
+is kept is a short list rather than what is thrown out, because the list of
+things to throw out is whatever the next exporter thinks of. A node of a kind
+that is not kept is swapped for a plain one in the same place rather than
+thrown away with everything under it, since exporters hang wheels off whatever
+they like, and it keeps its name so a skin still finds its skeleton.
+
+### Fitting
+
+`CarImport.fit` works out the transform that puts a model on the car, and the
+first rule of it is one scale for all three axes, never three. A motorbike
+squashed out to the width of a car and a rubber duck stretched to its length
+are not those things any more, and a player who brought one wanted to drive
+that.
+
+The model's length is matched to the 4.87 m collision box, and its width and
+height are held under the box's with a 15% allowance - a car with mirrors or a
+spoiler is a little bigger than the box it drives in, and one a great deal
+bigger would be seen scraping through gaps it is not touching. Whichever of the
+three runs out first is the one that decides. A lorry is brought down by its
+height. A lamp post comes out as a short lamp post rather than a thin one the
+length of a car. A marble is scaled up until it is as tall as the allowance
+lets it be, which for anything round is well short of 4.87 m long.
+
+Before any of that, the longer way across the ground is guessed to be the
+length and turned to lie down the road. Most things are longer than they are
+wide, so the guess is usually right, and the player turns it from there a
+quarter at a time. The turn is applied before anything is measured: a quarter
+turn puts the length across the road, and the fit on the far side of that turn
+is a different fit - the width runs out instead of the length - so it is worked
+out there rather than turned afterwards. The turns themselves are written out
+exactly rather than worked out from an angle, so four of them is the car that
+started. Last, the model is centred across the road and along it and stood on
+the ground.
+
+A car brought in has no interior, so it has no first person view. And a camera
+already sitting in the stock car's cabin when its player swaps to something
+solid steps back out on its own, in `ChaseCamera`, rather than every screen
+that changes a car having to remember the camera.
+
+Nothing about a lap changes with the car. The box, the tuning and the road are
+the same in every model, so a time set in a lorry is a time set in the stock
+car, and the leaderboards take no notice of which one it was.
+
+### The garage
+
+`Garage` is an autoload over a folder per car in `user://cars/`. Each holds
+the model exactly as it arrived, `car.glb`, which is never rewritten, a
+`car.cfg` saying what it is called and how far it has been turned, and
+`thumb.png`, its portrait. A car's id is the first sixteen hex characters of the
+sha256 of its model, so the same file added twice is one car, and a car has the
+same id on every machine it is ever copied to. None of it needs an account, a
+network or a `backend.cfg`; this is the truth the game is played against, the
+same way `TrackTimes` is for the times.
+
+Which car each player drives is a setting like their paint, in
+`GameSettings.car_ids` and saved as `[cars] model_1` and `model_2`. It is an id
+rather than a place in the garage's list: that list changes as cars come and
+go, and "the third one" silently becomes a different car the moment anything
+ahead of it is removed. Nothing checks the ids against the garage when they are
+loaded, and nothing has to. `Garage.dress` drives an id it does not know - a car
+since deleted, or a settings file copied from another machine - as the stock
+car, so a player never ends up with nothing to drive.
+
+Picking a car takes exactly the path paint does. The screen writes the setting
+and never touches a car; the race and the solo run are listening, and dress
+their cars from it. They listen to the garage too, because turning or deleting
+a car changes what a player is driving without changing which car they picked -
+a car turned while the race is paused is turned on the road before the pause
+screen is closed. Dressing a car in what it already has costs nothing, and it
+takes the id and the turns together to know that, since a turned car has the
+same id and a different model. Only the stock car is handed over as stock,
+which is what gives it back its cockpit. Chaos leaves all of this alone: it
+rolls how a car handles and what colour it is, never what it is.
+
+The garage screen opens from the pause menu, as GARAGE between PAINT and
+SETTINGS. Unlike PAINT it is not refused under chaos, for the same reason chaos
+leaves the model alone. It is the paint screen's shape - a column of tiles per
+player, over the race - and like the paint screen a tile puts the player in its
+car the moment it is pressed, because the car is right there on the road behind
+the panel and seeing it is the only way to know it is the one you wanted. The
+car each player is in is held down.
+
+ADD A CAR, TURN and REMOVE all act on whichever tile the cursor or the keyboard
+is on. There is exactly one car being talked about on the screen at a time, so
+no button has to ask which car it means. TURN and REMOVE are refused on the
+stock car. Removing a car puts anyone sitting in it back in the stock car
+before its file goes. One line at the bottom says what happened, or what was
+wrong with the file, and the choices are written to disk when the screen
+closes rather than on every press.
+
+Portraits are drawn once, the first time a car is seen, and kept beside the
+model. `CarPortrait` puts the model in a `World3D` of its own inside a viewport
+that lasts as long as the picture does - the course and the sky are in the
+game's world, and a portrait taken there would be a picture of wherever the car
+was parked. Opening the screen costs nothing for a car that has been drawn
+before, and TURN throws its car's picture away and draws it again the right way
+round.
+
+Every file the garage writes goes through `Sandbox`, and the folder itself
+through `Sandbox.folder`, so a harness under `tools/` has a garage of its own.
+The sandbox catches harnesses that are scripts as well as ones that are scenes,
+which matters here: every check below is a `--script`.
+
+`tools/checks/garage.gd` builds its test models in code, as boxes of a given
+size written out as .glb, and checks the fit on the numbers - a car-sized box,
+a lorry, a lamp post, a plank on end, a marble, and a quarter turn swapping the
+length limit for the width one. It feeds the door garbage, a text file and a
+.gltf with its buffer beside it, and sees that nothing is left behind. Then it
+dresses a car in a real race in a model carrying a camera, a light and a
+physics body twenty metres across, and measures what the car collides with by
+firing rays at it, because what the fit says it did is not the same thing as
+what the physics world sees. It will not run outside the sandbox.
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/garage.gd
+Godot --path . --script tools/checks/garage_shot.gd -- /tmp/shots
+```
 
 ## Views
 

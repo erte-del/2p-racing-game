@@ -39,20 +39,24 @@ signal quit_requested
 @onready var _resume_button: Button = $Page/Panel/Margin/Box/Resume
 @onready var _restart_button: Button = $Page/Panel/Margin/Box/Restart
 @onready var _paint_button: Button = $Page/Panel/Margin/Box/Paint
+@onready var _garage_button: Button = $Page/Panel/Margin/Box/Garage
 @onready var _settings_button: Button = $Page/Panel/Margin/Box/Settings
 @onready var _quit_button: Button = $Page/Panel/Margin/Box/Quit
 @onready var _settings_screen: SettingsMenu = $SettingsScreen
 @onready var _paint_screen: PaintMenu = $PaintScreen
+@onready var _garage_screen: GarageMenu = $GarageScreen
 
 
 func _ready() -> void:
 	_resume_button.pressed.connect(close)
 	_restart_button.pressed.connect(_on_restart_pressed)
 	_paint_button.pressed.connect(_on_paint_pressed)
+	_garage_button.pressed.connect(_on_garage_pressed)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	_quit_button.pressed.connect(_on_quit_pressed)
 	_settings_screen.closed.connect(_on_settings_closed)
 	_paint_screen.closed.connect(_on_paint_closed)
+	_garage_screen.closed.connect(_on_garage_closed)
 	hide()
 
 
@@ -75,10 +79,15 @@ func open(where: String, restart_text: String, quit_text := "QUIT TO MENU") -> v
 	# Always opens on the pause page itself, however it was left last time.
 	_settings_screen.hide()
 	_paint_screen.hide()
+	_garage_screen.hide()
 	# Chaos repaints both cars for every race, so a paint chosen under it
 	# would be gone by the next course. The button stays where it is and says
 	# why rather than disappearing: a row that changes shape between modes is
 	# one a player has to read every time instead of pressing.
+	#
+	# The garage is not refused the same way. Chaos rolls how a car handles
+	# and what colour it is, never which model it is wearing, so a car picked
+	# under chaos is still the car on the road after the next roll.
 	_paint_button.disabled = GameSettings.chaos
 	_paint_button.tooltip_text = ("Chaos repaints the cars for every race."
 			if GameSettings.chaos else "")
@@ -110,7 +119,8 @@ func close() -> void:
 ## settings sheet handles its own key and lies over this, so it gets first
 ## refusal - this only sees the ones it did not want.
 func _input(event: InputEvent) -> void:
-	if not visible or _settings_screen.visible or _paint_screen.visible:
+	if not visible or _settings_screen.visible or _paint_screen.visible \
+			or _garage_screen.visible:
 		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
@@ -140,6 +150,16 @@ func _on_paint_pressed() -> void:
 
 func _on_paint_closed() -> void:
 	_paint_button.grab_focus()
+
+
+## The garage asks the same question the paint screen does: how many cars
+## there are to put somebody in.
+func _on_garage_pressed() -> void:
+	_garage_screen.open(1 if GameSettings.solo else 2)
+
+
+func _on_garage_closed() -> void:
+	_garage_button.grab_focus()
 
 
 ## The settings lie over the pause screen the same way the pause screen lies

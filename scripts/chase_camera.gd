@@ -89,6 +89,14 @@ func _physics_process(delta: float) -> void:
 		return
 	# Exponential easing, so the feel does not change with frame rate.
 	_rush = lerpf(_rush, _target.overspeed(), 1.0 - exp(-rush_ease * delta))
+	# A car can lose its inside while the camera is sitting in it: a player
+	# picks a different car in the garage mid-race, and the stock car's cabin
+	# is swapped for a solid shape around the camera. Stepping back out here
+	# covers that however it happened, rather than trusting every screen that
+	# changes a car to remember the camera.
+	if _inside and not _target.has_cockpit():
+		_inside = false
+		_snap()
 	_apply_fov()
 	if _inside:
 		# Rigidly bolted to the car. Smoothing a first person view lags the

@@ -115,12 +115,17 @@ func _ready() -> void:
 	# After the track is built, since what a lap of it is worth is read off
 	# the track rather than described a second time.
 	_result.hide()
-	# The paint the player chose, and a standing offer to change it: the pause
-	# screen writes to the setting rather than reaching in here, so a swatch
-	# pressed mid-run lands on the car through the same path the saved choice
-	# takes at the start of one.
+	# The car and the paint the player chose, and a standing offer to change
+	# either: the pause screen writes to the setting rather than reaching in
+	# here, so a car or a swatch picked mid-run lands through the same path the
+	# saved choice takes at the start of one. The garage is listened to as
+	# well, because turning or deleting a car changes what is being driven
+	# without changing which car was picked.
+	_apply_cars()
 	_apply_paint()
+	GameSettings.changed.connect(_apply_cars)
 	GameSettings.changed.connect(_apply_paint)
+	Garage.changed.connect(_apply_cars)
 	_lines.watch(_car)
 	_place_on_the_line()
 	_camera.follow(_car)
@@ -181,6 +186,12 @@ func _input(event: InputEvent) -> void:
 
 
 # --- pausing ------------------------------------------------------------
+
+## Put the player in the car they picked. Chaos leaves this alone: it rolls how
+## the car handles and what colour it is, never what it is.
+func _apply_cars() -> void:
+	Garage.dress(_car, GameSettings.car_id(0))
+
 
 ## Put the player's colour on the car. Chaos is the one thing that overrules
 ## it: it repaints the car for every course on purpose, and a chosen colour

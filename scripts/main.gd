@@ -152,12 +152,18 @@ func _ready() -> void:
 	_arrow1.setup(_car1, _car2, _car2.body_color, LAYER_P1_ONLY, _camera1)
 	_arrow2.setup(_car2, _car1, _car1.body_color, LAYER_P2_ONLY, _camera2)
 
-	# The paint the players chose, and a standing offer to change it: the
-	# pause screen writes to the setting rather than reaching in here, so a
-	# swatch pressed mid-race lands on the car through the same path the
-	# saved choice takes at the start of one.
+	# The cars and the paint the players chose, and a standing offer to change
+	# either: the pause screen writes to the setting rather than reaching in
+	# here, so a car or a swatch picked mid-race lands through the same path
+	# the saved choice takes at the start of one. The car goes first, so the
+	# paint lands on the model that is going to be driven. The garage is
+	# listened to as well, because turning or deleting a car changes what a
+	# player is driving without changing which car they picked.
+	_apply_cars()
 	_apply_paint()
+	GameSettings.changed.connect(_apply_cars)
 	GameSettings.changed.connect(_apply_paint)
+	Garage.changed.connect(_apply_cars)
 
 	# Show everything except the rival's private layer. Subtracting one layer
 	# rather than listing the wanted ones means anything added to the world
@@ -293,6 +299,17 @@ func _restart() -> void:
 
 func _on_pause_quit() -> void:
 	get_tree().change_scene_to_file(menu_scene)
+
+
+## Put each player in the car they picked.
+##
+## Chaos does not overrule this the way it overrules the paint. It rolls how
+## the cars handle and what colour they are, never what they are: the model is
+## only looked at, and a player who brought their own car into a chaotic race
+## still wants to see it on the road.
+func _apply_cars() -> void:
+	for i in _cars.size():
+		Garage.dress(_cars[i], GameSettings.car_id(i))
 
 
 ## Put the players' colours on the cars, and on the arrows that point at them.

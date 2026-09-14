@@ -58,6 +58,20 @@ static func path(wanted: String) -> String:
 	return "%s/%s" % [FOLDER, wanted.get_file()]
 
 
+## Where a whole folder of files actually goes, made if it is not there yet.
+##
+## The same rule as `path`, for things that keep many files rather than one:
+## a test run gets a folder of the same name inside the sandbox. Made here
+## rather than by whoever asked, so nothing can be written into a folder that
+## was worked out and then never created.
+static func folder(wanted: String) -> String:
+	var where := wanted.trim_suffix("/")
+	if on():
+		where = "%s/%s" % [FOLDER, where.get_file()]
+	DirAccess.make_dir_recursive_absolute(where)
+	return where
+
+
 static func _asked_for() -> bool:
 	return FLAG in OS.get_cmdline_args() or FLAG in OS.get_cmdline_user_args()
 
@@ -71,9 +85,12 @@ static func _asked_for() -> bool:
 ## were caught at first, which meant the guard that was meant to stop a test
 ## rewriting somebody's records was missing from the harnesses that actually
 ## finish a lap.
+##
+## Slashes are straightened first, so a harness named the Windows way round -
+## `tools\checks\garage.gd` - is caught as surely as one named this way.
 static func _running_out_of_tools() -> bool:
 	for arg in OS.get_cmdline_args():
-		if not arg.contains("tools/"):
+		if not arg.replace("\\", "/").contains("tools/"):
 			continue
 		if arg.ends_with(".tscn") or arg.ends_with(".gd"):
 			return true

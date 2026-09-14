@@ -119,6 +119,14 @@ const OBSTACLE_GROUP := &"obstacle"
 ## everything that puts a car down on a surface reads it.
 @export var wheel_radius := 0.355
 
+## Which garage car this is wearing, and how many quarter turns it was put on
+## with. An empty id is the model the car was built with, which is the stock
+## car. Kept on the car so that dressing it again in exactly what it already
+## has costs nothing - and it takes both to know that, since a car turned while
+## the race was paused has the same id and a different model.
+var model_id := ""
+var model_turns := 0
+
 ## The other car, for slipstream. Wired up by the level.
 var rival: Car
 ## While frozen the car ignores input and holds still, used for the pause
