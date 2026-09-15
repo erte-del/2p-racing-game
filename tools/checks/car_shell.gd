@@ -15,7 +15,8 @@ extends SceneTree
 ## not.
 const TUNING := [
 	"max_speed", "gravity", "tight_turn_radius", "air_steer", "steer_rise",
-	"steer_fall", "roof_bounce",
+	"steer_fall", "roof_bounce", "bump_take", "bump_give", "side_push",
+	"push_fade", "bump_recovery",
 	"roll_per_accel", "max_roll", "dive_per_accel", "max_dive",
 	"landing_give", "max_squash", "body_spring", "body_damping",
 	"air_wheel_fade",

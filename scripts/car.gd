@@ -121,6 +121,29 @@ const OBSTACLE_GROUP := &"obstacle"
 ## than bouncing. Without it the bounces would shrink for ever, and a car
 ## sitting on a roof would judder there instead of resting.
 @export var roof_bounce_min := 2.0
+## Running into the other car. Both cars are CharacterBody3D, so to each other
+## they are walls: move_and_slide keeps them apart and does nothing else, and
+## CarContact adds the bump. It says why that is one node rather than
+## something each car does to the other.
+##
+## How much of the speed two cars are closing at the car doing the hitting
+## loses on a square hit, and how much of it the car being hit is given, as
+## fractions. The give is always held under the take, so running into a car
+## from behind costs more than it hands over, and tuned to come to one between
+## them, so after a square hit from behind neither car is still closing on the
+## other. A glancing hit passes on only as much as the hitter was pointed into
+## it, and the car hit is never given more than its own top speed.
+@export_range(0.0, 1.0) var bump_take := 0.75
+@export_range(0.0, 1.0) var bump_give := 0.25
+## How fast two cars that touch side on are pushed apart, in m/s, and the
+## seconds that push takes to die away. It is a push rather than a change of
+## speed, so it rides on top of where each car is going, and move_and_slide
+## and the rails still have the last word on where that ends up.
+@export var side_push := 4.0
+@export var push_fade := 0.3
+## Seconds after a contact during which another costs nothing, for the reason
+## obstacle_recovery gives: two cars leant together touch on every step.
+@export var bump_recovery := 0.4
 
 @export_group("Speed rush")
 ## How far past its own max speed a car has to be for the rush - the speed
@@ -220,6 +243,11 @@ var _last_height := 0.0
 ## that lands a car is also what tells the next one it is on the floor, and a
 ## car on the floor has its vertical speed taken away before it moves.
 var _bounce := 0.0
+## The push the other car last gave this one, in m/s across the ground, fading
+## away; and whether the car moved on its last step, which is what says
+## whether what it ran into on that step is still news.
+var _shove := Vector3.ZERO
+var _moved := false
 ## Everything that is looked at rather than driven on: the model, its paint,
 ## its lights and the driver's eye. It tips to follow the road while the body
 ## it hangs off stays upright.
@@ -369,6 +397,7 @@ func reset_motion() -> void:
 	_climb = 0.0
 	_last_height = global_position.y
 	_bounce = 0.0
+	_shove = Vector3.ZERO
 	_pitch = 0.0
 	_roll = 0.0
 	_roll_rate = 0.0
@@ -552,8 +581,12 @@ func turn_radius_at(speed: float) -> float:
 ## to it as it goes, which is what turns a ramp into a launch.
 func _drive(delta: float) -> void:
 	var forward := -global_transform.basis.z
-	velocity.x = forward.x * _speed
-	velocity.z = forward.z * _speed
+	# A push from the other car rides on top of the car's own speed rather
+	# than changing it, and fades away.
+	_shove = _shove.move_toward(Vector3.ZERO,
+		side_push / maxf(push_fade, 0.001) * delta)
+	velocity.x = forward.x * _speed + _shove.x
+	velocity.z = forward.z * _speed + _shove.z
 	var grounded := is_on_floor()
 	var bouncing := _bounce > 0.0
 	if bouncing:
@@ -567,6 +600,7 @@ func _drive(delta: float) -> void:
 	# takes that away.
 	var falling := -velocity.y
 	move_and_slide()
+	_moved = true
 
 	if is_on_floor():
 		# Measured rather than worked out from the slope: this is the height
@@ -609,6 +643,39 @@ func _bounce_off_a_roof(falling: float) -> void:
 		if collision.get_collider() is Car and collision.get_angle() <= floor_max_angle:
 			_bounce = minf(falling * roof_bounce, max_launch)
 			return
+
+
+## Signed speed along the car's own heading, in m/s. Positive is forwards.
+func speed() -> float:
+	return _speed
+
+
+## Take a knock from the other car: `change` in m/s along the car's own
+## heading, and `push` across the ground, fading over push_fade. Handed over
+## by CarContact, which has worked out both cars' knocks together.
+##
+## A loss slows the car towards a standstill and never through it. A gain is
+## capped at the car's own top speed, and never takes a car that is already
+## over it - on a fading boost - any higher. The boost itself is left alone,
+## for either car: the other car is not the hazard a pad was offered against,
+## and a boost that a rival could end just by getting in the way would make
+## blocking pay.
+func knock(change: float, push: Vector3) -> void:
+	if change < 0.0:
+		_speed = move_toward(_speed, 0.0, -change)
+	elif change > 0.0:
+		_speed = minf(_speed + change, maxf(top_speed(), _speed))
+	if push.length_squared() > _shove.length_squared():
+		_shove = push
+
+
+## Whether the car moved on its last step, forgetting it as it is asked.
+## What move_and_slide ran into is kept until the next move, so a car held
+## frozen still reports the last thing it touched, however long ago that was.
+func take_moved() -> bool:
+	var moved := _moved
+	_moved = false
+	return moved
 
 
 ## Pay for anything the car ran into on the way.

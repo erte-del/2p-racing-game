@@ -119,6 +119,10 @@ func _ready() -> void:
 	_cars = [_car1, _car2]
 	_car1.rival = _car2
 	_car2.rival = _car1
+	# The cars running into each other is settled in one place, for both of
+	# them at once; CarContact says why. The title screen's cars are parked.
+	if not attract_mode:
+		add_child(CarContact.new(_car1, _car2))
 
 	# Chaos rolls the cars, the course and the sky, so it has to be in place
 	# before the first course is built. The title screen backdrop never rolls:

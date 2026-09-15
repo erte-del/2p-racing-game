@@ -1469,6 +1469,62 @@ Onto the roof it comes down at 11.6 m/s, goes back up at 7.2 m/s and 1.14 m,
 bounces four times and comes to rest on the roof 1.93 s after it was let go.
 Onto the road it comes down at the same 11.6 m/s and never leaves it again.
 
+## Car-to-car contact
+
+The two cars are both `CharacterBody3D`, so to each other they are walls:
+`move_and_slide` stops one going through the other and does nothing else. A car
+nosed into the other's bumper sat there at full throttle reading as fast while
+going nowhere - the same thing `_take_the_hits` stops a barrier doing - and a
+car leant on from the side was not moved at all. `CarContact` adds the bump.
+
+From behind, the car doing the hitting loses `bump_take` (0.75) of the speed the
+two were closing at, and the car it hits is handed `bump_give` (0.25), never past
+its own top speed. The give is always held under the take, so running into a
+car costs more than it hands over and ramming never pays; and the two are tuned
+to come to one, so after a square hit from behind neither car is still closing
+on the other. Both are scaled by how square the hit was - how straight the
+hitter was pointed into the other car - and the car hit only turns what it is
+handed into speed as far as it is pushed along its own heading, so a car hit
+from in front is slowed and one hit side on is not sped up at all.
+
+From the side, both cars are pushed apart at `side_push` (4 m/s), as much of it
+as the contact is across each car, fading away over `push_fade` (0.3 s). The
+push is not speed. It is added to where the car is going inside `_drive`, so
+`move_and_slide` and the rails still decide where it ends up, and a car pinned
+between the other car and a rail slides down the rail rather than through it.
+`bump_recovery` (0.4 s) is how long before another contact counts, for the
+reason `obstacle_recovery` gives.
+
+Contact does not end a boost, for either car. The other car is not the hazard a
+pad was offered against, and a boost a rival could end just by getting in the
+way would make blocking pay.
+
+It is settled in one place rather than by each car. The cars take their physics
+steps one after the other, so a car that knocked the other in its own step would
+hand it a changed speed before it had moved, and how every contact came out
+would depend on which car was first in the scene. `CarContact` runs ahead of
+both cars, reads what each ran into on its last move, works the contact out once
+from both cars' speeds as they stood at the start of the step, and hands both
+their knocks over together. Only the two-player race builds one; solo has one
+car and nothing for it to run into. Chaos leaves all of it alone.
+
+`tools/checks/car_contact.gd` runs a car at 30 m/s into the back of one at
+20 m/s in the same lane, once each way round, and squeezes two cars side by
+side into a rail:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/car_contact.gd
+```
+
+From behind, both cars come away at 22.5 m/s - the rear car losing 7.5 and the
+front car gaining 2.5 - in a single contact, the same whichever car is behind,
+with the boxes never inside each other. Side by side, with the outer car turned
+8 degrees into the rail at 20 m/s for two seconds, the cars are pushed apart
+three times and are never more than 0.022 m into each other. The pinned car's
+side ends up 0.02 m past the rail's face as it is worked out from the course,
+well inside the 0.28 m the rail is thick, and both cars are still on the road
+at the end.
+
 ## Laid-out tracks
 
 Alongside the endless course there are tracks written down by hand. A track
