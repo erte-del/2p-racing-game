@@ -294,10 +294,20 @@ func _right(track: Track, at: float) -> Vector3:
 
 
 ## The whole of what the finish screen is saying, on one line.
+##
+## The words are a long way down from Result. Result itself is only the layer
+## that is shown and hidden - which is why the checks above still ask it, and
+## not the panel, whether finishing said anything - and it holds the badge as
+## well as the panel. The labels are in the box inside the panel's margin,
+## centred on the screen. They are asked for by that whole path rather than
+## found by name, so that the next time the finish screen is rearranged this
+## stops on the node that went missing instead of quietly reading whichever
+## label further down happens to be called Time.
 func _result(solo: Node) -> String:
 	var parts := PackedStringArray()
 	for name in ["Time", "Medal", "Note"]:
-		var text: String = solo.get_node("Hud/Result/Box/%s" % name).text
+		var text: String = solo.get_node(
+			"Hud/Result/Centre/Panel/Margin/Box/%s" % name).text
 		if not text.is_empty():
 			parts.append(text)
 	return " / ".join(parts)
