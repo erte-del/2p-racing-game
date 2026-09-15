@@ -1076,6 +1076,32 @@ road still cost nothing - a car scraping down one is already being pushed back
 where it belongs, and taking its speed as well would punish it twice for a
 mistake it is in the middle of recovering from.
 
+A hit also throws the car back off the face. For `obstacle_bounce_time` (0.4 s)
+after one, whatever of the car's own speed is still carrying it into the face
+is taken out of where it goes, and it is thrown back at `obstacle_bounce`
+(6 m/s on a square hit, less on a glancing one), fading away. None of that
+touches its speed - the hit has already cost what a hit costs - so a square hit
+still takes 30 m/s to 8.4. Without it, a car held into a barrier on the
+throttle stayed pressed against the face, was hit again every time
+`obstacle_recovery` ran out, and was scrubbed down towards a crawl, where it
+turns slowly.
+
+`tools/checks/barrier_recovery.gd` runs a car square into a lone row with the
+throttle held, keeps it held into the face for 1.5 s, then steers towards the
+way past - once without the bounce and once with it:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/barrier_recovery.gd
+```
+
+Without the bounce the car stays on the face, is going 5.1 m/s after the
+1.5 s, takes 1.08 s to turn 45 degrees away and hits the barrier 7 times in
+all. With it the car comes 1.15 m back off the face, is still going the 8.4 m/s
+the hit left it, turns away in 0.90 s at 6.7 m/s and hits it 5 times. How long
+turning away takes is mostly the turning circle at that speed, which the bounce
+does not change: at 8.4 m/s, 45 degrees is about 0.7 s away even for a car that
+never touched the face again.
+
 `tools/checks/barrier_layout.gd` lays out a hundred courses and checks every
 barrier on them, then hands the validator two plans that break the rules on
 purpose - a validator that has never rejected anything is not obviously
@@ -1996,7 +2022,7 @@ The lap it drives is a bad one - flat out, aimed fourteen metres ahead on the
 centreline, giving back speed wherever that point is not straight in front of
 it - and on the harder tracks it does not finish at all, because driving the
 centreline into a slalom is driving into a barrier. What makes it useful is
-that it is the same bad lap everywhere: on First Light it comes home in 34.62,
+that it is the same bad lap everywhere: on First Light it comes home in 34.78,
 against the 33 the track asks for gold. Gold is a little under the best the
 road allows, silver and bronze are spaced further apart the harder the track
 gets, and the whole ladder is set from that one ratio.

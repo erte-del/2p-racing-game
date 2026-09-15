@@ -107,6 +107,18 @@ const OBSTACLE_GROUP := &"obstacle"
 ## those would take a single mistake to a dead stop before the player had a
 ## frame to steer out of it.
 @export var obstacle_recovery := 0.4
+## How fast a car is thrown back off the face of an obstacle it has hit, in
+## m/s on a square hit, and the seconds that takes to die away. For that long
+## the car's own speed stops carrying it into the face as well, so it comes
+## off rather than being held there by its own throttle.
+##
+## Without it a car held against a barrier with the throttle down stayed
+## pressed to the face, was hit again every time obstacle_recovery ran out,
+## and was scrubbed down to a few metres a second, where it turns slowly.
+## None of it is taken off the car's speed: the hit has already cost what a
+## hit costs, and this is only where the car goes after it.
+@export var obstacle_bounce := 6.0
+@export var obstacle_bounce_time := 0.4
 
 @export_group("Contact")
 ## Coming down on the other car's roof throws a car back up, where coming down
@@ -232,6 +244,11 @@ var _boost := 0.0
 var _boost_hold := 0.0
 ## Seconds left before another obstacle can cost anything.
 var _hit_recovery := 0.0
+## After hitting an obstacle: the seconds left of being thrown back off it,
+## which way that is, flat on the ground, and how fast the throw started.
+var _rebound := 0.0
+var _rebound_normal := Vector3.ZERO
+var _rebound_speed := 0.0
 ## How fast the car was climbing on the last step it had road under it, and
 ## the height it was at, which is what that is worked out from. The climb is
 ## used up throwing the car off the end of the road, so a car always comes
@@ -394,6 +411,7 @@ func reset_motion() -> void:
 	_boost = 0.0
 	_boost_hold = 0.0
 	_hit_recovery = 0.0
+	_rebound = 0.0
 	_climb = 0.0
 	_last_height = global_position.y
 	_bounce = 0.0
@@ -587,6 +605,16 @@ func _drive(delta: float) -> void:
 		side_push / maxf(push_fade, 0.001) * delta)
 	velocity.x = forward.x * _speed + _shove.x
 	velocity.z = forward.z * _speed + _shove.z
+	if _rebound > 0.0:
+		# Thrown back off a barrier just hit. Whatever of the car's own speed
+		# is still carrying it into the face is taken out of where it goes -
+		# not out of its speed - and the throw put in instead, fading.
+		_rebound = maxf(_rebound - delta, 0.0)
+		var into := -(velocity.x * _rebound_normal.x + velocity.z * _rebound_normal.z)
+		var off := (maxf(into, 0.0)
+			+ _rebound_speed * _rebound / maxf(obstacle_bounce_time, 0.001))
+		velocity.x += _rebound_normal.x * off
+		velocity.z += _rebound_normal.z * off
 	var grounded := is_on_floor()
 	var bouncing := _bounce > 0.0
 	if bouncing:
@@ -699,6 +727,14 @@ func _take_the_hits() -> void:
 		var head_on := clampf(-forward.dot(collision.get_normal()), 0.0, 1.0)
 		_speed *= 1.0 - obstacle_scrub * head_on
 		_hit_recovery = obstacle_recovery
+		# And thrown back off the face, for the reason obstacle_bounce gives,
+		# by as much as the hit was square.
+		var away := collision.get_normal()
+		away.y = 0.0
+		if away.length_squared() > 0.0001 and head_on > 0.0:
+			_rebound_normal = away.normalized()
+			_rebound_speed = obstacle_bounce * head_on
+			_rebound = obstacle_bounce_time
 		# A hit ends the boost outright rather than scaling it. Carrying a pad
 		# through the hazard it was offered against would leave nothing to
 		# weigh up, which is the whole of what the pad is for.
