@@ -34,6 +34,9 @@ extends Node3D
 ## How far from the centreline still counts as being on the course, for
 ## deciding that the finish line was actually crossed.
 @export var finish_corridor := 25.0
+## How far past a checkpoint the car can still bank it, in metres, for the
+## reason the race gives.
+@export var checkpoint_window := 30.0
 
 @export_group("Headlights")
 ## Where in the night the headlights come on and reach full.
@@ -78,9 +81,10 @@ var _chaos: Chaos
 var _chaos_rng := RandomNumberGenerator.new()
 ## What a lap of this track is worth: gold, silver and bronze, in seconds.
 var _targets := Vector3.ZERO
-## Where a reset puts the car, and which checkpoint it is looking for next.
+## Where a reset puts the car, and which checkpoints it has banked, a flag a
+## checkpoint. They can be banked in any order; all of them are needed to finish.
 var _respawn := 0.0
-var _next_checkpoint := 0
+var _banked := PackedByteArray()
 ## Which countdown is the current one, so an older one that is still waiting
 ## on a timer cannot clear the screen out from under a newer one.
 var _countdown_run := 0
@@ -454,26 +458,31 @@ func _track_targets() -> Vector3:
 
 # --- where the car is ---------------------------------------------------
 
-## True once the car is past the finish line and still on the course. The
-## corridor matters because a car lost out in the mountains can project onto
-## any part of the centreline, the finish included.
+## True once the car is past the finish line, still on the course, on the road,
+## with every checkpoint banked. The corridor matters because a car lost out in
+## the mountains can project onto any part of the centreline, the finish
+## included; the road and the checkpoints because a car that fell into a jump
+## could otherwise drive across the grass to the flag and set a time for it.
 func _has_finished(offset: float) -> bool:
 	if offset < _track.finish_offset():
 		return false
-	return _on_course(offset)
+	return (_car.on_the_road() and _on_course(offset)
+			and _banked.count(1) == _banked.size())
 
 
-## Move the respawn up as the car passes checkpoints. It has to be on the
-## course to bank one, so a player cannot cut across the scenery and then
-## reset forward onto a checkpoint they never drove to.
+## Bank any checkpoint the car is passing: on the course, on the road, and
+## only just past it, so coming back onto the road further on does not bank the
+## ones left behind. In any order; a reset goes to whichever was banked last.
 func _bank_checkpoints(offset: float) -> void:
+	if not _car.on_the_road() or not _on_course(offset):
+		return
 	var marks := _track.checkpoint_offsets()
-	while _next_checkpoint < marks.size() and offset >= marks[_next_checkpoint]:
-		if not _on_course(offset):
-			return
-		_respawn = marks[_next_checkpoint]
-		_next_checkpoint += 1
-		_show_tally()
+	for mark in mini(marks.size(), _banked.size()):
+		if (_banked[mark] == 0 and offset >= marks[mark]
+				and offset < marks[mark] + checkpoint_window):
+			_banked[mark] = 1
+			_respawn = marks[mark]
+			_show_tally()
 
 
 ## Put the car back on the course at its last checkpoint, facing the right way
@@ -512,13 +521,13 @@ func _place_on_the_line() -> void:
 	# rather than sliding across the world for a frame.
 	_car.reset_physics_interpolation()
 	_respawn = at
-	_next_checkpoint = 0
+	_banked = PackedByteArray()
+	_banked.resize(_track.checkpoint_offsets().size())
 	_show_tally()
 
 
 func _show_tally() -> void:
-	_tally.text = "CHECKPOINT %d / %d" % [
-		_next_checkpoint, _track.checkpoint_offsets().size()]
+	_tally.text = "CHECKPOINT %d / %d" % [_banked.count(1), _banked.size()]
 
 
 func _on_course(offset: float) -> bool:

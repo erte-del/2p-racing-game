@@ -184,6 +184,10 @@ var _rail: StandardMaterial3D
 
 func _ready() -> void:
 	_build_materials()
+	# The road and its rails are what a car counts as being on the road, which
+	# is what banks a checkpoint and crosses the finish; see Car.ROAD_GROUP.
+	$RoadBody.add_to_group(Car.ROAD_GROUP)
+	$RailBody.add_to_group(Car.ROAD_GROUP)
 
 
 ## The curve is the source of truth for progress along the course and for

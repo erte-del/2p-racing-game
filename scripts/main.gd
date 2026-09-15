@@ -81,6 +81,11 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 ## A car further than this from the centreline is not really on the course, so
 ## it cannot trip the finish line from somewhere out in the scenery.
 @export var finish_corridor := 25.0
+## How far past a checkpoint a car can still bank it, in metres. Far enough
+## that nothing in the game is quick enough to be past the whole of it in one
+## physics step, short enough that coming back onto the road further on does
+## not count as having driven over a checkpoint left behind.
+@export var checkpoint_window := 30.0
 ## Metres of lead needed before a player is shown as leading. Until then, and
 ## whenever they are level again, both see a dash.
 @export var lead_margin := 1.5
@@ -97,10 +102,11 @@ var _countdown_run := 0
 ## actually free, so the countdown and the result screen are not counted.
 var _race_time := 0.0
 ## Distance along the course each car is sent back to when it resets. It
-## starts at the grid and moves up as checkpoints are passed.
+## starts at the grid and moves to each checkpoint as it is banked.
 var _respawn := PackedFloat32Array()
-## The next checkpoint each car has yet to reach.
-var _next_checkpoint := PackedInt32Array()
+## Which checkpoints each car has banked, a flag a checkpoint. They can be
+## banked in any order, and every one of them is needed to finish.
+var _banked: Array[PackedByteArray] = []
 ## Who is currently ahead, or -1 while the cars are level.
 var _leader := -1
 ## Set only when the players chose chaos, and only outside attract mode. Every
@@ -249,7 +255,7 @@ func _physics_process(delta: float) -> void:
 			_reset_to_checkpoint(i)
 			continue
 		_bank_checkpoints(i, offsets[i], marks)
-		if _has_finished(_cars[i], offsets[i]):
+		if _has_finished(i, offsets[i]):
 			_finish_course(i)
 			return
 
@@ -346,28 +352,41 @@ func _bit(layer: int) -> int:
 	return 1 << (layer - 1)
 
 
-## A car finishes by reaching the end of the course while still on it. The
-## corridor check matters because a car lost out in the mountains can project
-## onto any part of the centreline, including the finish.
-func _has_finished(car: Car, offset: float) -> bool:
+## A car finishes by reaching the end of the course while still on it, on the
+## road, with every checkpoint banked. The corridor matters because a car lost
+## out in the mountains can project onto any part of the centreline, including
+## the finish; the road and the checkpoints matter because a car that fell into
+## a jump could otherwise drive across the grass to the flag from wherever it
+## landed.
+func _has_finished(index: int, offset: float) -> bool:
 	# The track owns where the finish is, so the painted line and the race
 	# cannot drift apart.
 	if offset < _track.finish_offset():
 		return false
-	return _on_course(car, offset)
+	var car := _cars[index]
+	return (car.on_the_road() and _on_course(car, offset)
+			and _banked_count(index) == _banked[index].size())
 
 
-## Move a car's respawn point up as it passes checkpoints. A car has to be on
-## the course to bank one, so a player cannot collect checkpoints by driving
-## across the scenery, and then reset forward onto them.
+## Bank any checkpoint a car is passing. It has to be on the course and on the
+## road to bank one, and only just past it: a checkpoint is driven over, not
+## collected by coming back onto the road somewhere further on. They can come
+## in any order, and whichever was banked last is where a reset sends the car.
 func _bank_checkpoints(index: int, offset: float, marks: PackedFloat32Array) -> void:
 	var car := _cars[index]
-	while _next_checkpoint[index] < marks.size() and offset >= marks[_next_checkpoint[index]]:
-		if not _on_course(car, offset):
-			return
-		_respawn[index] = marks[_next_checkpoint[index]]
-		_next_checkpoint[index] += 1
-		_show_tally(index)
+	if not car.on_the_road() or not _on_course(car, offset):
+		return
+	for mark in mini(marks.size(), _banked[index].size()):
+		if (_banked[index][mark] == 0 and offset >= marks[mark]
+				and offset < marks[mark] + checkpoint_window):
+			_banked[index][mark] = 1
+			_respawn[index] = marks[mark]
+			_show_tally(index)
+
+
+## How many checkpoints a car has banked.
+func _banked_count(index: int) -> int:
+	return _banked[index].count(1)
 
 
 ## Put a car back on the course at its last checkpoint, facing the right way
@@ -519,7 +538,7 @@ func _show_places(offsets: Array[float]) -> void:
 ## each player is tracking their own run.
 func _show_tally(index: int) -> void:
 	_tallies[index].text = "%d/%d" % [
-		_next_checkpoint[index], _track.checkpoint_count]
+		_banked_count(index), _banked[index].size()]
 
 
 func _show_result(text: String) -> void:
@@ -570,10 +589,13 @@ func _place_on_grid() -> void:
 	# Every course starts the players over: the grid itself is the first
 	# place a reset sends them.
 	_respawn = PackedFloat32Array()
-	_next_checkpoint = PackedInt32Array()
+	_banked = []
+	var marks := _track.checkpoint_offsets().size()
 	for i in _cars.size():
 		_respawn.append(at)
-		_next_checkpoint.append(0)
+		var none := PackedByteArray()
+		none.resize(marks)
+		_banked.append(none)
 		_show_tally(i)
 
 	# Keep the grid on the road even if the course opens narrow.

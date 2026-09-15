@@ -74,9 +74,10 @@ func _init() -> void:
 	if not is_equal_approx(float(solo.get("_best")), first):
 		print("  the first run round did not become the best")
 		faults += 1
-	if solo.get("_next_checkpoint") != track.checkpoint_offsets().size():
+	var banked: int = (solo.get("_banked") as PackedByteArray).count(1)
+	if banked != track.checkpoint_offsets().size():
 		print("  not every checkpoint was banked: %d of %d"
-			% [solo.get("_next_checkpoint"), track.checkpoint_offsets().size()])
+			% [banked, track.checkpoint_offsets().size()])
 		faults += 1
 	if not solo.get_node("Hud/Result").visible:
 		print("  finishing said nothing")

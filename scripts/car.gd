@@ -13,6 +13,11 @@ extends CharacterBody3D
 ## back where it belongs, and taking its speed as well for a mistake it is in
 ## the middle of recovering from would be punishing it twice.
 const OBSTACLE_GROUP := &"obstacle"
+## Static bodies in this group are the road: the surface itself and the rails
+## along it. Anything else a car can stand on - the grass, mostly - is off the
+## road, where the car is slower and where nothing it does counts towards the
+## race. The track puts its own bodies in it.
+const ROAD_GROUP := &"road"
 
 ## Which set of input actions to read, e.g. "p1" -> p1_accelerate, p1_brake,
 ## p1_steer_left, p1_steer_right.
@@ -27,6 +32,11 @@ const OBSTACLE_GROUP := &"obstacle"
 @export var acceleration := 12.0       ## m/s^2 under throttle
 @export var braking := 24.0            ## m/s^2 under brake
 @export var engine_braking := 6.0      ## m/s^2 coasting with no input
+## How much of its top speed a car keeps with anything but the road under it,
+## as a fraction. Mild on purpose: the grass is a mistake that costs time, not
+## a trap. What stops it being a way round the course is that checkpoints and
+## the finish only count on the road, not that the grass is slow.
+@export_range(0.0, 1.0) var off_road_speed := 0.6
 ## Turning circle at a crawl and at top speed, in metres. Steering is
 ## expressed as a radius rather than a rate because the tracks are built from
 ## corners of a known radius, so these numbers say directly which corners the
@@ -265,6 +275,10 @@ var _bounce := 0.0
 ## whether what it ran into on that step is still news.
 var _shove := Vector3.ZERO
 var _moved := false
+## Whether the last thing the car stood on was off the road. Coming down on
+## the other car's roof leaves it as it was: a car sitting on its rival is not
+## on the grass.
+var _off_road := false
 ## Everything that is looked at rather than driven on: the model, its paint,
 ## its lights and the driver's eye. It tips to follow the road while the body
 ## it hangs off stays upright.
@@ -416,6 +430,7 @@ func reset_motion() -> void:
 	_last_height = global_position.y
 	_bounce = 0.0
 	_shove = Vector3.ZERO
+	_off_road = false
 	_pitch = 0.0
 	_roll = 0.0
 	_roll_rate = 0.0
@@ -437,8 +452,13 @@ func reset_motion() -> void:
 ## worked out against max_speed, so a boosted car does not wash any wider than
 ## one flat out on its own. Being fast enough to miss the corner is the risk a
 ## pad is meant to carry; being unable to steer is not.
+##
+## Off the road the car keeps only off_road_speed of it. Nothing sets the speed
+## down: the ceiling drops, and a car over it sheds the difference the way it
+## sheds a fading boost.
 func top_speed() -> float:
-	return max_speed * (1.0 + slipstream_bonus * _slipstream + _boost)
+	var ceiling := max_speed * (1.0 + slipstream_bonus * _slipstream + _boost)
+	return ceiling * off_road_speed if _off_road else ceiling
 
 
 ## True while the car is drafting, for effects and UI later.
@@ -637,6 +657,7 @@ func _drive(delta: float) -> void:
 		# whatever the last step did, for the reason climb_memory gives.
 		var measured := (global_position.y - _last_height) / maxf(delta, 0.0001)
 		_climb = maxf(measured, _climb - climb_memory * delta)
+		_note_the_floor()
 		if not grounded:
 			# Touched down on this step, and this is how hard, which is what
 			# the body sinks onto its springs with.
@@ -676,6 +697,28 @@ func _bounce_off_a_roof(falling: float) -> void:
 ## Signed speed along the car's own heading, in m/s. Positive is forwards.
 func speed() -> float:
 	return _speed
+
+
+## Whether the last thing the car stood on was the road, for the race to ask
+## before it banks a checkpoint or lets the car finish. A car in the air has not
+## left the road it took off from.
+func on_the_road() -> bool:
+	return not _off_road
+
+
+## Remember whether what the car is standing on is the road. The other car
+## does not count either way, and a car the physics has not reported touching
+## anything this step keeps what it had.
+func _note_the_floor() -> void:
+	for i in get_slide_collision_count():
+		var collision := get_slide_collision(i)
+		if collision.get_angle() > floor_max_angle:
+			continue
+		var collider := collision.get_collider() as Node
+		if collider == null or collider is Car:
+			return
+		_off_road = not collider.is_in_group(ROAD_GROUP)
+		return
 
 
 ## Take a knock from the other car: `change` in m/s along the car's own

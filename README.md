@@ -871,21 +871,78 @@ run number so a timer left over from the previous one cannot blank the text of
 the current one.
 
 A car counts as finished only while it is still within `finish_corridor` of the
-centreline: a car lost out in the scenery projects onto the nearest point of
-the course, which can be the finish.
+centreline - a car lost out in the scenery projects onto the nearest point of
+the course, which can be the finish - and only on the road, with every
+checkpoint banked (see Checkpoints and Off the road).
 
 ## Checkpoints
 
 Four checkpoints are spread evenly between the start and the finish, painted as
-yellow bands. They exist to be reset to: a player who falls off, gets stuck or
-ends up facing the wrong way presses their reset key and is put back on the
-centreline at the last one they passed, stopped and facing down the course.
-Before the first checkpoint that is the grid itself.
+yellow bands. They are there to be reset to, and to be driven over. A player
+who falls off, gets stuck or ends up facing the wrong way presses their reset
+key and is put back on the centreline at the checkpoint they banked last,
+stopped and facing down the course. Before the first one is banked that is the
+grid itself.
 
-A checkpoint is only banked while the car is actually on the course, so a
-player cannot collect them by driving across the scenery and then reset forward
-onto ground they never drove. The tally at the top of each half counts them,
+A checkpoint banks when a car on the road passes it, within `checkpoint_window`
+(30 m) past the line. Every one of them has to be banked to finish, in any
+order: a player put back somewhere odd, or who went the wrong way round, still
+only has to have driven over each of them. What does not count is coming back
+onto the road further on - a checkpoint left behind stays unbanked - and nothing
+counts from off the road at all. The tally at the top of each half counts them,
 0/4 up to 4/4.
+
+`tools/checks/checkpoint_rules.gd` drives a car over the lines of a real race:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/checkpoint_rules.gd
+```
+
+Over the finish on the road with nothing banked, the race goes on. Put back on
+the road 35 m past the first checkpoint and driven on, the tally stays at 0/4.
+Driven over the four checkpoints last to first, the tally goes from 1/4 to 4/4
+and a reset follows each one in turn; over the finish after that, the race
+ends.
+
+## Off the road
+
+The ground is one flat box, the embankment under a raised road carries no
+collision, and the road itself is only solid from above. A car that falls into
+the hole in a jump comes down on grass, and it used to be at full speed there
+with nothing in the race asking how it had got anywhere: a checkpoint banked
+for any car within `finish_corridor` of the centreline, and so did the finish,
+which did not ask for the checkpoints at all. On 14 of the 20 laid-out tracks a
+car dropped into the first jump hole could drive straight across the grass to
+the flag and finish - on Long Haul, 250 m of grass in place of 1358 m of road.
+
+Now a car only counts on the road. Whatever it last stood on decides it: the
+road and its rails are in `Car.ROAD_GROUP`, and anything else, which is mostly
+the grass, is off the road. A car in mid air over a crest has not left the road
+it took off from, and one sitting on the other car's roof has not left it
+either. Off the road a checkpoint does not bank and the finish does not count,
+and the car keeps only `off_road_speed` (0.6) of its top speed. That is mild on
+purpose: the grass is a mistake that costs time rather than a trap, and it is
+the checkpoints and the finish, not the grass being slow, that stop it being a
+way round the course. A car that falls in still has the reset key.
+
+A car on the grass can go under road that stands higher than the car does -
+30% of the road on the laid-out tracks and 54% on rolled courses - but not
+through road any lower, where the rails and the edge of the road stop it.
+
+`tools/checks/off_road.gd` puts cars on the grass and drives them:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/off_road.gd
+```
+
+Driven along the grass beside a real race, 15 m from the centreline, a car no
+longer banks the first checkpoint and no longer ends the race at the finish.
+Driven straight across the road from the grass, it is stopped by road level with
+the grass and by road at bumper height, and goes straight under road 5 m up.
+Held flat out on the grass from 30 m/s, it is down to 18.0 m/s within three
+seconds. And on none of the laid-out tracks does a car dropped into the first
+jump hole finish across the grass any more: where it reaches the flag at all,
+the race does not count it.
 
 ## Slipstream
 
