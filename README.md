@@ -147,6 +147,13 @@ anybody can read. And its headlights are placed off the shape itself - out to
 29% of its width, 47% up its height, on its front face - rather than off the
 numbers measured from the JDM model.
 
+The wheels roll at the speed the car is actually covering the road, taken from
+how far it moved, rather than the speed it is trying to go - so a car held
+against a barrier or the other car with the throttle down has its wheels stood
+still instead of spinning flat out. In the air there is nothing to turn them,
+so they keep the speed they left the road with and run down at
+`air_wheel_fade` (4 m/s every second) until they land.
+
 ## Custom cars
 
 A player can bring their own car into the game and drive it. It changes what
@@ -527,6 +534,14 @@ car rather than smoothed: lagging a first person view behind the steering reads
 as the whole world sliding about. The model's own steering wheel turns with the
 front wheels, three times as far, about the column its disc sits on.
 
+It is set from the car on every physics step, and with physics interpolation on
+(see Smooth motion) it is drawn between steps along with the car, so it is
+exactly as steady as the car it is bolted to. Where the body rolls through a
+corner the eye goes with the body but keeps only `eye_roll` of its roll, which
+is none: the cabin leans round the driver while the horizon holds still, because
+a horizon that tips at every corner is the quickest way there is to make
+somebody feel sick.
+
 A car brought in from outside has no interior, so it does not get the first
 person view at all: the camera would be sitting in the middle of a solid shell
 looking at the back of it. `ChaseCamera.set_inside` refuses it, rather than the
@@ -540,6 +555,41 @@ half of the screen is a `SubViewport` that inherits that same world and adds
 only its own `ChaseCamera`, which the level wires to a car in `main.gd`. The
 cameras are deliberately *not* children of the cars: two cameras in one viewport
 would fight over which is current.
+
+## Smooth motion
+
+The cars, the cameras and the arrows all move on the physics step, sixty times a
+second, and a frame that does not land exactly on a step - which on a screen
+faster than sixty, or on any screen when a frame runs late, is most of them -
+would otherwise show things standing still and then jumping. Physics
+interpolation (`physics/common/physics_interpolation`) is on, so Godot draws
+everything that moved on a physics step between where it was on the last step
+and where it is on this one.
+
+That only works for what moves on the physics step, so two kinds of thing are
+handled apart.
+
+Anything *put* somewhere rather than moved there calls
+`reset_physics_interpolation()` straight afterwards: a car onto the grid, back
+to a checkpoint or onto the line for another solo run, a camera snapped behind
+its car, and an arrow snapped round a car that has just been put somewhere.
+Without that the frame after it draws the thing part of the way across the
+world between the two places.
+
+Anything moved on the frame instead has interpolation turned off, because
+Godot's own guidance is that a node moved between physics steps while it is
+being interpolated between them jitters. That is the whole title screen - the
+title rocks, the pages slide and the camera turns round the parked cars - the
+pause screen and everything it opens, the medal as it drops onto the finish
+panel, and the sun, which swings round with the day. Godot interpolates a
+`Control` the same as anything else once this is on, which is why the menus
+have to be told. The title camera also reads where the cars are drawn,
+`get_global_transform_interpolated()`, rather than where physics last left
+them, since it asks between steps.
+
+The physics jitter fix is left at its default: Godot recommends turning it off
+for an interpolation solution of your own, and this one is Godot's. None of it
+changes what any check measures, since interpolation is only in what is drawn.
 
 ## Rival arrow
 
@@ -1252,6 +1302,64 @@ Godot --path . --headless --script tools/checks/tilt_trace.gd
 
 Level road reads 0.0 degrees, the ramp +24.1, the fall -28.0, and a 2.9 degree
 climb reads +3.4.
+
+What it reads is the road pitch the car works out, `Car._pitch`, not the angle
+the shell ends up at. The shell also leans on its springs now (see Body motion),
+and that is the driver rather than the road.
+
+## Body motion
+
+On top of the road pitch, the shell leans with what the car is doing: it rolls
+out of a corner, dips its nose under braking and sits back under throttle, and
+is knocked down onto its springs when it lands. Like the pitch, none of it
+touches the collision box; and none of it is mixed into the road pitch either -
+the lean is laid over it, so tilt_trace still reads the road.
+
+Every pull is worked out from how the car actually moved - its real speed along
+its heading, and how fast that heading is turning - rather than from what the
+player asked of it. A car held against a barrier with the throttle down does not
+squat as though it were pulling away, and the bot drivers, which turn the body
+directly instead of steering, still lean into their corners.
+
+- Roll is `roll_per_accel` (0.12 degrees for every m/s² of sideways pull, which
+  is speed times how fast the heading turns), up to `max_roll` (5 degrees). In
+  the air there is nothing to lean against, and the body swings back to square.
+- Pitch is `dive_per_accel` (0.1 degrees for every m/s² the car speeds up or
+  slows down), up to `max_dive` (3 degrees).
+- A landing knocks the body down at `landing_give` (0.08) of the speed the car
+  came down with, and it may sink no further than `max_squash` (0.15 m).
+
+All three hang on the same damped spring, `body_spring` (60 per second squared)
+and `body_damping` (9 per second), damped well short of what would stop it
+overshooting, so a lean settles with a small swing back rather than arriving
+dead.
+
+The wheels do not lean. They are on the road rather than on the springs, so each
+one is put where the body sitting square would carry it, and a car rolling
+through a corner keeps all four on the road instead of lifting one and burying
+another. The driver's eye goes where the body takes it but keeps only `eye_roll`
+of its roll, which is none, for the reason Views gives.
+
+Traced on the tuned numbers: taking a corner at 25.9 m/s rolls the body 3.2
+degrees; braking at the full 24 m/s² puts the nose down 2.6 degrees, one small
+swing past the 2.4 it settles at; pulling away at 12 m/s² brings it up 1.3; and
+a flat landing at 18.5 m/s sinks the body 0.086 m, deepest eight steps after
+touchdown, and has it back up and settled about half a second after that.
+
+`tools/checks/body_shot.gd` takes a picture of each - a car mid-corner and a car
+just after landing - with the chase view above and a camera stood off the car
+below, in front of it for the corner and beside it for the landing:
+
+```
+Godot --path . --fixed-fps 60 --script tools/checks/body_shot.gd -- /tmp/shots
+```
+
+The landing picture also shows something the lean does not touch. The road
+pitch is still easing out of the dive the flight put the nose into - it reads
+-24.1 degrees at touchdown and -9.8 six steps later - so for the first tenth of
+a second on the ground the nose, front wheels and all, is dug into the road.
+Landings have always looked like that; the wheels follow the road pitch, as the
+whole shell did before.
 
 ## Landing on the other car
 

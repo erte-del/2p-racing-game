@@ -124,6 +124,33 @@ const OBSTACLE_GROUP := &"obstacle"
 ## should not stand on its nose.
 @export var max_pitch := 32.0
 @export var pitch_ease := 9.0
+## On top of the road, the body leans with what the car is doing: out of a
+## corner, nose down under braking and back on its haunches under throttle,
+## and down onto its springs when it lands. None of it reaches the collision
+## box, for the reason above, and none of it is mixed into the road pitch
+## either - that is still worked out on its own and the lean is laid over it,
+## so anything reading how the road tips a car reads the road and not the
+## driver.
+##
+## Degrees of roll for every m/s² the car is pulled sideways, and the most it
+## may roll, in degrees.
+@export var roll_per_accel := 0.12
+@export var max_roll := 5.0
+## Degrees of pitch for every m/s² the car speeds up or slows down, nose up
+## under throttle and down under braking, and the most it may pitch, in
+## degrees.
+@export var dive_per_accel := 0.1
+@export var max_dive := 3.0
+## How fast the body starts to sink on landing, as a fraction of how fast the
+## car came down, and the furthest it may sink, in metres.
+@export var landing_give := 0.08
+@export var max_squash := 0.15
+## How hard the body is pulled back to where it is being pushed, in 1/s², and
+## how quickly its swinging about that dies away, in 1/s. Damped well short of
+## what it would take to stop it overshooting, so a lean settles with a small
+## swing back rather than arriving dead.
+@export var body_spring := 60.0
+@export var body_damping := 9.0
 
 @export_group("Wheels")
 ## Metres: how high the wheel centres sit, which is both the car's ride height
@@ -132,6 +159,11 @@ const OBSTACLE_GROUP := &"obstacle"
 ## fact about where the car sits on the road rather than about the model, and
 ## everything that puts a car down on a surface reads it.
 @export var wheel_radius := 0.355
+## How quickly wheels with no road under them spin down, in m/s of road speed
+## lost every second. On the ground they turn at exactly the speed the car is
+## covering it; in the air there is nothing to turn them, so they keep the
+## speed they left with and lose it slowly rather than stopping dead.
+@export var air_wheel_fade := 4.0
 
 ## Which garage car this is wearing, and how many quarter turns it was put on
 ## with. An empty id is the model the car was built with, which is the stock
@@ -172,8 +204,25 @@ var _bounce := 0.0
 ## its lights and the driver's eye. It tips to follow the road while the body
 ## it hangs off stays upright.
 var _shell: CarShell
-## How far the shell is tipped, in radians, nose up positive.
+## How far the road tips the shell, in radians, nose up positive.
 var _pitch := 0.0
+## How far the body leans on its springs on top of that - roll in radians,
+## right side up positive; pitch in radians, nose up positive; and how far it
+## has sunk, in metres, down negative - each with how fast it is moving.
+var _roll := 0.0
+var _roll_rate := 0.0
+var _dive := 0.0
+var _dive_rate := 0.0
+var _drop := 0.0
+var _drop_rate := 0.0
+## How fast the car came down on the step it landed, for the body to sink with.
+var _landing := 0.0
+## The heading, and the speed along it, on the last step: what the pulls the
+## body leans with are worked out from.
+var _last_yaw := 0.0
+var _last_ground_speed := 0.0
+## How fast the wheels are turning, as the road speed they would cover in m/s.
+var _wheel_speed := 0.0
 
 # Action names are built once; doing it per frame would allocate every tick.
 var _accelerate: StringName
@@ -275,7 +324,9 @@ func _physics_process(delta: float) -> void:
 	_apply_steering(steer, delta)
 	_drive(delta)
 	_tilt(delta)
-	_shell.animate_wheels(steer, _speed, wheel_radius, delta)
+	_lean(delta)
+	_roll_wheels(delta)
+	_shell.animate_wheels(steer, _wheel_speed, wheel_radius, delta)
 
 
 ## Stop dead and forget any slipstream. Used when the track is replaced.
@@ -289,8 +340,18 @@ func reset_motion() -> void:
 	_last_height = global_position.y
 	_bounce = 0.0
 	_pitch = 0.0
+	_roll = 0.0
+	_roll_rate = 0.0
+	_dive = 0.0
+	_dive_rate = 0.0
+	_drop = 0.0
+	_drop_rate = 0.0
+	_landing = 0.0
+	_last_yaw = rotation.y
+	_last_ground_speed = 0.0
+	_wheel_speed = 0.0
 	if _shell != null:
-		_shell.rotation.x = 0.0
+		_shell.pose(0.0, 0.0, 0.0, 0.0)
 	velocity = Vector3.ZERO
 
 
@@ -455,6 +516,10 @@ func _drive(delta: float) -> void:
 		# whatever the last step did, for the reason climb_memory gives.
 		var measured := (global_position.y - _last_height) / maxf(delta, 0.0001)
 		_climb = maxf(measured, _climb - climb_memory * delta)
+		if not grounded:
+			# Touched down on this step, and this is how hard, which is what
+			# the body sinks onto its springs with.
+			_landing = maxf(falling, 0.0)
 		if not grounded and not bouncing:
 			_bounce_off_a_roof(falling)
 	elif grounded and not bouncing:
@@ -516,7 +581,8 @@ func _take_the_hits() -> void:
 		return
 
 
-## Tip the shell to follow the road, and in the air to follow the flight.
+## Work out how far the shell tips to follow the road, and in the air to follow
+## the flight. It is put on the shell by _lean, with the body's own lean on top.
 ##
 ## On the ground the angle comes from the surface the car is standing on, so a
 ## car reads the road it is actually on rather than the road it has been over.
@@ -540,4 +606,73 @@ func _tilt(delta: float) -> void:
 	var limit := deg_to_rad(max_pitch)
 	target = clampf(target, -limit, limit)
 	_pitch = lerpf(_pitch, target, 1.0 - exp(-pitch_ease * delta))
-	_shell.rotation.x = _pitch
+
+
+## Lean the body on its springs with what the car is doing, and put the road
+## pitch and the lean on the shell together.
+##
+## The pulls are worked out from how the car actually moved rather than from
+## what the player asked of it, the same as the wheels are. A car held against
+## a barrier with the throttle down does not squat as though it were pulling
+## away, and a car turned by something other than the steering - the bot
+## drivers turn the body directly - still leans into the turn.
+##
+## In the air there is nothing to lean against, so the body swings back to
+## sitting square while the road pitch follows the flight.
+func _lean(delta: float) -> void:
+	var step := maxf(delta, 0.0001)
+	var forward := -global_transform.basis.z
+	var ground_speed := get_real_velocity().dot(forward)
+	var turning := angle_difference(_last_yaw, rotation.y) / step
+	var pull := (ground_speed - _last_ground_speed) / step
+	_last_yaw = rotation.y
+	_last_ground_speed = ground_speed
+
+	var roll_to := 0.0
+	var dive_to := 0.0
+	if is_on_floor():
+		# Sideways pull is speed times how fast the heading is turning. A car
+		# turning left is pulled left and its body swings out to the right,
+		# which drops the right side: a negative roll.
+		roll_to = deg_to_rad(-roll_per_accel * ground_speed * turning)
+		dive_to = deg_to_rad(dive_per_accel * pull)
+	var roll := _spring(_roll, _roll_rate, roll_to, deg_to_rad(max_roll), delta)
+	var dive := _spring(_dive, _dive_rate, dive_to, deg_to_rad(max_dive), delta)
+	if _landing > 0.0:
+		# Knocked rather than pushed: the car does not sit any lower for having
+		# landed, it is thrown down onto its springs and comes back up.
+		_drop_rate -= _landing * landing_give
+		_landing = 0.0
+	var drop := _spring(_drop, _drop_rate, 0.0, max_squash, delta)
+	_roll = roll.x
+	_roll_rate = roll.y
+	_dive = dive.x
+	_dive_rate = dive.y
+	_drop = drop.x
+	_drop_rate = drop.y
+	_shell.pose(_pitch, _dive, _roll, _drop)
+
+
+## One step of a damped spring pulling `value` towards `target`, with the target
+## and the value both kept within `limit` either side of rest. Returns the new
+## value and how fast it is now moving.
+func _spring(value: float, rate: float, target: float, limit: float,
+		delta: float) -> Vector2:
+	target = clampf(target, -limit, limit)
+	rate += (body_spring * (target - value) - body_damping * rate) * delta
+	value += rate * delta
+	if absf(value) > limit:
+		value = signf(value) * limit
+		rate = 0.0
+	return Vector2(value, rate)
+
+
+## How fast the wheels turn: at exactly the speed the car is covering the road
+## while it is on it, which is what stops them spinning flat out against a
+## barrier or the other car, and in the air at whatever they left the road
+## with, slowly running down.
+func _roll_wheels(delta: float) -> void:
+	if is_on_floor():
+		_wheel_speed = get_real_velocity().dot(-global_transform.basis.z)
+	else:
+		_wheel_speed = move_toward(_wheel_speed, 0.0, air_wheel_fade * delta)

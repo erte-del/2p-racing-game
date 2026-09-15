@@ -11,9 +11,12 @@ extends Node3D
 ## not, so whatever somebody drops into the game drives exactly like the car
 ## that shipped with it and hits things in exactly the same places.
 ##
-## It is also the node that tips. `Car` works out the pitch from the road and
-## sets it here, so the shell leans into a climb while the collision box it
-## hangs off stays upright.
+## It is also the node that tips and leans. `Car` works out the pitch from the
+## road, and how the body moves on its springs on top of that, and poses the
+## shell with both, so the shell leans into a climb and out of a corner while
+## the collision box it hangs off stays upright. The wheels are the exception:
+## they are on the road rather than on the springs, so they are held where the
+## body would carry them sitting square.
 ##
 ## Everything below is written to work on a model that has none of what the
 ## car that shipped with the game has. A model with no wheels simply has no
@@ -39,6 +42,11 @@ const REAR_WHEELS := ["Wheel_BL", "Wheel_BR"]
 ## Where the driver's eye sits, in the car's own space. The car is right hand
 ## drive, so this sits over on the +X side behind the wheel.
 @export var eye_point := Vector3(0.4, 1.18, 0.14)
+## How much of the body's roll through a corner the driver's eye goes with, as
+## a fraction. A horizon that tips every time the car corners is the quickest
+## way there is to make somebody feel sick, and the lean is still there to be
+## felt in the dashboard and the pillars swinging across the view.
+@export_range(0.0, 1.0) var eye_roll := 0.0
 ## How much of the world shows through the windows.
 @export_range(0.0, 1.0) var glass_opacity := 0.18
 ## A steering wheel turns much further than the road wheels do.
@@ -95,9 +103,15 @@ var _wheel_rest_basis := Basis.IDENTITY
 
 var _front_wheels: Array[Node3D] = []
 var _rear_wheels: Array[Node3D] = []
-# Each wheel's untouched orientation, so the animation composes onto it
-# instead of assuming the model exported with identity rotations.
-var _wheel_rest: Array[Basis] = []
+# Each wheel's untouched transform in the shell's own space, so the animation
+# composes onto it instead of assuming the model exported with identity
+# rotations, and so a wheel can be put where a square body would carry it
+# however the body is leaning.
+var _wheel_home: Array[Transform3D] = []
+## The road pitch and the roll the shell was last posed with. The road pitch is
+## what the wheels follow; the roll is what the driver's eye mostly leaves out.
+var _road_pitch := 0.0
+var _roll := 0.0
 
 ## Visual-only wheel state.
 var _wheel_steer := 0.0
@@ -155,9 +169,24 @@ func bounds() -> AABB:
 	return _bounds
 
 
-## Where the driver's eye sits, in world space.
+## Where the driver's eye sits, in world space. It goes wherever the body takes
+## it, but keeps only eye_roll of the body's roll, so the horizon holds still
+## through a corner while the cabin leans round it.
 func eye_transform() -> Transform3D:
-	return Transform3D(global_transform.basis, global_transform * eye_point)
+	var level := Basis(Vector3.BACK, -_roll * (1.0 - eye_roll))
+	return Transform3D(global_transform.basis * level, global_transform * eye_point)
+
+
+## Pose the shell: tipped by the road, and leaned and sunk on its springs on
+## top of that. Roll and pitch are in radians, the drop in metres, down
+## negative. The road pitch is remembered apart from the lean because the
+## wheels follow the one and not the other.
+func pose(road_pitch: float, dive: float, roll: float, drop: float) -> void:
+	_road_pitch = road_pitch
+	_roll = roll
+	transform = Transform3D(
+		Basis.from_euler(Vector3(road_pitch + dive, 0.0, roll)),
+		Vector3(0.0, drop, 0.0))
 
 
 ## Switch the headlights on, off, or part way. 0 is off, 1 is full night.
@@ -205,10 +234,16 @@ func animate_wheels(steer: float, speed: float, wheel_radius: float,
 	_wheel_roll = fposmod(
 		_wheel_roll - speed * delta / maxf(wheel_radius, 0.001), TAU)
 
+	# The wheels are on the road rather than on the springs. Wherever the
+	# body leans or sinks, each one is put where the body sitting square would
+	# carry it, so a car rolling through a corner keeps all four wheels down
+	# instead of lifting one and burying another.
+	var square := _square()
 	for i in _front_wheels.size():
-		_set_wheel(_front_wheels[i], _wheel_rest[i], _wheel_steer)
+		_set_wheel(_front_wheels[i], square * _wheel_home[i], _wheel_steer)
 	for i in _rear_wheels.size():
-		_set_wheel(_rear_wheels[i], _wheel_rest[_front_wheels.size() + i], 0.0)
+		_set_wheel(_rear_wheels[i],
+			square * _wheel_home[_front_wheels.size() + i], 0.0)
 
 	if _steering_wheel:
 		# The wheel's disc lies in its own XZ plane, so local Y is the column
@@ -224,9 +259,9 @@ func _take_up_the_model(stock: bool) -> void:
 	_stock = stock
 	_front_wheels = _collect_wheels(FRONT_WHEELS)
 	_rear_wheels = _collect_wheels(REAR_WHEELS)
-	_wheel_rest.clear()
+	_wheel_home.clear()
 	for wheel in _front_wheels + _rear_wheels:
-		_wheel_rest.append(wheel.transform.basis)
+		_wheel_home.append(_home_of(wheel))
 	# A fresh model starts square rather than inheriting however far the last
 	# one happened to be turned.
 	_wheel_steer = 0.0
@@ -453,9 +488,31 @@ func _headlights_off_the_shape() -> Vector3:
 		_bounds.position.z)
 
 
-## Roll about the wheel's own lateral axis, then yaw it for steering.
-func _set_wheel(wheel: Node3D, rest: Basis, steer_angle: float) -> void:
+## Put a wheel at `home`, a place in the world, rolled about its own lateral
+## axis and then yawed for steering.
+func _set_wheel(wheel: Node3D, home: Transform3D, steer_angle: float) -> void:
 	var spin := Basis.from_euler(
 		Vector3(_wheel_roll, steer_angle, 0.0), EULER_ORDER_YXZ
 	)
-	wheel.transform.basis = rest * spin
+	wheel.global_transform = home * Transform3D(spin, Vector3.ZERO)
+
+
+## Where the shell's own space would be in the world with the body sitting
+## square: tipped by the road and by nothing else.
+func _square() -> Transform3D:
+	var road := Transform3D(
+		Basis.from_euler(Vector3(_road_pitch, 0.0, 0.0)), Vector3.ZERO)
+	var car := get_parent_node_3d()
+	return car.global_transform * road if car != null else road
+
+
+## Where a wheel sits in the shell's own space: its own transform and that of
+## every node between it and the shell, which is however deep the importer
+## decided to nest it.
+func _home_of(wheel: Node3D) -> Transform3D:
+	var home := wheel.transform
+	var node := wheel.get_parent() as Node3D
+	while node != null and node != self:
+		home = node.transform * home
+		node = node.get_parent() as Node3D
+	return home

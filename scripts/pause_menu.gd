@@ -48,6 +48,11 @@ signal quit_requested
 
 
 func _ready() -> void:
+	# The pages on this screen - and the garage, the paint and the settings it
+	# opens - scroll and move on the frame, not on the physics step, and Godot
+	# jitters a node moved between steps while it is interpolating it between
+	# them.
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_resume_button.pressed.connect(close)
 	_restart_button.pressed.connect(_on_restart_pressed)
 	_paint_button.pressed.connect(_on_paint_pressed)

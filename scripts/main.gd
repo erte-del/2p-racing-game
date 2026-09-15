@@ -207,8 +207,12 @@ func _dress_for_the_title_screen() -> void:
 
 
 ## The point the title screen turns about: midway between the parked cars.
+##
+## Where the cars are drawn rather than where physics last left them, because
+## the title screen asks from _process, in between physics steps.
 func grid_centre() -> Vector3:
-	return (_car1.global_position + _car2.global_position) * 0.5
+	return (_car1.get_global_transform_interpolated().origin
+			+ _car2.get_global_transform_interpolated().origin) * 0.5
 
 
 ## The headlights follow the sky, not the race, so this runs whether or not
@@ -379,6 +383,11 @@ func _reset_to_checkpoint(index: int) -> void:
 	car.reset_motion()
 	car.global_position = here + Vector3.UP * grid_clearance
 	car.look_at(car.global_position + forward, Vector3.UP)
+	# Put back rather than driven back, so it is drawn at the checkpoint on the
+	# next frame instead of streaking there from wherever it was.
+	car.reset_physics_interpolation()
+	var arrows: Array[RivalArrow] = [_arrow1, _arrow2]
+	arrows[index].snap()
 
 
 ## How far along the course each car is, in the same order as the cars.
@@ -574,6 +583,11 @@ func _place_on_grid() -> void:
 				+ Vector3.UP * grid_clearance)
 		# look_at aims -Z, which is the car's forward.
 		car.look_at(car.global_position + forward, Vector3.UP)
+		# Put there, not driven there, so it is drawn on the grid straight
+		# away rather than sliding across the world for a frame.
+		car.reset_physics_interpolation()
+	_arrow1.snap()
+	_arrow2.snap()
 
 	# Only once the cars are actually on the grid, or this reads their old
 	# positions and hands someone a lead they no longer have.

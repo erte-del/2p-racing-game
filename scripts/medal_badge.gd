@@ -62,6 +62,9 @@ var _fall: Tween
 
 
 func _ready() -> void:
+	# The drop is tweened on the frame, not on the physics step, so it is drawn
+	# where the tween puts it rather than interpolated towards it a step late.
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	custom_minimum_size = size_needed()
 	size = size_needed()
 	visible = false

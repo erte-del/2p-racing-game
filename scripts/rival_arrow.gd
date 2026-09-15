@@ -72,6 +72,19 @@ func recolour(colour: Color) -> void:
 	material.albedo_color = colour
 
 
+## Put the arrow straight where it belongs, for when the car it orbits has been
+## put somewhere new rather than driven there. The bearing is taken afresh as
+## well: swinging round from wherever it pointed before would spend a moment
+## pointing at a car that is no longer there.
+func snap() -> void:
+	if _owner_car == null or _rival_car == null:
+		return
+	_bearing = _target_bearing()
+	_place()
+	_update_visibility()
+	reset_physics_interpolation()
+
+
 ## Runs with physics, like the cars and cameras, so the arrow cannot jitter
 ## against the car it is tracking.
 func _physics_process(delta: float) -> void:

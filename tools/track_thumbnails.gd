@@ -40,6 +40,9 @@ func _init() -> void:
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	camera.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
 	camera.far = 1200.0
+	# Moved by this script between frames rather than on a physics step, so it
+	# is drawn where it is put rather than interpolated towards it.
+	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	root.add_child(camera)
 	camera.make_current()
 	main.get_node("DayNight").start_offset = 0.0

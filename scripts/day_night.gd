@@ -90,6 +90,9 @@ func _ready() -> void:
 		push_warning("DayNight: no sun or environment to drive")
 		set_process(false)
 		return
+	# Swung round with the day on the frame, not on the physics step, so it is
+	# drawn where it is put rather than interpolated towards it a step late.
+	_sun.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 
 	# The sky material is a sub-resource of the scene, and these edits are made
 	# every frame. Working on a copy keeps the scene's own resource untouched.

@@ -160,6 +160,12 @@ var _modes_open := false
 
 
 func _ready() -> void:
+	# Everything on the title screen moves on the frame rather than on the
+	# physics step - the title rocks, the pages slide, the camera turns - and
+	# Godot's own guidance is that a node moved outside the physics step while
+	# it is being interpolated between steps jitters. The backdrop behind it
+	# is parked, so it has nothing to gain from interpolation either.
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_play.pressed.connect(_on_play_pressed)
 	_garage_button.pressed.connect(_on_garage_pressed)
 	_garage_screen.closed.connect(_on_garage_closed)

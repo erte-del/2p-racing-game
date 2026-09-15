@@ -10,6 +10,16 @@ extends SceneTree
 # box with no wheels, no steering wheel, no named materials and no interior -
 # because that is the shape of most of what a player will actually drop in.
 
+## Everything about how a car drives and moves that its model must not be able
+## to change, compared between the car given a new model and the one that was
+## not.
+const TUNING := [
+	"max_speed", "gravity", "tight_turn_radius", "roof_bounce",
+	"roll_per_accel", "max_roll", "dive_per_accel", "max_dive",
+	"landing_give", "max_squash", "body_spring", "body_damping",
+	"air_wheel_fade",
+]
+
 
 func _init() -> void:
 	await process_frame
@@ -69,11 +79,10 @@ func _init() -> void:
 	if not is_equal_approx(_speed(car), speed):
 		print("  swapping the model changed how fast the car was going")
 		faults += 1
-	if car.max_speed != other.max_speed or car.gravity != other.gravity \
-			or car.tight_turn_radius != other.tight_turn_radius \
-			or car.roof_bounce != other.roof_bounce:
-		print("  swapping the model retuned the car")
-		faults += 1
+	for property in TUNING:
+		if car.get(property) != other.get(property):
+			print("  swapping the model retuned the car's %s" % property)
+			faults += 1
 
 	# No interior, so no first person - and the key that asks for it is not a
 	# key that does nothing else afterwards.

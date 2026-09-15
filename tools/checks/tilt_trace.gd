@@ -7,6 +7,10 @@ extends SceneTree
 # off the lip, the nose dropping through the top of the flight, and the road
 # again on landing. If the shell reads all five correctly it reads a climb
 # correctly too, a climb being a gentle ramp that never runs out.
+#
+# What is read is the road pitch the car works out, not the shell's own angle.
+# The shell also leans on its springs - nose down under braking, back under
+# throttle - and that is the driver, not the road.
 
 const RUN_UP := 24.0
 
@@ -56,9 +60,8 @@ func _init() -> void:
 		await physics_frame
 	car.reset_motion()
 
-	var body: Node3D = car.get_node("Body")
 	var ground := car.global_position.y
-	var flat := rad_to_deg(body.rotation.x)
+	var flat := rad_to_deg(car._pitch)
 	var up := 0.0
 	var down := 0.0
 	var landed := 0.0
@@ -66,7 +69,7 @@ func _init() -> void:
 	for i in 300:
 		car._speed = car.max_speed
 		await physics_frame
-		var pitch := rad_to_deg(body.rotation.x)
+		var pitch := rad_to_deg(car._pitch)
 		var where := ""
 		if not car.is_on_floor():
 			was_airborne = true
@@ -137,14 +140,13 @@ func _over_a_hill(main: Node, track: Track, car: Car) -> int:
 		await physics_frame
 	car.reset_motion()
 
-	var body: Node3D = car.get_node("Body")
 	var steepest := 0.0
 	var frames: int = int((climb.length + 20.0) / car.max_speed * 60.0)
 	for i in frames:
 		car._speed = car.max_speed
 		await physics_frame
-		if absf(rad_to_deg(body.rotation.x)) > absf(steepest):
-			steepest = rad_to_deg(body.rotation.x)
+		if absf(rad_to_deg(car._pitch)) > absf(steepest):
+			steepest = rad_to_deg(car._pitch)
 
 	var grade := rad_to_deg(atan2(climb.rise, climb.length))
 	print("")

@@ -488,6 +488,9 @@ func _back_to_checkpoint() -> void:
 	if forward.length_squared() > 0.000001:
 		_car.look_at(_car.global_position + forward.normalized(), Vector3.UP)
 	_car.reset_motion()
+	# Put back rather than driven back, so it is drawn at the checkpoint on the
+	# next frame instead of streaking there from wherever it was.
+	_car.reset_physics_interpolation()
 	_camera.follow(_car)
 
 
@@ -505,6 +508,9 @@ func _place_on_the_line() -> void:
 	_car.global_position = here + Vector3.UP * grid_clearance
 	_car.look_at(_car.global_position + forward.normalized(), Vector3.UP)
 	_car.reset_motion()
+	# Put there, not driven there, so it is drawn on the line straight away
+	# rather than sliding across the world for a frame.
+	_car.reset_physics_interpolation()
 	_respawn = at
 	_next_checkpoint = 0
 	_show_tally()

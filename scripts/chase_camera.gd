@@ -82,6 +82,10 @@ func _snap() -> void:
 	else:
 		global_position = _desired_position()
 		_aim()
+	# A snap is a jump, not a move. Left interpolated, the frame drawn straight
+	# after one shows the camera part of the way across the world between
+	# where it was and where it has been put.
+	reset_physics_interpolation()
 
 
 func _physics_process(delta: float) -> void:
