@@ -1002,7 +1002,7 @@ working - and finally runs a car at a barrier and through the gap beside it:
 Godot --path . --headless --script tools/checks/barrier_layout.gd
 ```
 
-On the tuned numbers that is 6.3 barriers a course, none with fewer than one,
+On the tuned numbers that is 5.7 barriers a course, none with fewer than one,
 no way past narrower than the 3.4 m rule, and no faults. Driving square into
 one takes 30 m/s to 8.4 and wipes the boost; taking the gap beside it costs
 nothing at all.
@@ -1118,6 +1118,25 @@ same jump was cleared at 19.5 m/s and 38.8 m/s and impassable at 25. The ramp
 comes up out of the road as a curve (`ramp_curve`, 1.5), leaving the steepest
 part at the lip where the angle actually does any work.
 
+A fourth was found later, by reading the car rather than by driving it.
+Nothing wore the climb away while a car was in the air, so it came down still
+holding what the ramp had given it - 10.6 m/s of it at tuned speed - and only
+lost that at `climb_memory` once it was back on the road. Anything that ran it
+out of floor in the next second or two threw it straight back up: the other
+car's roof, the end of the landing, a crest just past touchdown. The climb is
+now spent on the step it throws the car, so a car always lands holding none.
+
+Floor snapping is on, at 0.6 m, and it is not what would stop a jump. Godot
+only snaps a body that began the step on the floor and is not moving upwards,
+and only as far down as the snap reaches. A car rolling off a lip has a hole
+metres deep under it and nothing within reach, so it leaves the floor, and
+from the next step on it is rising and snapping is not tried at all. What
+snapping does do is keep a car on a falling road. A car on the ground has no
+vertical speed of its own, so going downhill it runs flat off the surface and
+has to drop back onto it; without snapping, a car driven flat out down a 4.7 m
+descent spent three fifths of the run off the floor, in hops of up to nine
+steps. Up a climb and over its crest it makes no difference at all.
+
 The hole is 17 m, and it is the one thing about a course measured against the
 cars rather than rolled freely. A hole a car cannot clear flat out is not a
 risk, it is a wall across the road - and chaos rolls worlds where the cars are
@@ -1135,9 +1154,9 @@ worked out: the launch is capped, so range does not follow the clean projectile
 square of speed.
 
 The landing is long - 90 m - because the range of a jump is decided by the speed
-it is taken at. The same ramp puts a car down 15 m past the lip at the slowest
-the game rolls and 79 m past it at the fastest, and the road has to reach the
-far end of that.
+it is taken at. The same ramp puts a car down 19.4 m past the lip on the
+slowest, heaviest roll the game makes and 95.0 m past it on the fastest,
+lightest one, and the road has to reach the far end of that.
 
 Nothing else is built on a jump. The pads and barriers keep off the stretch a
 jump covers, plus `jump_keep_out` (12 m) either side, and a checkpoint that
@@ -1163,12 +1182,30 @@ slowest, heaviest roll chaos can produce it is a 10 m hole cleared by 9.4 m.
 The longest flight is 95.0 m against 107.5 m of road to come down on, and no
 roll crosses without leaving the ground. It then asks the opposite question,
 because a jump every car clears whatever it does is scenery rather than a risk:
-a car crawling at 10.5 m/s comes down 7.5 m short and ends up on the grass.
+a car crawling at 10.5 m/s at the 17.5 m hole flies 7.5 m, comes down 10 m
+short and ends up on the grass.
 
 That longest flight is what sets the ceiling on the cars' top speed. The
-landing is 90 m of road and the ramp puts a chaos-fast boosted car 95 m past
-the lip; there is 107.5 m to come down on, so a further retune upwards lands
-the fastest roll on the grass rather than the road.
+landing is 90 m of road and the ramp puts the fastest car chaos rolls, under
+its lightest gravity, 95 m past the lip; there is 107.5 m to come down on, so
+a further retune upwards lands the fastest roll on the grass rather than the
+road.
+
+`tools/checks/landing_climb.gd` flies a car off a real jump, then flies it
+again with a flat-topped ledge built where it came down: 1.2 m high, which is
+taller than the snap and so has to be left rather than held onto, and short
+enough that the car runs off the end of it 0.55 s after landing. A flat ledge
+has nothing to climb, so whatever the car goes up with off the end came from
+somewhere else:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/landing_climb.gd
+```
+
+Before the climb was spent, the car landed holding +10.6 m/s and went up off
+the end of the ledge at +7.4 m/s, rising 1.09 m. Now it lands holding
+-0.1 m/s, which is nothing less one step's fade, and leaves the ledge at
++0.0 m/s. None of the jump or tilt numbers above moved.
 
 `tools/checks/jump_shot.gd` looks at one - the top car back on the run up where
 the choice to commit is made, the bottom one held in the air over the hole,
@@ -1213,8 +1250,8 @@ then over a plain climb:
 Godot --path . --headless --script tools/checks/tilt_trace.gd
 ```
 
-Level road reads 0.0 degrees, the ramp +24.6, the fall -29.8, and a 2.9 degree
-climb reads +3.3.
+Level road reads 0.0 degrees, the ramp +24.1, the fall -28.0, and a 2.9 degree
+climb reads +3.4.
 
 ## Laid-out tracks
 

@@ -144,7 +144,9 @@ var _boost_hold := 0.0
 ## Seconds left before another obstacle can cost anything.
 var _hit_recovery := 0.0
 ## How fast the car was climbing on the last step it had road under it, and
-## the height it was at, which is what that is worked out from.
+## the height it was at, which is what that is worked out from. The climb is
+## used up throwing the car off the end of the road, so a car always comes
+## back down with none.
 var _climb := 0.0
 var _last_height := 0.0
 ## Everything that is looked at rather than driven on: the model, its paint,
@@ -163,11 +165,6 @@ var _steer_right: StringName
 
 func _ready() -> void:
 	_shell = $Body
-	# No snapping to the floor. Snapping exists to keep a body glued to the
-	# ground over a crest, which is exactly what a ramp must not do: with it
-	# on, a car runs off the lip of a jump and is dragged down over the edge
-	# still reporting itself as on the road, and never launches at all.
-	floor_snap_length = 0.0
 
 	_accelerate = StringName(input_prefix + "_accelerate")
 	_brake = StringName(input_prefix + "_brake")
@@ -179,8 +176,20 @@ func _ready() -> void:
 	# the one thing about the way this car looks that it cannot know on its own.
 	_shell.repaint(body_color)
 
-	# Courses have climbs, and a body that only zeroes its vertical velocity on
-	# the floor launches off every crest. Snapping keeps it on the surface.
+	# Snapped down onto the road, by up to 0.6 m a step. A car on the ground
+	# has no vertical speed of its own, so on a falling road it runs flat off
+	# the surface and has to drop back onto it: without snapping, a car driven
+	# flat out down a 4.7 m descent spent three fifths of the run off the
+	# floor, in hops of up to nine steps, with the shell reading every one of
+	# them as a flight.
+	#
+	# Snapping does not stop a jump, and Godot's own rules for it say why: it
+	# is only tried on a step the car began on the floor and is not moving
+	# upwards, and it reaches no further down than floor_snap_length. On the
+	# step a car rolls off a lip there is a hole metres deep under it and
+	# nothing in reach to snap to, so it leaves the floor. _drive then hands it
+	# the ramp's climb, and from the next step on it is rising, so snapping is
+	# not tried again until it is back on the ground.
 	floor_snap_length = 0.6
 
 
@@ -422,6 +431,12 @@ func _drive(delta: float) -> void:
 	elif grounded:
 		# The step it left the ground on.
 		velocity.y = clampf(_climb * launch, -max_launch, max_launch)
+		# And spent. Nothing wears the climb away while the car is in the air,
+		# so a car left holding it comes down still carrying the ramp, and
+		# throws itself up again off the next edge it runs out of floor on -
+		# the other car's roof, the end of the landing, a crest just past
+		# touchdown - until climb_memory has worn it away seconds later.
+		_climb = 0.0
 	_last_height = global_position.y
 	_take_the_hits()
 
