@@ -64,8 +64,15 @@ func _init() -> void:
 	# The choice has to survive the menu being thrown away: a race started
 	# with the sky pinned should open already there, with no dawn to sit out.
 	root.get_node("GameSettings").time_of_day = root.get_node("GameSettings").ALWAYS_NIGHT
-	menu.get_node("Play").emit_signal("pressed")
-	await _settle()
+	# Play opens the mode page rather than a race, so the race is reached the
+	# way a player reaches it: two playing, infinite, then a normal race. Each
+	# press waits out the slide it starts, as a player would.
+	var page := "ModeChoice/Page/Panel/Margin/Box/"
+	for button in ["Play", page + "Players/Together", page + "ModeSlot/Inner/Infinite",
+			page + "ModeSlot/Inner/FlavourSlot/Inner/Row/Normal"]:
+		menu.get_node(button).emit_signal("pressed")
+		for i in 30:
+			await process_frame
 	print("race scene: ", current_scene.name, "  nightness %.2f"
 		% current_scene.get_node("DayNight").night_amount())
 	for i in 40:
