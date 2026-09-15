@@ -92,6 +92,20 @@ const OBSTACLE_GROUP := &"obstacle"
 ## frame to steer out of it.
 @export var obstacle_recovery := 0.4
 
+@export_group("Contact")
+## Coming down on the other car's roof throws a car back up, where coming down
+## on anything else puts it down and keeps it there. Nothing needs it; it is
+## there because a car that lands on its rival ought to know about it.
+##
+## How much of the speed a car comes down onto a roof with it goes back up
+## with, as a fraction. Under one, so every bounce is lower than the one before
+## and a car always settles.
+@export_range(0.0, 1.0) var roof_bounce := 0.6
+## A car coming down onto a roof slower than this, in m/s, stays on it rather
+## than bouncing. Without it the bounces would shrink for ever, and a car
+## sitting on a roof would judder there instead of resting.
+@export var roof_bounce_min := 2.0
+
 @export_group("Speed rush")
 ## How far past its own max speed a car has to be for the rush - the speed
 ## lines and the camera pulling back - to be at full strength, as a fraction
@@ -149,6 +163,11 @@ var _hit_recovery := 0.0
 ## back down with none.
 var _climb := 0.0
 var _last_height := 0.0
+## How fast the car is to go back up on its next step, having just come down
+## on the other car's roof. Held for a step rather than set at once: the step
+## that lands a car is also what tells the next one it is on the floor, and a
+## car on the floor has its vertical speed taken away before it moves.
+var _bounce := 0.0
 ## Everything that is looked at rather than driven on: the model, its paint,
 ## its lights and the driver's eye. It tips to follow the road while the body
 ## it hangs off stays upright.
@@ -268,6 +287,7 @@ func reset_motion() -> void:
 	_hit_recovery = 0.0
 	_climb = 0.0
 	_last_height = global_position.y
+	_bounce = 0.0
 	_pitch = 0.0
 	if _shell != null:
 		_shell.rotation.x = 0.0
@@ -415,10 +435,17 @@ func _drive(delta: float) -> void:
 	velocity.x = forward.x * _speed
 	velocity.z = forward.z * _speed
 	var grounded := is_on_floor()
-	if grounded:
+	var bouncing := _bounce > 0.0
+	if bouncing:
+		velocity.y = _bounce
+		_bounce = 0.0
+	elif grounded:
 		velocity.y = 0.0
 	else:
 		velocity.y -= gravity * delta
+	# How fast it is coming down, taken before move_and_slide lands it and
+	# takes that away.
+	var falling := -velocity.y
 	move_and_slide()
 
 	if is_on_floor():
@@ -428,7 +455,9 @@ func _drive(delta: float) -> void:
 		# whatever the last step did, for the reason climb_memory gives.
 		var measured := (global_position.y - _last_height) / maxf(delta, 0.0001)
 		_climb = maxf(measured, _climb - climb_memory * delta)
-	elif grounded:
+		if not grounded and not bouncing:
+			_bounce_off_a_roof(falling)
+	elif grounded and not bouncing:
 		# The step it left the ground on.
 		velocity.y = clampf(_climb * launch, -max_launch, max_launch)
 		# And spent. Nothing wears the climb away while the car is in the air,
@@ -439,6 +468,23 @@ func _drive(delta: float) -> void:
 		_climb = 0.0
 	_last_height = global_position.y
 	_take_the_hits()
+
+
+## Throw the car back up if what it has just come down on is the other car.
+##
+## Only a floor counts. A car that comes down across the other car's flank, or
+## clips a corner of it on the way past, has hit a wall, and a wall throws
+## nothing back up. The bounce is capped the way a launch off a lip is, for
+## the same reason: a car thrown far higher than the thing it hit looks like it
+## was fired, not bounced.
+func _bounce_off_a_roof(falling: float) -> void:
+	if falling < roof_bounce_min:
+		return
+	for i in get_slide_collision_count():
+		var collision := get_slide_collision(i)
+		if collision.get_collider() is Car and collision.get_angle() <= floor_max_angle:
+			_bounce = minf(falling * roof_bounce, max_launch)
+			return
 
 
 ## Pay for anything the car ran into on the way.

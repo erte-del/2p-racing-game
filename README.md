@@ -1253,6 +1253,44 @@ Godot --path . --headless --script tools/checks/tilt_trace.gd
 Level road reads 0.0 degrees, the ramp +24.1, the fall -28.0, and a 2.9 degree
 climb reads +3.4.
 
+## Landing on the other car
+
+Coming down on the other car's roof throws a car back up; coming down on
+anything else - the road, the grass, a barrier, a ledge - puts it down and
+keeps it there. Nothing about racing needs it. It is there because a car that
+lands on its rival ought to know about it.
+
+`Car.roof_bounce` (0.6) is how much of the speed a car comes down with it goes
+back up with, so every bounce is lower than the one before and a car always
+settles, and nothing slower than `roof_bounce_min` (2 m/s) bounces at all, so
+a car sitting on a roof rests there instead of juddering. The bounce is capped
+at `max_launch`, the same ceiling a lip has. Only a floor counts: a car that
+comes down across the other car's flank, or clips a corner of it on the way
+past, has hit a wall, and a wall throws nothing back.
+
+The bounce is handed over a step late, on purpose. The step that lands a car
+is also what tells the next step it is on the floor, and a car on the floor has
+its vertical speed taken away before it moves, so a bounce set on the landing
+step would be gone before it did anything. A car leaving a roof on a bounce is
+not a car running out of road either, so it is not handed its climb on the way
+up as well. Solo has no other car, so nothing there ever bounces.
+
+Chaos leaves the bounce alone. It already rolls gravity, which is what decides
+how high a bounce goes and how long it hangs, and rolling how much comes back
+on top of that would make the one silly thing in the game unpredictable in two
+ways at once.
+
+`tools/checks/roof_bounce.gd` drops a car 3 m onto the other car's roof, and
+then the same 3 m onto the road beside it:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/roof_bounce.gd
+```
+
+Onto the roof it comes down at 11.6 m/s, goes back up at 7.2 m/s and 1.14 m,
+bounces four times and comes to rest on the roof 1.93 s after it was let go.
+Onto the road it comes down at the same 11.6 m/s and never leaves it again.
+
 ## Laid-out tracks
 
 Alongside the endless course there are tracks written down by hand. A track

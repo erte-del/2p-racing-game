@@ -70,7 +70,8 @@ func _init() -> void:
 		print("  swapping the model changed how fast the car was going")
 		faults += 1
 	if car.max_speed != other.max_speed or car.gravity != other.gravity \
-			or car.tight_turn_radius != other.tight_turn_radius:
+			or car.tight_turn_radius != other.tight_turn_radius \
+			or car.roof_bounce != other.roof_bounce:
 		print("  swapping the model retuned the car")
 		faults += 1
 
