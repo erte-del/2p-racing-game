@@ -45,6 +45,7 @@ func _init() -> void:
 			named += 1
 	print("%d of them can be pressed, %d are named" % [live, named])
 	faults += _check_the_times(grid)
+	faults += _check_the_names(grid, menu)
 	if live != TrackRoster.FILES.size():
 		print("  the tracks that exist are not the ones that can be pressed")
 		faults += 1
@@ -204,6 +205,43 @@ func _check_the_times(grid: GridContainer) -> int:
 						% TrackRoster.track_name(index))
 					faults += 1
 		print("%s shows %s" % [TrackRoster.track_name(index), shown])
+	return faults
+
+
+## Every name reads whole over its picture. A name wider than its label is cut
+## off at both ends and reads as another word, which a count of names cannot
+## see. Measured in the font and size the label is drawn in, against the width
+## it was given, so a name the menu shrank is judged at the size it shrank to.
+func _check_the_names(grid: GridContainer, menu: Node) -> int:
+	var faults := 0
+	var usual: int = menu.get("track_name_font_size")
+	var height := -1.0
+	for cell in grid.get_children():
+		var labels := cell.get_children().filter(
+			func(c: Node) -> bool: return c is Label)
+		if labels.is_empty():
+			continue
+		var label := labels[0] as Label
+		var points := label.get_theme_font_size("font_size")
+		var needs := label.get_theme_font("font").get_string_size(
+			label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, points).x
+		var room := label.size.x - label.get_theme_stylebox("normal").get_minimum_size().x
+		if needs > room:
+			print("  %s is %.0f px wide in a column with room for %.0f"
+				% [label.text, needs, room])
+			faults += 1
+		elif points < usual:
+			print("%s is set at %d to fit its column" % [label.text, points])
+		# And as tall as every other name, whatever size it is set at. The
+		# picture hangs under the name, so a shorter name is a picture sitting
+		# out of line with the rest of its row.
+		var tall := label.get_combined_minimum_size().y
+		if height < 0.0:
+			height = tall
+		elif not is_equal_approx(tall, height):
+			print("  %s is %.0f px tall where the other names are %.0f"
+				% [label.text, tall, height])
+			faults += 1
 	return faults
 
 

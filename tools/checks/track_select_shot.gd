@@ -49,7 +49,29 @@ func _init() -> void:
 	for i in 12:
 		await process_frame
 	root.get_texture().get_image().save_png("%s/03_tracks.png" % out)
+
+	# And the rows the page opens scrolled away from, whose names are no less
+	# likely to be too long for their columns.
+	var scroll: ScrollContainer = menu.get_node("TrackChoice/Page/Panel/Margin/Box/Scroll")
+	var grid: GridContainer = scroll.get_node("Grid")
+	scroll.scroll_vertical = int(grid.get_child(grid.columns * 2).position.y)
+	for i in 12:
+		await process_frame
+	root.get_texture().get_image().save_png("%s/04_tracks_below.png" % out)
+
+	# Said as well as drawn: a name cut off at one end of twenty is easy to
+	# look straight past in a picture.
+	var too_long := 0
+	for cell in grid.get_children():
+		var label := cell.get_child(0) as Label
+		var needs := label.get_theme_font("font").get_string_size(
+			label.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
+			label.get_theme_font_size("font_size")).x
+		if needs > label.size.x - label.get_theme_stylebox("normal").get_minimum_size().x:
+			print("  %s is too long for its column" % label.text)
+			too_long += 1
 	if times != null:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(times.save_path))
-	print("mode page and track select drawn")
+	print("mode page and track select drawn, %d names too long for their columns"
+		% too_long)
 	quit()

@@ -97,6 +97,11 @@ extends Control
 ## How big the overhead shot on a track button is, in pixels. Five of them
 ## across is what decides how wide the page comes out.
 @export var track_button_size := 152.0
+## The size a track's name is set in over its picture.
+@export var track_name_font_size := 18
+## The smallest a name too long for its column is shrunk to. Below this a
+## name stops reading as a name from where a menu is looked at.
+@export var track_name_smallest_font_size := 13
 
 @export_group("Chaos")
 ## The chaos button never settles on a colour. Everything else on the page
@@ -328,12 +333,13 @@ func _fill_the_track_grid() -> void:
 		var label := Label.new()
 		label.text = called.to_upper()
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		# Clipped rather than allowed to set the width of its column: one long
-		# name would otherwise stretch the whole grid out around it.
+		# Held to the width of the picture rather than allowed to set the width
+		# of its column: one long name would otherwise stretch the whole grid
+		# out around it. A name that does not fit is set smaller to fit it,
+		# once the cell is on the grid; clipped only past the smallest size.
 		label.autowrap_mode = TextServer.AUTOWRAP_OFF
 		label.clip_text = true
 		label.custom_minimum_size.x = track_button_size
-		label.add_theme_font_size_override("font_size", 18)
 		if not exists:
 			label.add_theme_color_override("font_color", Color(0.55, 0.58, 0.66))
 		cell.add_child(label)
@@ -387,6 +393,33 @@ func _fill_the_track_grid() -> void:
 		cell.add_child(time)
 
 		_track_grid.add_child(cell)
+		# Not until now: off the grid, the label does not know which font the
+		# page's theme will draw it in, and so cannot say how wide it will be.
+		_fit_the_name(label)
+
+
+## Set a track's name as small as it has to be to read whole over its picture.
+##
+## Smaller rather than wrapped, because a name on two lines pushes its picture
+## down out of line with the rest of its row. Smaller rather than a wider
+## grid, because all five columns would have to grow for the sake of one name.
+## A name cut off at both ends reads as a different name: LONG WAY ROUND came
+## out as .ONG WAY ROUNI. tools/checks/track_select.gd reports one that still
+## does not fit at the smallest size.
+func _fit_the_name(label: Label) -> void:
+	# Held to the height of a name at the usual size, with a smaller one
+	# centred in it. A shorter label lifts its picture a few pixels out of line
+	# with the rest of the row, which is the thing wrapping was turned down for.
+	label.add_theme_font_size_override("font_size", track_name_font_size)
+	label.custom_minimum_size.y = label.get_combined_minimum_size().y
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var font := label.get_theme_font("font")
+	var room := track_button_size - label.get_theme_stylebox("normal").get_minimum_size().x
+	var points := track_name_font_size
+	while points > track_name_smallest_font_size and font.get_string_size(
+			label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, points).x > room:
+		points -= 1
+	label.add_theme_font_size_override("font_size", points)
 
 
 ## What a track is and what it wants, for anyone who goes looking.

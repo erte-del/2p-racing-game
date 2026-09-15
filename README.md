@@ -1373,6 +1373,15 @@ itself by building its description, which costs a few array appends and no
 geometry - a name written down in two places drifts, and the one on the button
 would be the one nobody notices is wrong.
 
+A name is held to the width of its picture, and one too long for that is set
+smaller until it fits, down to `track_name_smallest_font_size`. It keeps the
+height of a name at the usual size, with the smaller text centred in it, or its
+picture would rise a few pixels out of line with the rest of the row. Not
+wrapped, which would push its picture down out of line the other way, and not
+given a wider column, which would widen all five for the sake of one name. A
+name cut off at both ends reads as a different name - LONG WAY ROUND came out
+as .ONG WAY ROUNI before it was shrunk.
+
 The overhead shots are checked in rather than drawn at load. A menu that built
 twenty tracks to show twenty pictures of them would take a second to open, and
 the pictures do not change between runs. `tools/track_thumbnails.gd` draws them,
@@ -1416,7 +1425,9 @@ fresh, with nothing picked, still opens on the title.
 `tools/checks/track_select.gd` presses the buttons and sees where they go,
 which is three places for a track to be chosen and then quietly not raced: the
 grid built in code, the setting carried across a scene change, and a Track that
-has to divert from a seed to a file.
+has to divert from a seed to a file. It also measures every name in the font
+it is drawn in, and counts one wider than its column as a fault, since a cut-off
+name is still a name to a check that only asks whether there is one.
 
 ```
 Godot --path . --headless --script tools/checks/track_select.gd
