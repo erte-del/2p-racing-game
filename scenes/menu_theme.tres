@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=6 format=3]
+[gd_resource type="Theme" load_steps=7 format=3]
 
 ; The look of every button and panel on the menu screens, in one place, so a
 ; new screen matches the title screen without copying styleboxes into it.
@@ -51,6 +51,25 @@ content_margin_top = 8.0
 content_margin_right = 18.0
 content_margin_bottom = 8.0
 
+; A button that cannot be pressed. Without one of these a disabled button
+; falls back to Godot's own grey, which looks like a different program
+; standing in the middle of the page.
+[sub_resource type="StyleBoxFlat" id="Btn_disabled"]
+bg_color = Color(0.075, 0.098, 0.157, 0.9)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.898, 0.929, 1, 0.22)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+content_margin_left = 18.0
+content_margin_top = 8.0
+content_margin_right = 18.0
+content_margin_bottom = 8.0
+
 [sub_resource type="StyleBoxFlat" id="Panel_bg"]
 bg_color = Color(0.055, 0.075, 0.125, 0.94)
 border_width_left = 3
@@ -76,11 +95,13 @@ Button/colors/font_hover_color = Color(1, 1, 1, 1)
 Button/colors/font_focus_color = Color(1, 1, 1, 1)
 Button/colors/font_pressed_color = Color(1, 1, 1, 1)
 Button/colors/font_hover_pressed_color = Color(1, 1, 1, 1)
+Button/colors/font_disabled_color = Color(0.55, 0.58, 0.66, 1)
 Button/font_sizes/font_size = 26
 Button/styles/normal = SubResource("Btn_normal")
 Button/styles/hover = SubResource("Btn_hover")
 Button/styles/pressed = SubResource("Btn_pressed")
 Button/styles/focus = SubResource("Btn_hover")
+Button/styles/disabled = SubResource("Btn_disabled")
 Label/colors/font_color = Color(1, 1, 1, 1)
 Label/font_sizes/font_size = 24
 PanelContainer/styles/panel = SubResource("Panel_bg")

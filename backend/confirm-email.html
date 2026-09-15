@@ -1,0 +1,89 @@
+<!--
+  The confirmation email, for Authentication -> Emails -> Confirm sign up.
+
+  Paste the whole of this into the Body field. It only appears once custom
+  SMTP is configured; until then Supabase sends its own default and this file
+  is just waiting.
+
+  `{{ .ConfirmationURL }}` is the one thing Supabase fills in. Leave it
+  exactly as written, in both places it appears.
+
+  Written nothing like the landing page it leads to, because email is not the
+  web. There are no external stylesheets, no web fonts and no CSS variables:
+  Gmail strips <link> and <style> can be dropped outright, so every rule here
+  is inlined on the element it styles. The layout is tables rather than flex
+  or grid, because Outlook renders through Word and understands neither. The
+  button is a table with a background colour rather than a styled link, for
+  the same reason - a bare <a> with padding collapses to plain text there.
+
+  The colours are the game's own, the same ones the landing page uses, so the
+  email and the page a player arrives at look like one thing.
+-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#080B13;margin:0;padding:0;">
+  <tr>
+    <td align="center" style="padding:32px 16px;">
+
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#0E1320;border:3px solid #8A93A6;border-radius:10px;">
+        <tr>
+          <td style="padding:40px 40px 36px 40px;font-family:Helvetica,Arial,sans-serif;">
+
+            <p style="margin:0 0 10px 0;font-size:13px;font-weight:bold;letter-spacing:3px;text-transform:uppercase;color:#8C94A8;">
+              2P Racing Game
+            </p>
+
+            <h1 style="margin:0 0 18px 0;font-size:38px;line-height:1.05;font-weight:bold;letter-spacing:1px;text-transform:uppercase;color:#E5EDFF;">
+              Confirm your email
+            </h1>
+
+            <p style="margin:0 0 8px 0;font-size:17px;line-height:1.6;color:#C7D4ED;">
+              One click and the account is yours. After that your best time on
+              every track is backed up as you set it, and stands on the
+              leaderboards against everyone else driving the same road.
+            </p>
+
+            <!-- A rule rather than the dashed centre line the landing page
+                 draws. Repeating gradients do not survive most email clients,
+                 and a divider that renders as a grey smear in Outlook is
+                 worse than a plain one everywhere. -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0;">
+              <tr><td style="height:3px;line-height:3px;font-size:0;background-color:#2D3C5A;">&nbsp;</td></tr>
+            </table>
+
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="background-color:#FFD140;border-radius:8px;">
+                  <a href="{{ .ConfirmationURL }}"
+                     style="display:inline-block;padding:15px 34px;font-family:Helvetica,Arial,sans-serif;font-size:17px;font-weight:bold;letter-spacing:1.5px;text-transform:uppercase;color:#0E1320;text-decoration:none;">
+                    Confirm and start driving
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:26px 0 6px 0;font-size:14px;line-height:1.6;color:#8C94A8;">
+              If the button does nothing, paste this into your browser:
+            </p>
+            <!-- Spelled out as well as linked. Plenty of clients refuse to
+                 make a button clickable, and a confirmation email nobody can
+                 act on is a player who never signs in. -->
+            <p style="margin:0;font-size:13px;line-height:1.5;word-break:break-all;">
+              <a href="{{ .ConfirmationURL }}" style="color:#99E6AD;text-decoration:underline;">{{ .ConfirmationURL }}</a>
+            </p>
+
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:30px 0 0 0;">
+              <tr><td style="height:1px;line-height:1px;font-size:0;background-color:#2D3C5A;">&nbsp;</td></tr>
+            </table>
+
+            <p style="margin:20px 0 0 0;font-size:14px;line-height:1.6;color:#8C94A8;">
+              The link works once and then stops, which is normal. If you did
+              not sign up for 2P Racing Game, nothing has been created in your
+              name and you can ignore this.
+            </p>
+
+          </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+</table>

@@ -54,6 +54,86 @@ signal regenerated
 @export var checkpoint_depth := 2.5
 @export var checkpoint_color := Color(0.95, 0.72, 0.12)
 
+@export_group("Boost pads")
+## Pads are laid on the long straights, clear of the corners at either end and
+## clear of the grid, the finish and the respawns.
+@export var boost_pads_enabled := true
+## The shortest straight that can hold a pad.
+@export var min_pad_straight := 40.0
+## The chance an eligible straight is used, and the metres between one pad and
+## the next. Both are what keep a course from turning into a chain of pads.
+@export_range(0.0, 1.0) var pad_chance := 0.72
+@export var min_pad_spacing := 60.0
+## How far a pad keeps from the grid, the finish line and every checkpoint.
+@export var pad_keep_out := 20.0
+## How far anything built on the road keeps from a jump, on top of the jump's
+## own length.
+@export var jump_keep_out := 12.0
+
+@export_group("Laid out")
+## A track written down rather than rolled. When this is set, generate()
+## builds it and ignores the seed it was given: everything about the shape of
+## the course comes from the file instead.
+@export_file("*.gd") var track_file := ""
+
+@export_group("Jumps")
+## A ramp, a hole where there is no road, and a long run to come down on.
+## Jumps go after a level straight of at least `jump_run_up`, which is the run
+## up, and there are at most `max_jumps` to a course.
+@export var jumps_enabled := true
+@export var jump_run_up := 45.0
+@export var max_jumps := 3
+## Metres of ramp and how high it lifts the road, and how the rise is spread
+## along it - above one curves the foot into the road and leaves the steepest
+## part at the lip, which is where the angle does the work.
+@export var ramp_length := 15.0
+@export var ramp_rise := 5.0
+@export var ramp_curve := 1.5
+## The hole, and the road to come down on after it. The hole has to be short
+## enough that a car flat out clears it and longer than the car, which is
+## 4.87 m: a hole a car can lie across is one it drives over without ever
+## leaving the ground. Chaos shortens it for a world where the cars are slow
+## or heavy, and the check drives a car at every roll to make sure.
+@export var jump_gap := 17.0
+@export var landing_length := 90.0
+
+@export_group("Barriers")
+## Rows of barriers stood across part of the road on the long straights. They
+## never block all of it: a row is narrowed until the gap it leaves is wide
+## enough to drive through, and the next row is set far enough on that a car
+## can cross from one gap to the other.
+@export var obstacles_enabled := true
+## The shortest straight that can hold a row, and the chance an eligible one
+## is used.
+@export var min_obstacle_straight := 62.0
+@export_range(0.0, 1.0) var obstacle_chance := 0.5
+## Metres between rows on separate straights, and the most one straight may
+## hold if it has the room.
+@export var min_obstacle_spacing := 70.0
+@export var max_obstacle_rows := 3
+## The gap that must always be left open across the road, in metres, and the
+## turning circle assumed when working out whether a row can be dodged. The
+## car is 2.06 m wide and washes out to a 16 m circle at speed, so these are
+## the car's own numbers; change the car and these follow.
+@export var clear_lane := 3.4
+@export var dodge_radius := 16.0
+## The chance a row takes the same part of the road as the one before it.
+## Rows holding the same side can follow closely; rows swapping sides need
+## most of a straight between them, so this is most of what decides how many
+## barriers a course carries.
+@export_range(0.0, 1.0) var same_side_chance := 0.55
+
+@export_group("The fork")
+## One stretch of every course where the road is split down the middle: a pad
+## and a run of barriers on one side, nothing at all on the other. Take the
+## boost and thread the barriers, or give up the boost and have clear road.
+@export var fork_enabled := true
+## The shortest straight that can hold one, and the shortest and longest the
+## divider itself may be.
+@export var fork_min_straight := 57.0
+@export var fork_divider_min := 20.0
+@export var fork_divider_max := 70.0
+
 @export_group("Shape")
 @export var min_course_length := 620.0
 @export var max_course_length := 1050.0
@@ -79,12 +159,19 @@ signal regenerated
 @onready var _checkpoints: MeshInstance3D = $Checkpoints
 @onready var _rails: MeshInstance3D = $Rails
 @onready var _rail_shape: CollisionShape3D = $RailBody/Shape
+@onready var _furniture: TrackFurniture = $Furniture
 
 var _layout: TrackLayout
+var _features: TrackFeatures
+## The track this was laid out from, if it was laid out rather than rolled.
+var _definition: TrackDefinition
 ## Cross-sections of the finished road.
 var _points: PackedVector3Array
 var _rights: PackedVector3Array
 var _half_widths: PackedFloat32Array
+## Whether there is road at each cross-section. False across the hole in a
+## jump, where the asphalt, the kerbs, the rails and the embankment all stop.
+var _road_present: PackedByteArray
 
 var _asphalt: StandardMaterial3D
 var _kerb: StandardMaterial3D
@@ -110,6 +197,36 @@ func length() -> float:
 	return _layout.length() if _layout else 0.0
 
 
+## The pieces this course was chained from, and the furniture laid on it.
+## Read by the checks in tools/, and by anything that wants to reason about
+## the course rather than just drive on it.
+func layout() -> TrackLayout:
+	return _layout
+
+
+func features() -> TrackFeatures:
+	return _features
+
+
+## The track this was laid out from, or null if it was rolled from a seed.
+func definition() -> TrackDefinition:
+	return _definition
+
+
+## How far along the course the nearest point to a world position is.
+##
+## The curve's points are in this node's own space, so the position is brought
+## into it first. That keeps the race and the grid right even if the track is
+## moved or scaled, rather than silently assuming it sits at the origin.
+func offset_of(world: Vector3) -> float:
+	return curve().get_closest_offset(global_transform.affine_inverse() * world)
+
+
+## The centreline at a distance along the course, in world space.
+func centre_at(offset: float) -> Vector3:
+	return global_transform * curve().sample_baked(offset)
+
+
 ## Half-width of the road at a distance along the course.
 func half_width_at(offset: float) -> float:
 	if _half_widths.is_empty():
@@ -130,18 +247,42 @@ func piece_summary() -> String:
 			TrackLayout.CORNER: corners += 1
 			TrackLayout.CLIMB: climbs += 1
 			_: straights += 1
-	return "%d pieces (%d straights, %d corners, %d climbs), %.0f m" % [
-		_layout.pieces.size(), straights, corners, climbs, length()]
+	return "%d pieces (%d straights, %d corners, %d climbs), %.0f m, %s" % [
+		_layout.pieces.size(), straights, corners, climbs, length(),
+		_features.summary() if _features else "no furniture"]
 
 
-## Lay out a fresh course. The seed is advanced until one is found that neither
-## crosses itself nor runs off the ground, so a bad roll costs a retry rather
-## than producing a broken track.
-func generate(track_seed: int) -> void:
+## Build a track that was laid out by hand.
+##
+## The definition is handed the numbers it is not allowed to choose - how
+## finely the road is sampled, and how long a jump is - and then asked to
+## describe itself. What comes back is the same Piece chain and the same
+## Placement list the generator and the planner produce, so everything below
+## this point is the road being built, exactly as it is for a rolled course.
+func lay_out(definition: TrackDefinition) -> void:
 	if _asphalt == null:
 		_build_materials()
 
-	var tuning := {
+	definition.step = sample_step
+	definition.ramp_length = ramp_length
+	definition.jump_gap = jump_gap
+	definition.landing_length = landing_length
+	definition.describe()
+	_definition = definition
+
+	_layout = TrackLayout.adopt(definition.pieces, _layout_tuning())
+	_build_the_road()
+	_features = TrackFeatures.adopt(definition.placements, {
+		"clear_lane": clear_lane,
+		"dodge_radius": dodge_radius,
+	})
+	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
+	regenerated.emit()
+
+
+## Everything about the shape of a course that is not the course itself.
+func _layout_tuning() -> Dictionary:
+	return {
 		"step": sample_step,
 		"min_length": min_course_length,
 		"max_length": max_course_length,
@@ -152,11 +293,38 @@ func generate(track_seed: int) -> void:
 		"clearance": self_clearance,
 		"narrow_half_width": narrow_half_width,
 		"wide_half_width": wide_half_width,
+		"jump_chance": 0.45 if jumps_enabled else 0.0,
+		"jump_run_up": jump_run_up,
+		"max_jumps": max_jumps,
+		"ramp_length": ramp_length,
+		"ramp_rise": ramp_rise,
+		"ramp_curve": ramp_curve,
+		"jump_gap": jump_gap,
+		"landing_length": landing_length,
 	}
 
+
+## Lay out a fresh course. The seed is advanced until one is found that neither
+## crosses itself nor runs off the ground, so a bad roll costs a retry rather
+## than producing a broken track.
+func generate(track_seed: int) -> void:
+	if not track_file.is_empty():
+		var written := load(track_file) as GDScript
+		if written == null:
+			push_error("Track: %s is not a track" % track_file)
+			return
+		lay_out(written.new())
+		return
+
+	if _asphalt == null:
+		_build_materials()
+
+	var tuning := _layout_tuning()
 	var layout: TrackLayout = null
+	var used_seed := track_seed
 	for attempt in max_attempts:
-		layout = TrackLayout.build(track_seed + attempt, tuning)
+		used_seed = track_seed + attempt
+		layout = TrackLayout.build(used_seed, tuning)
 		if layout != null:
 			break
 	if layout == null:
@@ -164,7 +332,19 @@ func generate(track_seed: int) -> void:
 		return
 
 	_layout = layout
-	_adopt(layout)
+	_definition = null
+	_build_the_road()
+	# Last, because the furniture is placed against the finished course: it
+	# needs the length, and it keeps clear of the start, the finish and the
+	# checkpoints, none of which are known until the road exists.
+	_build_furniture(used_seed)
+	regenerated.emit()
+
+
+## Turn the layout into the road and everything painted on it. Shared by a
+## laid-out track and a rolled one, so the two are built by the same steps.
+func _build_the_road() -> void:
+	_adopt(_layout)
 	_build_curve()
 	_build_road()
 	_build_embankment()
@@ -172,7 +352,37 @@ func generate(track_seed: int) -> void:
 	_build_start_line()
 	_build_checkpoints()
 	_build_rails()
-	regenerated.emit()
+
+
+## Plan the furniture for this course and put it on the road.
+##
+## The plan is seeded from the same seed the course was, so a given course
+## always comes with the same pads on it - a seed describes a whole race,
+## not just its shape.
+func _build_furniture(features_seed: int) -> void:
+	var keep_out := PackedFloat32Array([start_offset(), finish_offset()])
+	keep_out.append_array(checkpoint_offsets())
+	_features = TrackFeatures.build(_layout, features_seed, {
+		"pads_enabled": boost_pads_enabled,
+		"min_pad_straight": min_pad_straight,
+		"pad_chance": pad_chance,
+		"min_pad_spacing": min_pad_spacing,
+		"keep_out": keep_out,
+		"keep_out_radius": pad_keep_out,
+		"obstacles_enabled": obstacles_enabled,
+		"min_obstacle_straight": min_obstacle_straight,
+		"obstacle_chance": obstacle_chance,
+		"min_obstacle_spacing": min_obstacle_spacing,
+		"max_obstacle_rows": max_obstacle_rows,
+		"clear_lane": clear_lane,
+		"dodge_radius": dodge_radius,
+		"same_side_chance": same_side_chance,
+		"fork_enabled": fork_enabled,
+		"fork_min_straight": fork_min_straight,
+		"fork_divider": Vector2(fork_divider_min, fork_divider_max),
+		"reserved": jump_spans(),
+	})
+	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
 
 
 # --- reading the layout -------------------------------------------------
@@ -182,6 +392,7 @@ func _adopt(layout: TrackLayout) -> void:
 	for p in layout.points:
 		_points.append(p + Vector3.UP * road_height)
 	_half_widths = layout.half_widths
+	_road_present = layout.road_present
 
 	var count := _points.size()
 	_rights = PackedVector3Array()
@@ -224,6 +435,12 @@ func _build_road() -> void:
 	for i in count - 1:
 		var j := i + 1
 		var run_next := run + sample_step
+		# The run along the course still advances across a hole, so the road
+		# on the far side of a jump carries on with the texture the road
+		# before it ended on rather than starting again from nothing.
+		if not _has_road(i, j):
+			run = run_next
+			continue
 
 		var pi := _points[i]
 		var pj := _points[j]
@@ -268,6 +485,15 @@ func _strip(
 		st.add_vertex(corner[0])
 
 
+## Whether there is road between two cross-sections. Both ends have to have
+## it: a quad from the lip of a ramp to the first sample of thin air would
+## bridge the hole the jump is made of.
+func _has_road(i: int, j: int) -> bool:
+	if _road_present.size() != _points.size():
+		return true
+	return _road_present[i] != 0 and _road_present[j] != 0
+
+
 ## Where the race ends, as a distance along the course.
 func finish_offset() -> float:
 	return maxf(length() - finish_setback, 0.0)
@@ -282,10 +508,45 @@ func start_offset() -> float:
 ## the start and the finish.
 func checkpoint_offsets() -> PackedFloat32Array:
 	var out := PackedFloat32Array()
-	var span := finish_offset() - start_offset()
+	var start := start_offset()
+	var span := finish_offset() - start
+	# Asked for once rather than once a checkpoint: the race reads these every
+	# frame, and the spans are a walk over every piece of the course.
+	var jumps := jump_spans()
 	for i in checkpoint_count:
-		out.append(start_offset() + span * float(i + 1) / float(checkpoint_count + 1))
+		var at := start + span * float(i + 1) / float(checkpoint_count + 1)
+		out.append(_off_the_jumps(at, jumps))
 	return out
+
+
+## The stretches of course a jump takes up, with room either side, as spans of
+## offset. Nothing else is built on one: a pad in mid air pays nobody, and a
+## barrier standing on a ramp is a wall at the one place a car has to be flat
+## out.
+func jump_spans() -> Array[Vector2]:
+	var spans: Array[Vector2] = []
+	if _layout == null:
+		return spans
+	for piece in _layout.pieces:
+		if piece.kind == TrackLayout.JUMP:
+			spans.append(Vector2(
+				piece.start_offset - jump_keep_out,
+				piece.end_offset + jump_keep_out))
+	return spans
+
+
+## Move an offset clear of any jump, to whichever end of it is nearer.
+##
+## A respawn is the one thing that cannot simply be left off a jump: they are
+## spread evenly along the course by count, so where they land is not a
+## choice. Putting a car back on the road at a ramp would send it over the
+## edge with no run up, and putting one back in the hole would drop it
+## straight through.
+func _off_the_jumps(at: float, spans: Array[Vector2]) -> float:
+	for span in spans:
+		if at > span.x and at < span.y:
+			return span.x if at - span.x < span.y - at else span.y
+	return at
 
 
 ## Paint a chequered band across the road at the finish, so the players can
@@ -387,6 +648,8 @@ func _build_rails() -> void:
 	for side: float in [-1.0, 1.0]:
 		for i in count - 1:
 			var j := i + 1
+			if not _has_road(i, j):
+				continue
 			var outer_i := _half_widths[i] + kerb_width
 			var outer_j := _half_widths[j] + kerb_width
 			var ri := _rights[i] * side
@@ -445,6 +708,8 @@ func _build_embankment() -> void:
 
 	for i in count - 1:
 		var j := i + 1
+		if not _has_road(i, j):
+			continue
 		# Only where the road actually stands above the ground.
 		if _points[i].y < 0.15 and _points[j].y < 0.15:
 			continue

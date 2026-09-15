@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/track.gd" id="1_track"]
+[ext_resource type="Script" path="res://scripts/track_furniture.gd" id="2_furniture"]
 
 [node name="Track" type="Node3D"]
 script = ExtResource("1_track")
@@ -26,3 +27,6 @@ script = ExtResource("1_track")
 [node name="RailBody" type="StaticBody3D" parent="."]
 
 [node name="Shape" type="CollisionShape3D" parent="RailBody"]
+
+[node name="Furniture" type="Node3D" parent="."]
+script = ExtResource("2_furniture")

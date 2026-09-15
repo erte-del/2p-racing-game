@@ -24,6 +24,8 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @onready var _car2: Car = $Car2
 @onready var _camera1: ChaseCamera = $Split/TopView/SubViewport/Camera
 @onready var _camera2: ChaseCamera = $Split/BottomView/SubViewport/Camera
+@onready var _lines1: SpeedLines = $Split/TopView/SubViewport/Lines
+@onready var _lines2: SpeedLines = $Split/BottomView/SubViewport/Lines
 @onready var _arrow1: RivalArrow = $ArrowP1
 @onready var _arrow2: RivalArrow = $ArrowP2
 @onready var _track: Track = $Track
@@ -35,6 +37,10 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @onready var _places: Array[Label] = [$Hud/Top/Box/Place, $Hud/Bottom/Box/Place]
 @onready var _results: Array[Label] = [$Result/Top/Label, $Result/Bottom/Label]
 @onready var _tallies: Array[Label] = [$Progress/Top/Label, $Progress/Bottom/Label]
+@onready var _pause: PauseMenu = $Pause
+
+## Where leaving the race goes.
+@export_file("*.tscn") var menu_scene := "res://scenes/menu.tscn"
 
 @export_group("Starting grid")
 ## Sideways offset from the centreline, in metres.
@@ -103,6 +109,10 @@ var _chaos: Chaos
 ## Its own generator, so a chaos roll cannot shift the sequence the courses
 ## come out of and make the same seed build a different track.
 var _chaos_rng := RandomNumberGenerator.new()
+## True when nothing picked a track, which is the endless course: a fresh road
+## every time. It decides what starting over means, since there is nothing to
+## start again on a road that is different each time it is rolled.
+var _endless := true
 
 
 func _ready() -> void:
@@ -116,12 +126,44 @@ func _ready() -> void:
 	if not attract_mode and GameSettings.chaos:
 		_chaos = Chaos.new(_cars, _day_night, _track)
 		_chaos_rng.randomize()
+	# Told rather than left to read the setting, so the title screen backdrop
+	# - which is this scene too - stays the colour it is meant to be.
+	_lines1.wild = _chaos != null
+	_lines2.wild = _chaos != null
+	($Trees as Trees).wild = _chaos != null
 
+	# A laid-out track if one was picked on the way in, and the endless course
+	# otherwise. Never in attract mode: the title backdrop rolls its own
+	# courses, and freezing it on whichever track was last played would make
+	# the one screen that is always moving always the same.
+	if not attract_mode:
+		_track.track_file = GameSettings.track_file
+		_endless = GameSettings.track_file.is_empty()
+		_pause.restart_requested.connect(_restart)
+		_pause.quit_requested.connect(_on_pause_quit)
 	_new_course(starting_seed if starting_seed != 0 else randi())
+
+	# Each player watches their own speed: the streaks show whenever a car is
+	# past its own max speed, whatever put it there.
+	_lines1.watch(_car1)
+	_lines2.watch(_car2)
 
 	# Each player sees an arrow in the *other* car's colour.
 	_arrow1.setup(_car1, _car2, _car2.body_color, LAYER_P1_ONLY, _camera1)
 	_arrow2.setup(_car2, _car1, _car1.body_color, LAYER_P2_ONLY, _camera2)
+
+	# The cars and the paint the players chose, and a standing offer to change
+	# either: the pause screen writes to the setting rather than reaching in
+	# here, so a car or a swatch picked mid-race lands through the same path
+	# the saved choice takes at the start of one. The car goes first, so the
+	# paint lands on the model that is going to be driven. The garage is
+	# listened to as well, because turning or deleting a car changes what a
+	# player is driving without changing which car they picked.
+	_apply_cars()
+	_apply_paint()
+	GameSettings.changed.connect(_apply_cars)
+	GameSettings.changed.connect(_apply_paint)
+	Garage.changed.connect(_apply_cars)
 
 	# Show everything except the rival's private layer. Subtracting one layer
 	# rather than listing the wanted ones means anything added to the world
@@ -148,8 +190,12 @@ func _dress_for_the_title_screen() -> void:
 	_day_night.night_seconds = attract_phase_seconds
 	for car in _cars:
 		car.frozen = true
-	for overlay in [$Split, $Hud, $Progress, $Countdown, $Result]:
+	for overlay in [$Split, $Hud, $Progress, $Countdown, $Result, _pause]:
 		overlay.hide()
+	# The menu is not a paused race, and this scene is its backdrop. Turned off
+	# outright rather than merely hidden, so there is no second screen behind
+	# the title quietly listening for the key that closes the one in front.
+	_pause.process_mode = Node.PROCESS_MODE_DISABLED
 	for camera in [_camera1, _camera2]:
 		camera.get_parent().render_target_update_mode = SubViewport.UPDATE_DISABLED
 		camera.current = false
@@ -183,14 +229,19 @@ func _physics_process(delta: float) -> void:
 	if not _racing:
 		return
 	_race_time += delta
-	_show_clock(_format_time(_race_time))
-	_show_places()
+	_show_clock(RaceClock.format(_race_time))
+	# Where each car is along the course is looked up once and shared by
+	# everything below, because finding the nearest point on the curve is a
+	# walk along the whole of it.
+	var offsets := _offsets()
+	_show_places(offsets)
+	var marks := _track.checkpoint_offsets()
 	for i in _cars.size():
 		if Input.is_action_just_pressed(_cars[i].input_prefix + "_reset"):
 			_reset_to_checkpoint(i)
 			continue
-		_bank_checkpoints(i)
-		if _has_finished(_cars[i]):
+		_bank_checkpoints(i, offsets[i], marks)
+		if _has_finished(_cars[i], offsets[i]):
 			_finish_course(i)
 			return
 
@@ -203,27 +254,94 @@ func _poll_view_toggles() -> void:
 			cameras[i].set_inside(not cameras[i].is_inside())
 
 
+## Escape stops the race where it stands. The backdrop behind the title is
+## this scene too, and it is not a race anyone is in the middle of.
+func _input(event: InputEvent) -> void:
+	if attract_mode or _pause.visible:
+		return
+	if not event.is_action_pressed("ui_cancel"):
+		return
+	get_viewport().set_input_as_handled()
+	_open_pause()
+
+
+## What the pause screen says it is sitting on top of, and what its two ways
+## out of the race mean here. The endless course has no name and no road to go
+## back to; a laid-out track names itself, and leaving it goes back to the grid
+## it was picked from - which is where the menu opens anyway, since nothing has
+## cleared the track that is still chosen.
+func _open_pause() -> void:
+	if _endless:
+		var what := "ENDLESS COURSE"
+		if _chaos != null:
+			what += "  \u2013  CHAOS"
+		_pause.open(what, "NEXT COURSE", "QUIT TO MENU")
+		return
+	var definition := _track.definition()
+	var named := definition.track_name.to_upper() if definition != null else ""
+	_pause.open(named, "RESTART", "BACK TO TRACKS")
+
+
+## Start the race over. The endless course is endless: asking for another go
+## means another road. A laid-out track is the opposite - the same road is the
+## whole point of it, so only the cars go back to the line.
+##
+## Either way this counts as a new countdown, which is what stops a result
+## screen that is still waiting out its own timer from starting a third race
+## over the top of this one.
+func _restart() -> void:
+	_racing = false
+	_show_result("")
+	_countdown_run += 1
+	if _endless:
+		_new_course(randi())
+	else:
+		_place_on_grid()
+		_camera1.follow(_car1)
+		_camera2.follow(_car2)
+	_start_after_countdown()
+
+
+func _on_pause_quit() -> void:
+	get_tree().change_scene_to_file(menu_scene)
+
+
+## Put each player in the car they picked.
+##
+## Chaos does not overrule this the way it overrules the paint. It rolls how
+## the cars handle and what colour they are, never what they are: the model is
+## only looked at, and a player who brought their own car into a chaotic race
+## still wants to see it on the road.
+func _apply_cars() -> void:
+	for i in _cars.size():
+		Garage.dress(_cars[i], GameSettings.car_id(i))
+
+
+## Put the players' colours on the cars, and on the arrows that point at them.
+##
+## Chaos is the one thing that overrules this. It repaints both cars for every
+## course on purpose, and a chosen colour landing back on them halfway through
+## would be the mode failing to do the one thing it says it does.
+func _apply_paint() -> void:
+	if _chaos != null:
+		return
+	_car1.repaint(GameSettings.car_colour(0))
+	_car2.repaint(GameSettings.car_colour(1))
+	# Each player is shown an arrow in the *other* car's colour, so repainting
+	# a car without repainting the arrow would point one player at a colour
+	# nobody on the course is wearing.
+	_arrow1.recolour(_car2.body_color)
+	_arrow2.recolour(_car1.body_color)
+
+
 func _bit(layer: int) -> int:
 	return 1 << (layer - 1)
-
-
-## The curve's points are in the Track node's own space. Going through its
-## transform keeps the grid and the finish line correct even if that node is
-## moved or scaled, rather than silently assuming it sits at the origin.
-func _to_world(local: Vector3) -> Vector3:
-	return _track.global_transform * local
-
-
-func _to_track(world: Vector3) -> Vector3:
-	return _track.global_transform.affine_inverse() * world
 
 
 ## A car finishes by reaching the end of the course while still on it. The
 ## corridor check matters because a car lost out in the mountains can project
 ## onto any part of the centreline, including the finish.
-func _has_finished(car: Car) -> bool:
-	var curve := _track.curve()
-	var offset := curve.get_closest_offset(_to_track(car.global_position))
+func _has_finished(car: Car, offset: float) -> bool:
 	# The track owns where the finish is, so the painted line and the race
 	# cannot drift apart.
 	if offset < _track.finish_offset():
@@ -234,10 +352,8 @@ func _has_finished(car: Car) -> bool:
 ## Move a car's respawn point up as it passes checkpoints. A car has to be on
 ## the course to bank one, so a player cannot collect checkpoints by driving
 ## across the scenery, and then reset forward onto them.
-func _bank_checkpoints(index: int) -> void:
-	var marks := _track.checkpoint_offsets()
+func _bank_checkpoints(index: int, offset: float, marks: PackedFloat32Array) -> void:
 	var car := _cars[index]
-	var offset := _offset_of(car)
 	while _next_checkpoint[index] < marks.size() and offset >= marks[_next_checkpoint[index]]:
 		if not _on_course(car, offset):
 			return
@@ -250,10 +366,9 @@ func _bank_checkpoints(index: int) -> void:
 ## and stopped. This is the way out of being stuck or falling off.
 func _reset_to_checkpoint(index: int) -> void:
 	var car := _cars[index]
-	var curve := _track.curve()
 	var at := _respawn[index]
-	var here := _to_world(curve.sample_baked(at))
-	var ahead := _to_world(curve.sample_baked(minf(at + 1.0, _track.length())))
+	var here := _track.centre_at(at)
+	var ahead := _track.centre_at(minf(at + 1.0, _track.length()))
 
 	var forward := ahead - here
 	forward.y = 0.0
@@ -266,20 +381,28 @@ func _reset_to_checkpoint(index: int) -> void:
 	car.look_at(car.global_position + forward, Vector3.UP)
 
 
-func _offset_of(car: Car) -> float:
-	return _track.curve().get_closest_offset(_to_track(car.global_position))
+## How far along the course each car is, in the same order as the cars.
+func _offsets() -> Array[float]:
+	var offsets: Array[float] = []
+	for car in _cars:
+		offsets.append(_track.offset_of(car.global_position))
+	return offsets
 
 
 ## Whether a car is close enough to the centreline to count as on the course.
 func _on_course(car: Car, offset: float) -> bool:
-	var centre := _to_world(_track.curve().sample_baked(offset))
-	return car.global_position.distance_to(centre) < finish_corridor
+	return car.global_position.distance_to(_track.centre_at(offset)) < finish_corridor
 
 
 ## Lay out a new course and put the cars on the line.
 func _new_course(course_seed: int) -> void:
 	if _chaos:
 		_chaos.reroll(_chaos_rng)
+		# Chaos repaints the cars for every course, and an arrow still in the
+		# last course's colour would be pointing at the wrong idea of who the
+		# other player is.
+		_arrow1.recolour(_car2.body_color)
+		_arrow2.recolour(_car1.body_color)
 	_track.generate(course_seed)
 	_place_on_grid()
 	# Snap both cameras, or they fly across the world to the new grid.
@@ -299,8 +422,13 @@ func _finish_course(winner: int) -> void:
 		car.reset_motion()
 
 	_show_result("%s WINS\n%s" % [
-		_colour_name(_cars[winner].body_color), _format_time(_race_time)])
-	await get_tree().create_timer(result_seconds).timeout
+		_colour_name(_cars[winner].body_color), RaceClock.format(_race_time)])
+	var run := _countdown_run
+	await get_tree().create_timer(result_seconds, false).timeout
+	# A player who restarted from the pause screen rather than waiting has
+	# already started the next race, and this must not lay another over it.
+	if run != _countdown_run:
+		return
 	_show_result("")
 
 	_new_course(randi())
@@ -321,17 +449,21 @@ func _start_after_countdown() -> void:
 	var each := preview_seconds / float(steps)
 	for remaining in range(steps, 0, -1):
 		_show_count(str(remaining))
-		await get_tree().create_timer(each).timeout
+		await get_tree().create_timer(each, false).timeout
+		# A restart part way through starts its own countdown, and this one
+		# must not go on counting over it and release the cars at its own GO.
+		if run != _countdown_run:
+			return
 
 	_show_count("GO")
 	_race_time = 0.0
-	_show_clock(_format_time(0.0))
-	_show_places()
+	_show_clock(RaceClock.format(0.0))
+	_show_places(_offsets())
 	for car in _cars:
 		car.frozen = false
 	_racing = true
 
-	await get_tree().create_timer(go_seconds).timeout
+	await get_tree().create_timer(go_seconds, false).timeout
 	# Only clear if another countdown has not started in the meantime.
 	if run == _countdown_run:
 		_show_count("")
@@ -356,8 +488,8 @@ func _show_clock(text: String) -> void:
 ## the places start as a dash rather than picking one arbitrarily. The two
 ## margins give it hysteresis: a lead has to be earned, and only a clear return
 ## to level gives it up, so the display cannot strobe wheel to wheel.
-func _show_places() -> void:
-	var gap := _offset_of(_cars[0]) - _offset_of(_cars[1])
+func _show_places(offsets: Array[float]) -> void:
+	var gap := offsets[0] - offsets[1]
 	if absf(gap) < level_margin:
 		_leader = -1
 	elif absf(gap) > lead_margin:
@@ -407,23 +539,12 @@ func _colour_name(colour: Color) -> String:
 	return "PINK"
 
 
-## Minutes only once there are any, so a short course reads "42.16" rather
-## than "0:42.16".
-func _format_time(seconds: float) -> String:
-	var minutes := int(seconds) / 60
-	var rest := fmod(seconds, 60.0)
-	if minutes > 0:
-		return "%d:%05.2f" % [minutes, rest]
-	return "%.2f" % rest
-
-
 ## Line the cars up side by side on the start line, facing down the course.
 ## Deriving the grid from the curve means it keeps working for every course.
 func _place_on_grid() -> void:
-	var curve := _track.curve()
 	var at: float = maxf(_track.start_offset() - grid_setback, 0.0)
-	var here := _to_world(curve.sample_baked(at))
-	var ahead := _to_world(curve.sample_baked(at + 1.0))
+	var here := _track.centre_at(at)
+	var ahead := _track.centre_at(at + 1.0)
 
 	var forward := ahead - here
 	forward.y = 0.0
@@ -457,4 +578,4 @@ func _place_on_grid() -> void:
 	# Only once the cars are actually on the grid, or this reads their old
 	# positions and hands someone a lead they no longer have.
 	_leader = -1
-	_show_places()
+	_show_places(_offsets())

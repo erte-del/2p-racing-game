@@ -4,6 +4,9 @@
 [ext_resource type="PackedScene" path="res://scenes/main.tscn" id="2_world"]
 [ext_resource type="Theme" path="res://scenes/menu_theme.tres" id="3_theme"]
 [ext_resource type="PackedScene" path="res://scenes/settings.tscn" id="4_settings"]
+[ext_resource type="PackedScene" path="res://scenes/account.tscn" id="5_account"]
+[ext_resource type="PackedScene" path="res://scenes/leaderboard.tscn" id="6_board"]
+[ext_resource type="PackedScene" path="res://scenes/garage.tscn" id="7_garage"]
 
 [node name="Menu" type="Control"]
 anchors_preset = 15
@@ -55,9 +58,9 @@ theme_override_font_sizes/font_size = 104
 
 [node name="Play" type="Button" parent="."]
 anchor_left = 0.5
-anchor_top = 0.72
+anchor_top = 0.6
 anchor_right = 0.5
-anchor_bottom = 0.72
+anchor_bottom = 0.6
 offset_left = -140.0
 offset_right = 140.0
 offset_bottom = 76.0
@@ -65,17 +68,43 @@ grow_horizontal = 2
 text = "PLAY"
 theme_override_font_sizes/font_size = 40
 
+[node name="Garage" type="Button" parent="."]
+anchor_left = 0.5
+anchor_top = 0.6
+anchor_right = 0.5
+anchor_bottom = 0.6
+offset_left = -140.0
+offset_top = 86.0
+offset_right = 140.0
+offset_bottom = 138.0
+grow_horizontal = 2
+text = "GARAGE"
+theme_override_font_sizes/font_size = 28
+
 [node name="Settings" type="Button" parent="."]
 anchor_left = 0.5
-anchor_top = 0.72
+anchor_top = 0.6
 anchor_right = 0.5
-anchor_bottom = 0.72
+anchor_bottom = 0.6
 offset_left = -140.0
-offset_top = 90.0
+offset_top = 148.0
 offset_right = 140.0
-offset_bottom = 148.0
+offset_bottom = 200.0
 grow_horizontal = 2
 text = "SETTINGS"
+theme_override_font_sizes/font_size = 28
+
+[node name="Account" type="Button" parent="."]
+anchor_left = 0.5
+anchor_top = 0.6
+anchor_right = 0.5
+anchor_bottom = 0.6
+offset_left = -140.0
+offset_top = 210.0
+offset_right = 140.0
+offset_bottom = 262.0
+grow_horizontal = 2
+text = "ACCOUNT"
 theme_override_font_sizes/font_size = 28
 
 [node name="ModeChoice" type="Control" parent="."]
@@ -122,57 +151,96 @@ text = "CHOOSE A MODE"
 horizontal_alignment = 1
 theme_override_font_sizes/font_size = 44
 
-[node name="Infinite" type="Button" parent="ModeChoice/Page/Panel/Margin/Box"]
+[node name="Players" type="HBoxContainer" parent="ModeChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Alone" type="Button" parent="ModeChoice/Page/Panel/Margin/Box/Players"]
 custom_minimum_size = Vector2(0, 64)
 layout_mode = 2
-text = "INFINITE"
-theme_override_font_sizes/font_size = 32
+size_flags_horizontal = 3
+toggle_mode = true
+text = "SOLO"
+theme_override_font_sizes/font_size = 30
 
-[node name="FlavourSlot" type="Control" parent="ModeChoice/Page/Panel/Margin/Box"]
+[node name="Together" type="Button" parent="ModeChoice/Page/Panel/Margin/Box/Players"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "CO-OP"
+theme_override_font_sizes/font_size = 30
+
+[node name="ModeSlot" type="Control" parent="ModeChoice/Page/Panel/Margin/Box"]
 visible = false
 custom_minimum_size = Vector2(0, 0)
 layout_mode = 2
 clip_contents = true
 mouse_filter = 2
 
-[node name="Inner" type="VBoxContainer" parent="ModeChoice/Page/Panel/Margin/Box/FlavourSlot"]
+[node name="Inner" type="VBoxContainer" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot"]
+layout_mode = 1
+offset_right = 420.0
+theme_override_constants/separation = 18
+
+[node name="Infinite" type="Button" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner"]
+custom_minimum_size = Vector2(0, 64)
+layout_mode = 2
+text = "INFINITE"
+theme_override_font_sizes/font_size = 32
+
+[node name="FlavourSlot" type="Control" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner"]
+visible = false
+custom_minimum_size = Vector2(0, 0)
+layout_mode = 2
+clip_contents = true
+mouse_filter = 2
+
+[node name="Inner" type="VBoxContainer" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/FlavourSlot"]
 layout_mode = 1
 offset_right = 420.0
 theme_override_constants/separation = 12
 
-[node name="Row" type="HBoxContainer" parent="ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner"]
+[node name="Row" type="HBoxContainer" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/FlavourSlot/Inner"]
 layout_mode = 2
 theme_override_constants/separation = 12
 
-[node name="Normal" type="Button" parent="ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner/Row"]
+[node name="Normal" type="Button" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/FlavourSlot/Inner/Row"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "NORMAL"
 theme_override_font_sizes/font_size = 22
 
-[node name="Chaos" type="Button" parent="ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner/Row"]
+[node name="Chaos" type="Button" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/FlavourSlot/Inner/Row"]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "CHAOS"
 theme_override_font_sizes/font_size = 22
 
-[node name="Note" type="Label" parent="ModeChoice/Page/Panel/Margin/Box/FlavourSlot/Inner"]
+[node name="InfiniteNote" type="MarginContainer" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner"]
+layout_mode = 2
+theme_override_constants/margin_top = -11
+
+[node name="Label" type="Label" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/InfiniteNote"]
 layout_mode = 2
 text = "New track every race."
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
 theme_override_font_sizes/font_size = 18
 
-[node name="Tracks" type="Button" parent="ModeChoice/Page/Panel/Margin/Box"]
+[node name="Tracks" type="Button" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner"]
 custom_minimum_size = Vector2(0, 64)
 layout_mode = 2
-disabled = true
 text = "TRACKS"
 theme_override_font_sizes/font_size = 32
 
-[node name="TracksNote" type="Label" parent="ModeChoice/Page/Panel/Margin/Box"]
+[node name="TracksNote" type="MarginContainer" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner"]
 layout_mode = 2
-text = "Laid-out circuits to learn and lap. Not built yet."
+theme_override_constants/margin_top = -11
+
+[node name="Label" type="Label" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/TracksNote"]
+layout_mode = 2
+text = "The same road every time. Learn it, then beat it."
 horizontal_alignment = 1
 theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
 theme_override_font_sizes/font_size = 18
@@ -181,5 +249,77 @@ theme_override_font_sizes/font_size = 18
 layout_mode = 2
 text = "BACK"
 
+[node name="TrackChoice" type="Control" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="ColorRect" parent="TrackChoice"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.62)
+
+[node name="Page" type="CenterContainer" parent="TrackChoice"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="TrackChoice/Page"]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="TrackChoice/Page/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 34
+theme_override_constants/margin_top = 26
+theme_override_constants/margin_right = 34
+theme_override_constants/margin_bottom = 26
+
+[node name="Box" type="VBoxContainer" parent="TrackChoice/Page/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Heading" type="Label" parent="TrackChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "CHOOSE A TRACK"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 44
+
+[node name="Scroll" type="ScrollContainer" parent="TrackChoice/Page/Panel/Margin/Box"]
+custom_minimum_size = Vector2(0, 436)
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="Grid" type="GridContainer" parent="TrackChoice/Page/Panel/Margin/Box/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 14
+theme_override_constants/v_separation = 14
+columns = 5
+
+[node name="Boards" type="Button" parent="TrackChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "LEADERBOARD"
+
+[node name="Back" type="Button" parent="TrackChoice/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "BACK"
+
 [node name="SettingsScreen" parent="." instance=ExtResource("4_settings")]
+visible = false
+
+[node name="AccountScreen" parent="." instance=ExtResource("5_account")]
+visible = false
+
+[node name="LeaderboardScreen" parent="." instance=ExtResource("6_board")]
+visible = false
+
+[node name="GarageScreen" parent="." instance=ExtResource("7_garage")]
 visible = false

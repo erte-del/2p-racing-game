@@ -1,0 +1,98 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/pause_menu.gd" id="1_pause"]
+[ext_resource type="Theme" path="res://scenes/menu_theme.tres" id="2_theme"]
+[ext_resource type="PackedScene" path="res://scenes/settings.tscn" id="3_settings"]
+[ext_resource type="PackedScene" path="res://scenes/paint.tscn" id="4_paint"]
+[ext_resource type="PackedScene" path="res://scenes/garage.tscn" id="5_garage"]
+
+[node name="Pause" type="Control"]
+process_mode = 2
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_pause")
+
+[node name="Dim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.62)
+
+[node name="Page" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Page"]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="Page/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 30
+
+[node name="Box" type="VBoxContainer" parent="Page/Panel/Margin"]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="Title" type="VBoxContainer" parent="Page/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="Heading" type="Label" parent="Page/Panel/Margin/Box/Title"]
+layout_mode = 2
+text = "PAUSED"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 44
+
+[node name="Where" type="Label" parent="Page/Panel/Margin/Box/Title"]
+layout_mode = 2
+text = "ENDLESS COURSE"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 20
+
+[node name="Resume" type="Button" parent="Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "RESUME"
+
+[node name="Restart" type="Button" parent="Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "RESTART"
+
+[node name="Paint" type="Button" parent="Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "PAINT"
+
+[node name="Garage" type="Button" parent="Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "GARAGE"
+
+[node name="Settings" type="Button" parent="Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "SETTINGS"
+
+[node name="Quit" type="Button" parent="Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "QUIT TO MENU"
+
+[node name="SettingsScreen" parent="." instance=ExtResource("3_settings")]
+visible = false
+
+[node name="PaintScreen" parent="." instance=ExtResource("4_paint")]
+visible = false
+
+[node name="GarageScreen" parent="." instance=ExtResource("5_garage")]
+visible = false

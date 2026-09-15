@@ -1,7 +1,8 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/car.gd" id="1_car"]
 [ext_resource type="PackedScene" path="res://assets/models/car.glb" id="2_model"]
+[ext_resource type="Script" path="res://scripts/car_shell.gd" id="3_shell"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_body"]
 size = Vector3(2.06, 1.45, 4.87)
@@ -13,4 +14,7 @@ script = ExtResource("1_car")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.725, 0)
 shape = SubResource("BoxShape3D_body")
 
-[node name="Model" parent="." instance=ExtResource("2_model")]
+[node name="Body" type="Node3D" parent="."]
+script = ExtResource("3_shell")
+
+[node name="Model" parent="Body" instance=ExtResource("2_model")]

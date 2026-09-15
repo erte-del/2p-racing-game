@@ -38,6 +38,10 @@ const CONTROL_ROWS := [
 @onready var _controls_button: Button = $SettingsPage/Panel/Margin/Box/Controls
 @onready var _close_button: Button = $SettingsPage/Panel/Margin/Box/Close
 @onready var _controls_back: Button = $ControlsPage/Panel/Margin/Box/Back
+@onready var _player_names: Array[Label] = [
+	$ControlsPage/Panel/Margin/Box/Columns/P1/Name,
+	$ControlsPage/Panel/Margin/Box/Columns/P2/Name,
+]
 
 ## The setting each sky button stands for, in the same order as the buttons.
 var _sky_values: Array[int] = []
@@ -98,6 +102,13 @@ func _show_settings() -> void:
 func _show_controls() -> void:
 	_settings_page.hide()
 	_controls_page.show()
+	# Each player's half is headed in the colour of their own car, so the sheet
+	# says whose keys these are without having to be read. Taken from the
+	# setting each time it opens rather than written into the scene, because
+	# the players can repaint their cars from the pause screen.
+	for i in _player_names.size():
+		_player_names[i].add_theme_color_override(
+			"font_color", Paints.legible(GameSettings.car_colour(i)))
 	_controls_back.grab_focus()
 
 

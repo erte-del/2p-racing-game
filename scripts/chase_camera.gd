@@ -16,25 +16,57 @@ extends Camera3D
 ## the cockpit does not feel like looking down a tube.
 @export var cockpit_fov := 80.0
 
+@export_group("Speed rush")
+## Extra metres back and extra degrees of view at full overspeed. Small on
+## purpose: this is meant to be felt as the car pulling away from the camera,
+## not noticed as the camera moving. The cockpit only gets the wider view,
+## since there is nowhere for a camera bolted to the driver to pull back to.
+@export var rush_distance := 1.5
+@export var rush_fov := 7.0
+## How quickly the camera follows the car's overspeed. Slower than the effect
+## it is reacting to, so the frame breathes rather than snapping about.
+@export var rush_ease := 4.0
+
 var _target: Car
 ## Chase view when false, driver's eye when true.
 var _inside := false
 var _chase_fov := 75.0
+## How much of the speed rush the camera is currently showing, 0 to 1.
+var _rush := 0.0
+
+
+## The resting field of view is read once, here, rather than off `fov`: by the
+## time a course is swapped the speed rush has already been added to it, and
+## reading it back would bake that in and creep wider every race.
+func _ready() -> void:
+	_chase_fov = fov
 
 
 ## Called by the level once the world is built.
 func follow(target: Car) -> void:
 	_target = target
-	_chase_fov = fov
+	_rush = 0.0
+	# A car with nowhere to sit takes the camera back outside rather than
+	# leaving it buried in whatever the player is now driving.
+	if _inside and (target == null or not target.has_cockpit()):
+		_inside = false
+	_apply_fov()
 	_snap()
 
 
 ## Swap between the chase view and the driver's eye.
+##
+## A car the players brought from outside has no interior: it is a shape, and
+## a camera put inside one looks at the back of a solid shell. The refusal
+## lives here rather than where the key is read, because both the race and the
+## solo run press this same button and neither should have to remember.
 func set_inside(inside: bool) -> void:
+	if inside and (_target == null or not _target.has_cockpit()):
+		return
 	if _inside == inside:
 		return
 	_inside = inside
-	fov = cockpit_fov if _inside else _chase_fov
+	_apply_fov()
 	_snap()
 
 
@@ -55,12 +87,22 @@ func _snap() -> void:
 func _physics_process(delta: float) -> void:
 	if _target == null:
 		return
+	# Exponential easing, so the feel does not change with frame rate.
+	_rush = lerpf(_rush, _target.overspeed(), 1.0 - exp(-rush_ease * delta))
+	# A car can lose its inside while the camera is sitting in it: a player
+	# picks a different car in the garage mid-race, and the stock car's cabin
+	# is swapped for a solid shape around the camera. Stepping back out here
+	# covers that however it happened, rather than trusting every screen that
+	# changes a car to remember the camera.
+	if _inside and not _target.has_cockpit():
+		_inside = false
+		_snap()
+	_apply_fov()
 	if _inside:
 		# Rigidly bolted to the car. Smoothing a first person view lags the
 		# horizon behind the steering and reads as the world sliding about.
 		global_transform = _target.eye_transform()
 		return
-	# Exponential smoothing, so the feel does not change with frame rate.
 	var weight := 1.0 - exp(-smoothing * delta)
 	global_position = global_position.lerp(_desired_position(), weight)
 	_aim()
@@ -68,8 +110,12 @@ func _physics_process(delta: float) -> void:
 
 func _desired_position() -> Vector3:
 	# The car faces -Z, so +Z is directly behind it.
-	var behind := _target.global_transform.basis.z * distance
+	var behind := _target.global_transform.basis.z * (distance + rush_distance * _rush)
 	return _target.global_position + behind + Vector3.UP * height
+
+
+func _apply_fov() -> void:
+	fov = (cockpit_fov if _inside else _chase_fov) + rush_fov * _rush
 
 
 func _aim() -> void:

@@ -135,7 +135,12 @@ func night_amount() -> float:
 func _process(delta: float) -> void:
 	_time += delta
 	var step := delta / maxf(transition_seconds, 0.001)
-	_apply(move_toward(_nightness, _target_nightness(), step))
+	var nightness := move_toward(_nightness, _target_nightness(), step)
+	# Most of the cycle is spent holding at full day or full night. Handing the
+	# renderer the same sky again every frame has it redraw the sky for nothing.
+	if nightness == _nightness:
+		return
+	_apply(nightness)
 
 
 ## Where the sky is being asked to sit: the clock, unless the players have
