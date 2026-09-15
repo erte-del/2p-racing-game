@@ -108,17 +108,8 @@ func _show_controls() -> void:
 	# the players can repaint their cars from the pause screen.
 	for i in _player_names.size():
 		_player_names[i].add_theme_color_override(
-			"font_color", _legible(GameSettings.car_colour(i)))
+			"font_color", Paints.legible(GameSettings.car_colour(i)))
 	_controls_back.grab_focus()
-
-
-## A paint as a colour to write words in. A car can be painted black, and a
-## heading in it would be a heading nobody can read, so anything too dark to
-## sit on the panel is lifted until it can be.
-func _legible(colour: Color) -> Color:
-	if colour.v < 0.55:
-		colour.v = 0.55
-	return colour
 
 
 func _on_volume_changed(value: float) -> void:

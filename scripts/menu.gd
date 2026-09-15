@@ -314,11 +314,19 @@ func _start_infinite(chaos: bool) -> void:
 ## a track was added.
 func _fill_the_track_grid() -> void:
 	for index in TrackRoster.COUNT:
+		var exists := TrackRoster.exists(index)
+		# Each of these is asked once a cell. The name and the targets are
+		# each a track file built and described, and the best time is checked
+		# against the file on the disk every time it is asked for.
+		var called := TrackRoster.track_name(index)
+		var targets := TrackRoster.targets(index)
+		var best := TrackTimes.best(TrackRoster.file(index)) if exists else -1.0
+
 		var cell := VBoxContainer.new()
 		cell.add_theme_constant_override("separation", 4)
 
 		var label := Label.new()
-		label.text = TrackRoster.track_name(index).to_upper()
+		label.text = called.to_upper()
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		# Clipped rather than allowed to set the width of its column: one long
 		# name would otherwise stretch the whole grid out around it.
@@ -326,7 +334,7 @@ func _fill_the_track_grid() -> void:
 		label.clip_text = true
 		label.custom_minimum_size.x = track_button_size
 		label.add_theme_font_size_override("font_size", 18)
-		if not TrackRoster.exists(index):
+		if not exists:
 			label.add_theme_color_override("font_color", Color(0.55, 0.58, 0.66))
 		cell.add_child(label)
 
@@ -334,14 +342,14 @@ func _fill_the_track_grid() -> void:
 		button.custom_minimum_size = Vector2(track_button_size, track_button_size)
 		button.expand_icon = true
 		button.icon = TrackRoster.thumbnail(index)
-		button.disabled = not TrackRoster.exists(index)
+		button.disabled = not exists
 		if button.disabled:
 			# The theme greys a disabled button until it disappears into the
 			# page, which reads as a hole rather than as a track still to
 			# come. An empty slot gets its own frame instead: dark, outlined,
 			# and plainly a place where something goes.
 			button.add_theme_stylebox_override("disabled", _empty_slot())
-		button.tooltip_text = _what_it_asks(index)
+		button.tooltip_text = _what_it_asks(exists, called, targets)
 		if not button.disabled:
 			button.pressed.connect(_start_track.bind(TrackRoster.file(index)))
 		cell.add_child(button)
@@ -350,10 +358,7 @@ func _fill_the_track_grid() -> void:
 		# the time alone was not enough: against a dark panel a silver time
 		# and a time worth nothing are two shades of pale, and a medal that
 		# has to be compared with its neighbours to be seen is not one.
-		var medal := Medal.NONE
-		if TrackRoster.exists(index):
-			var standing := TrackTimes.best(TrackRoster.file(index))
-			medal = Medal.earned(standing, TrackRoster.targets(index))
+		var medal := Medal.earned(best, targets)
 		var rule := ColorRect.new()
 		rule.custom_minimum_size = Vector2(track_button_size, 5)
 		rule.color = Medal.colour(medal)
@@ -370,14 +375,13 @@ func _fill_the_track_grid() -> void:
 		time.custom_minimum_size.x = track_button_size
 		time.clip_text = true
 		time.add_theme_font_size_override("font_size", 20)
-		var best := TrackTimes.best(TrackRoster.file(index)) if TrackRoster.exists(index) else -1.0
 		if best >= 0.0:
 			# Coloured to match the bar rather than spelled out. A cell this
 			# size has room for a number or for a word, and the number is the
 			# one a player is trying to change.
-			time.text = _format_time(best)
+			time.text = RaceClock.format(best)
 			time.add_theme_color_override("font_color", Medal.colour(medal))
-		elif TrackRoster.exists(index):
+		elif exists:
 			time.text = "NO TIME"
 			time.add_theme_color_override("font_color", Color(0.55, 0.58, 0.66))
 		cell.add_child(time)
@@ -386,25 +390,14 @@ func _fill_the_track_grid() -> void:
 
 
 ## What a track is and what it wants, for anyone who goes looking.
-func _what_it_asks(index: int) -> String:
-	if not TrackRoster.exists(index):
+func _what_it_asks(exists: bool, called: String, targets: Vector3) -> String:
+	if not exists:
 		return "Not built yet."
-	var targets := TrackRoster.targets(index)
 	if targets == Vector3.ZERO:
-		return TrackRoster.track_name(index)
+		return called
 	return "%s\nGOLD %s     SILVER %s     BRONZE %s" % [
-		TrackRoster.track_name(index), _format_time(targets.x),
-		_format_time(targets.y), _format_time(targets.z)]
-
-
-## The same clock the race keeps, so a time on the button and the time that
-## was driven read as the same number.
-func _format_time(seconds: float) -> String:
-	var minutes := int(seconds) / 60
-	var rest := fmod(seconds, 60.0)
-	if minutes > 0:
-		return "%d:%05.2f" % [minutes, rest]
-	return "%.2f" % rest
+		called, RaceClock.format(targets.x),
+		RaceClock.format(targets.y), RaceClock.format(targets.z)]
 
 
 ## The face of a track that does not exist yet.
@@ -422,11 +415,10 @@ func _empty_slot() -> StyleBoxFlat:
 ## grid built before the race would still be showing the old time.
 func _refresh_the_track_grid() -> void:
 	for cell in _track_grid.get_children():
-		cell.queue_free()
-	# Freed nodes are still children until the frame ends, and a grid with two
-	# sets of cells in it lays out both.
-	for cell in _track_grid.get_children():
+		# Taken out as well as freed: freed nodes are still children until the
+		# frame ends, and a grid with two sets of cells in it lays out both.
 		_track_grid.remove_child(cell)
+		cell.queue_free()
 	_fill_the_track_grid()
 
 

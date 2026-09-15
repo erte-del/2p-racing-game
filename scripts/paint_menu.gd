@@ -110,7 +110,7 @@ func _show_the_choices() -> void:
 	for player in _players:
 		var mine := GameSettings.car_colour(player)
 		var theirs := GameSettings.car_colour(1 - player) if _players > 1 else Color.TRANSPARENT
-		_names[player].add_theme_color_override("font_color", _legible(mine))
+		_names[player].add_theme_color_override("font_color", Paints.legible(mine))
 		var swatches := _grids[player].get_children()
 		for index in swatches.size():
 			var swatch := swatches[index] as Button
@@ -168,12 +168,3 @@ func _focus_chosen(player: int) -> void:
 			wanted.grab_focus()
 			return
 	_back_button.grab_focus()
-
-
-## A paint as a colour to write words in. A car can be painted black, and a
-## heading in it would be a heading nobody can read, so anything too dark to
-## sit on the panel is lifted until it can be.
-func _legible(colour: Color) -> Color:
-	if colour.v < 0.55:
-		colour.v = 0.55
-	return colour

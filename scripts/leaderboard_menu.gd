@@ -201,7 +201,7 @@ func _show_board(rows: Array) -> void:
 		var mine := TrackTimes.best(TrackRoster.file(_showing))
 		if mine >= 0.0:
 			_note.text = ("Your %s is not in the top %d yet."
-				% [_format_time(mine), rows.size()])
+				% [RaceClock.format(mine), rows.size()])
 		else:
 			_note.text = "You have not set a time on this one yet."
 
@@ -227,7 +227,7 @@ func _line(place: int, row: Dictionary) -> Control:
 	line.add_child(name)
 
 	var time := Label.new()
-	time.text = _format_time(float(row.get("seconds", 0.0)))
+	time.text = RaceClock.format(float(row.get("seconds", 0.0)))
 	time.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	time.custom_minimum_size.x = 120.0
 	line.add_child(time)
@@ -249,13 +249,3 @@ func _clear() -> void:
 		# the new one for that frame.
 		_rows.remove_child(row)
 	_note.text = ""
-
-
-## The same clock the race and the track screen keep, so a time is the same
-## number wherever it is read.
-func _format_time(seconds: float) -> String:
-	var minutes := int(seconds) / 60
-	var rest := fmod(seconds, 60.0)
-	if minutes > 0:
-		return "%d:%05.2f" % [minutes, rest]
-	return "%.2f" % rest

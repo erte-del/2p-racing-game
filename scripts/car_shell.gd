@@ -166,7 +166,17 @@ func eye_transform() -> Transform3D:
 ## knowing what the sky is doing, and a level can just as well come from a
 ## tunnel or from a player pressing a button later.
 func set_headlights(level: float) -> void:
-	_light_level = clampf(level, 0.0, 1.0)
+	var clamped := clampf(level, 0.0, 1.0)
+	# Asked every frame, and the answer only changes while the sun is going
+	# down or coming up.
+	if clamped == _light_level:
+		return
+	_light_level = clamped
+	_light_the_lamps()
+
+
+## Put the light level the shell is holding onto the beams and the lamps.
+func _light_the_lamps() -> void:
 	for light in _headlights:
 		light.light_energy = headlight_energy * _light_level
 		# A light at zero energy still costs something to render, so the beams
@@ -234,7 +244,9 @@ func _take_up_the_model(stock: bool) -> void:
 	_prepare_materials()
 	_place_headlights()
 	repaint(_paint)
-	set_headlights(_light_level)
+	# Put on outright rather than through set_headlights, which would see the
+	# level has not changed and skip the fresh lamp material.
+	_light_the_lamps()
 
 
 ## Found by name rather than by path: the glTF importer decides how deeply it

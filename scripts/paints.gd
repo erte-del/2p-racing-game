@@ -66,6 +66,15 @@ static func default_for(player: int) -> Color:
 	return COLOURS[DEFAULTS[player]]
 
 
+## A paint as a colour to write words in. A car can be painted black, and a
+## heading in it would be a heading nobody can read, so anything too dark to
+## sit on a panel is lifted until it can be.
+static func legible(paint: Color) -> Color:
+	if paint.v < 0.55:
+		paint.v = 0.55
+	return paint
+
+
 ## Which slot a colour sits in, or -1 for a colour that is not one of these -
 ## which is what a car repainted by chaos is wearing.
 ##

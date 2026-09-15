@@ -213,6 +213,20 @@ func definition() -> TrackDefinition:
 	return _definition
 
 
+## How far along the course the nearest point to a world position is.
+##
+## The curve's points are in this node's own space, so the position is brought
+## into it first. That keeps the race and the grid right even if the track is
+## moved or scaled, rather than silently assuming it sits at the origin.
+func offset_of(world: Vector3) -> float:
+	return curve().get_closest_offset(global_transform.affine_inverse() * world)
+
+
+## The centreline at a distance along the course, in world space.
+func centre_at(offset: float) -> Vector3:
+	return global_transform * curve().sample_baked(offset)
+
+
 ## Half-width of the road at a distance along the course.
 func half_width_at(offset: float) -> float:
 	if _half_widths.is_empty():
@@ -238,9 +252,6 @@ func piece_summary() -> String:
 		_features.summary() if _features else "no furniture"]
 
 
-## Lay out a fresh course. The seed is advanced until one is found that neither
-## crosses itself nor runs off the ground, so a bad roll costs a retry rather
-## than producing a broken track.
 ## Build a track that was laid out by hand.
 ##
 ## The definition is handed the numbers it is not allowed to choose - how
@@ -260,14 +271,7 @@ func lay_out(definition: TrackDefinition) -> void:
 	_definition = definition
 
 	_layout = TrackLayout.adopt(definition.pieces, _layout_tuning())
-	_adopt(_layout)
-	_build_curve()
-	_build_road()
-	_build_embankment()
-	_build_finish_line()
-	_build_start_line()
-	_build_checkpoints()
-	_build_rails()
+	_build_the_road()
 	_features = TrackFeatures.adopt(definition.placements, {
 		"clear_lane": clear_lane,
 		"dodge_radius": dodge_radius,
@@ -300,6 +304,9 @@ func _layout_tuning() -> Dictionary:
 	}
 
 
+## Lay out a fresh course. The seed is advanced until one is found that neither
+## crosses itself nor runs off the ground, so a bad roll costs a retry rather
+## than producing a broken track.
 func generate(track_seed: int) -> void:
 	if not track_file.is_empty():
 		var written := load(track_file) as GDScript
@@ -326,7 +333,18 @@ func generate(track_seed: int) -> void:
 
 	_layout = layout
 	_definition = null
-	_adopt(layout)
+	_build_the_road()
+	# Last, because the furniture is placed against the finished course: it
+	# needs the length, and it keeps clear of the start, the finish and the
+	# checkpoints, none of which are known until the road exists.
+	_build_furniture(used_seed)
+	regenerated.emit()
+
+
+## Turn the layout into the road and everything painted on it. Shared by a
+## laid-out track and a rolled one, so the two are built by the same steps.
+func _build_the_road() -> void:
+	_adopt(_layout)
 	_build_curve()
 	_build_road()
 	_build_embankment()
@@ -334,11 +352,6 @@ func generate(track_seed: int) -> void:
 	_build_start_line()
 	_build_checkpoints()
 	_build_rails()
-	# Last, because the furniture is placed against the finished course: it
-	# needs the length, and it keeps clear of the start, the finish and the
-	# checkpoints, none of which are known until the road exists.
-	_build_furniture(used_seed)
-	regenerated.emit()
 
 
 ## Plan the furniture for this course and put it on the road.
@@ -495,10 +508,14 @@ func start_offset() -> float:
 ## the start and the finish.
 func checkpoint_offsets() -> PackedFloat32Array:
 	var out := PackedFloat32Array()
-	var span := finish_offset() - start_offset()
+	var start := start_offset()
+	var span := finish_offset() - start
+	# Asked for once rather than once a checkpoint: the race reads these every
+	# frame, and the spans are a walk over every piece of the course.
+	var jumps := jump_spans()
 	for i in checkpoint_count:
-		var at := start_offset() + span * float(i + 1) / float(checkpoint_count + 1)
-		out.append(_off_the_jumps(at))
+		var at := start + span * float(i + 1) / float(checkpoint_count + 1)
+		out.append(_off_the_jumps(at, jumps))
 	return out
 
 
@@ -525,8 +542,8 @@ func jump_spans() -> Array[Vector2]:
 ## choice. Putting a car back on the road at a ramp would send it over the
 ## edge with no run up, and putting one back in the hole would drop it
 ## straight through.
-func _off_the_jumps(at: float) -> float:
-	for span in jump_spans():
+func _off_the_jumps(at: float, spans: Array[Vector2]) -> float:
+	for span in spans:
 		if at > span.x and at < span.y:
 			return span.x if at - span.x < span.y - at else span.y
 	return at

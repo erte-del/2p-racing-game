@@ -229,14 +229,19 @@ func _physics_process(delta: float) -> void:
 	if not _racing:
 		return
 	_race_time += delta
-	_show_clock(_format_time(_race_time))
-	_show_places()
+	_show_clock(RaceClock.format(_race_time))
+	# Where each car is along the course is looked up once and shared by
+	# everything below, because finding the nearest point on the curve is a
+	# walk along the whole of it.
+	var offsets := _offsets()
+	_show_places(offsets)
+	var marks := _track.checkpoint_offsets()
 	for i in _cars.size():
 		if Input.is_action_just_pressed(_cars[i].input_prefix + "_reset"):
 			_reset_to_checkpoint(i)
 			continue
-		_bank_checkpoints(i)
-		if _has_finished(_cars[i]):
+		_bank_checkpoints(i, offsets[i], marks)
+		if _has_finished(_cars[i], offsets[i]):
 			_finish_course(i)
 			return
 
@@ -333,23 +338,10 @@ func _bit(layer: int) -> int:
 	return 1 << (layer - 1)
 
 
-## The curve's points are in the Track node's own space. Going through its
-## transform keeps the grid and the finish line correct even if that node is
-## moved or scaled, rather than silently assuming it sits at the origin.
-func _to_world(local: Vector3) -> Vector3:
-	return _track.global_transform * local
-
-
-func _to_track(world: Vector3) -> Vector3:
-	return _track.global_transform.affine_inverse() * world
-
-
 ## A car finishes by reaching the end of the course while still on it. The
 ## corridor check matters because a car lost out in the mountains can project
 ## onto any part of the centreline, including the finish.
-func _has_finished(car: Car) -> bool:
-	var curve := _track.curve()
-	var offset := curve.get_closest_offset(_to_track(car.global_position))
+func _has_finished(car: Car, offset: float) -> bool:
 	# The track owns where the finish is, so the painted line and the race
 	# cannot drift apart.
 	if offset < _track.finish_offset():
@@ -360,10 +352,8 @@ func _has_finished(car: Car) -> bool:
 ## Move a car's respawn point up as it passes checkpoints. A car has to be on
 ## the course to bank one, so a player cannot collect checkpoints by driving
 ## across the scenery, and then reset forward onto them.
-func _bank_checkpoints(index: int) -> void:
-	var marks := _track.checkpoint_offsets()
+func _bank_checkpoints(index: int, offset: float, marks: PackedFloat32Array) -> void:
 	var car := _cars[index]
-	var offset := _offset_of(car)
 	while _next_checkpoint[index] < marks.size() and offset >= marks[_next_checkpoint[index]]:
 		if not _on_course(car, offset):
 			return
@@ -376,10 +366,9 @@ func _bank_checkpoints(index: int) -> void:
 ## and stopped. This is the way out of being stuck or falling off.
 func _reset_to_checkpoint(index: int) -> void:
 	var car := _cars[index]
-	var curve := _track.curve()
 	var at := _respawn[index]
-	var here := _to_world(curve.sample_baked(at))
-	var ahead := _to_world(curve.sample_baked(minf(at + 1.0, _track.length())))
+	var here := _track.centre_at(at)
+	var ahead := _track.centre_at(minf(at + 1.0, _track.length()))
 
 	var forward := ahead - here
 	forward.y = 0.0
@@ -392,14 +381,17 @@ func _reset_to_checkpoint(index: int) -> void:
 	car.look_at(car.global_position + forward, Vector3.UP)
 
 
-func _offset_of(car: Car) -> float:
-	return _track.curve().get_closest_offset(_to_track(car.global_position))
+## How far along the course each car is, in the same order as the cars.
+func _offsets() -> Array[float]:
+	var offsets: Array[float] = []
+	for car in _cars:
+		offsets.append(_track.offset_of(car.global_position))
+	return offsets
 
 
 ## Whether a car is close enough to the centreline to count as on the course.
 func _on_course(car: Car, offset: float) -> bool:
-	var centre := _to_world(_track.curve().sample_baked(offset))
-	return car.global_position.distance_to(centre) < finish_corridor
+	return car.global_position.distance_to(_track.centre_at(offset)) < finish_corridor
 
 
 ## Lay out a new course and put the cars on the line.
@@ -430,7 +422,7 @@ func _finish_course(winner: int) -> void:
 		car.reset_motion()
 
 	_show_result("%s WINS\n%s" % [
-		_colour_name(_cars[winner].body_color), _format_time(_race_time)])
+		_colour_name(_cars[winner].body_color), RaceClock.format(_race_time)])
 	var run := _countdown_run
 	await get_tree().create_timer(result_seconds, false).timeout
 	# A player who restarted from the pause screen rather than waiting has
@@ -465,8 +457,8 @@ func _start_after_countdown() -> void:
 
 	_show_count("GO")
 	_race_time = 0.0
-	_show_clock(_format_time(0.0))
-	_show_places()
+	_show_clock(RaceClock.format(0.0))
+	_show_places(_offsets())
 	for car in _cars:
 		car.frozen = false
 	_racing = true
@@ -496,8 +488,8 @@ func _show_clock(text: String) -> void:
 ## the places start as a dash rather than picking one arbitrarily. The two
 ## margins give it hysteresis: a lead has to be earned, and only a clear return
 ## to level gives it up, so the display cannot strobe wheel to wheel.
-func _show_places() -> void:
-	var gap := _offset_of(_cars[0]) - _offset_of(_cars[1])
+func _show_places(offsets: Array[float]) -> void:
+	var gap := offsets[0] - offsets[1]
 	if absf(gap) < level_margin:
 		_leader = -1
 	elif absf(gap) > lead_margin:
@@ -547,23 +539,12 @@ func _colour_name(colour: Color) -> String:
 	return "PINK"
 
 
-## Minutes only once there are any, so a short course reads "42.16" rather
-## than "0:42.16".
-func _format_time(seconds: float) -> String:
-	var minutes := int(seconds) / 60
-	var rest := fmod(seconds, 60.0)
-	if minutes > 0:
-		return "%d:%05.2f" % [minutes, rest]
-	return "%.2f" % rest
-
-
 ## Line the cars up side by side on the start line, facing down the course.
 ## Deriving the grid from the curve means it keeps working for every course.
 func _place_on_grid() -> void:
-	var curve := _track.curve()
 	var at: float = maxf(_track.start_offset() - grid_setback, 0.0)
-	var here := _to_world(curve.sample_baked(at))
-	var ahead := _to_world(curve.sample_baked(at + 1.0))
+	var here := _track.centre_at(at)
+	var ahead := _track.centre_at(at + 1.0)
 
 	var forward := ahead - here
 	forward.y = 0.0
@@ -597,4 +578,4 @@ func _place_on_grid() -> void:
 	# Only once the cars are actually on the grid, or this reads their old
 	# positions and hands someone a lead they no longer have.
 	_leader = -1
-	_show_places()
+	_show_places(_offsets())

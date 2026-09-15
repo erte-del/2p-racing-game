@@ -382,15 +382,13 @@ func _apply_steering(steer: float, delta: float) -> void:
 	if is_zero_approx(steer) or is_zero_approx(_speed):
 		return
 	var speed := absf(_speed)
-	# Squared, so the car stays tight through slow corners and only washes
-	# wide as it approaches top speed.
-	var pace := clampf(speed / max_speed, 0.0, 1.0)
-	var radius := lerpf(tight_turn_radius, fast_turn_radius, pace * pace)
-	rotate_y(steer * (speed / radius) * signf(_speed) * delta)
+	rotate_y(steer * (speed / turn_radius_at(_speed)) * signf(_speed) * delta)
 
 
 ## The tightest corner the car can hold at a given speed, in metres.
 func turn_radius_at(speed: float) -> float:
+	# Squared, so the car stays tight through slow corners and only washes
+	# wide as it approaches top speed.
 	var pace := clampf(absf(speed) / max_speed, 0.0, 1.0)
 	return lerpf(tight_turn_radius, fast_turn_radius, pace * pace)
 

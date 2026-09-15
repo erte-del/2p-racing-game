@@ -166,12 +166,15 @@ func _physics_process(delta: float) -> void:
 		return
 
 	_time += delta
-	_clock.text = _format_time(_time)
+	_clock.text = RaceClock.format(_time)
 	if Input.is_action_just_pressed("p1_reset"):
 		_back_to_checkpoint()
 		return
-	_bank_checkpoints()
-	if _has_finished():
+	# Looked up once for both, because finding the nearest point on the curve
+	# is a walk along the whole of it.
+	var offset := _track.offset_of(_car.global_position)
+	_bank_checkpoints(offset)
+	if _has_finished(offset):
 		_finish()
 
 
@@ -184,8 +187,6 @@ func _input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 	_open_pause()
 
-
-# --- pausing ------------------------------------------------------------
 
 ## Put the player in the car they picked. Chaos leaves this alone: it rolls how
 ## the car handles and what colour it is, never what it is.
@@ -203,6 +204,7 @@ func _apply_paint() -> void:
 	_car.repaint(GameSettings.car_colour(0))
 
 
+# --- pausing ------------------------------------------------------------
 
 ## What the pause screen says it is sitting on top of.
 ##
@@ -275,7 +277,7 @@ func _start_after_countdown() -> void:
 	_car.frozen = true
 	_car.reset_motion()
 	_time = 0.0
-	_clock.text = _format_time(0.0)
+	_clock.text = RaceClock.format(0.0)
 
 	var steps: int = maxi(1, int(round(preview_seconds)))
 	var each := preview_seconds / float(steps)
@@ -303,8 +305,8 @@ func _finish() -> void:
 	_car.reset_motion()
 	# Set outright rather than left on whatever the last step wrote, so the
 	# clock in the corner and the time in the middle are the same number.
-	_clock.text = _format_time(_time)
-	_result_time.text = _format_time(_time)
+	_clock.text = RaceClock.format(_time)
+	_result_time.text = RaceClock.format(_time)
 	_result.show()
 	# Nothing to pin until a track says what was won; the endless course never
 	# does, and takes the badge off on its way past.
@@ -331,13 +333,13 @@ func _finish() -> void:
 	if _best < 0.0:
 		_result_note.text = "FIRST TIME SET"
 	elif beaten:
-		_result_note.text = "BEST BY %s" % _format_time(_best - _time)
+		_result_note.text = "BEST BY %s" % RaceClock.format(_best - _time)
 	else:
-		_result_note.text = "%s OFF THE BEST" % _format_time(_time - _best)
+		_result_note.text = "%s OFF THE BEST" % RaceClock.format(_time - _best)
 	var up: Array = Medal.next_up(_time, _targets)
 	if int(up[0]) != Medal.NONE:
 		_result_note.text += "        %s TO %s" % [
-			_format_time(float(up[1])), Medal.label(int(up[0]))]
+			RaceClock.format(float(up[1])), Medal.label(int(up[0]))]
 
 	if beaten:
 		_best = _time
@@ -435,7 +437,7 @@ func _show_best() -> void:
 		_best_label.text = ""
 		return
 	var medal := Medal.earned(_best, _targets)
-	_best_label.text = "BEST  %s" % _format_time(_best)
+	_best_label.text = "BEST  %s" % RaceClock.format(_best)
 	if medal != Medal.NONE:
 		_best_label.text += "   %s" % Medal.label(medal)
 	# Coloured by what the standing time is worth, so the corner says how the
@@ -455,8 +457,7 @@ func _track_targets() -> Vector3:
 ## True once the car is past the finish line and still on the course. The
 ## corridor matters because a car lost out in the mountains can project onto
 ## any part of the centreline, the finish included.
-func _has_finished() -> bool:
-	var offset := _offset_of(_car)
+func _has_finished(offset: float) -> bool:
 	if offset < _track.finish_offset():
 		return false
 	return _on_course(offset)
@@ -465,9 +466,8 @@ func _has_finished() -> bool:
 ## Move the respawn up as the car passes checkpoints. It has to be on the
 ## course to bank one, so a player cannot cut across the scenery and then
 ## reset forward onto a checkpoint they never drove to.
-func _bank_checkpoints() -> void:
+func _bank_checkpoints(offset: float) -> void:
 	var marks := _track.checkpoint_offsets()
-	var offset := _offset_of(_car)
 	while _next_checkpoint < marks.size() and offset >= marks[_next_checkpoint]:
 		if not _on_course(offset):
 			return
@@ -480,9 +480,8 @@ func _bank_checkpoints() -> void:
 ## and stopped. The clock keeps running: this is the way out of a hole in the
 ## road, and what it costs is the time it costs.
 func _back_to_checkpoint() -> void:
-	var curve := _track.curve()
-	var here := _to_world(curve.sample_baked(_respawn))
-	var ahead := _to_world(curve.sample_baked(minf(_respawn + 1.0, _track.length())))
+	var here := _track.centre_at(_respawn)
+	var ahead := _track.centre_at(minf(_respawn + 1.0, _track.length()))
 	_car.global_position = here + Vector3.UP * grid_clearance
 	var forward := ahead - here
 	forward.y = 0.0
@@ -494,10 +493,9 @@ func _back_to_checkpoint() -> void:
 
 ## Line the car up on the start line, facing down the course.
 func _place_on_the_line() -> void:
-	var curve := _track.curve()
 	var at: float = maxf(_track.start_offset() - grid_setback, 0.0)
-	var here := _to_world(curve.sample_baked(at))
-	var ahead := _to_world(curve.sample_baked(at + 1.0))
+	var here := _track.centre_at(at)
+	var ahead := _track.centre_at(at + 1.0)
 	var forward := ahead - here
 	forward.y = 0.0
 	if forward.length_squared() < 0.000001:
@@ -517,30 +515,5 @@ func _show_tally() -> void:
 		_next_checkpoint, _track.checkpoint_offsets().size()]
 
 
-func _offset_of(car: Car) -> float:
-	return _track.curve().get_closest_offset(_to_track(car.global_position))
-
-
 func _on_course(offset: float) -> bool:
-	var centre := _to_world(_track.curve().sample_baked(offset))
-	return _car.global_position.distance_to(centre) < finish_corridor
-
-
-## The curve's points are in the Track node's own space. Going through its
-## transform keeps this right even if that node is moved or scaled.
-func _to_world(local: Vector3) -> Vector3:
-	return _track.global_transform * local
-
-
-func _to_track(world: Vector3) -> Vector3:
-	return _track.global_transform.affine_inverse() * world
-
-
-## Minutes only once there are any, so a forty second run reads as a number
-## rather than as a clock.
-func _format_time(seconds: float) -> String:
-	var minutes := int(seconds) / 60
-	var rest := fmod(seconds, 60.0)
-	if minutes > 0:
-		return "%d:%05.2f" % [minutes, rest]
-	return "%.2f" % rest
+	return _car.global_position.distance_to(_track.centre_at(offset)) < finish_corridor

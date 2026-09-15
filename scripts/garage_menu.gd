@@ -238,15 +238,24 @@ func _listing() -> Array:
 func _fill() -> void:
 	var focused := _focused_tile()
 	var added := Garage.cars()
+	# Read off the disk and built once a car rather than once a tile. Every
+	# player's row shows the same pictures in the same frames, and nothing ever
+	# changes one on a single tile.
+	var faces := _tile_faces()
+	var portraits := {}
+	for car: Dictionary in _official_listing() + added:
+		portraits[car.id] = Garage.portrait(car.id)
 	for player in _player_rows.size():
 		for grid in _grids_of(player):
 			for tile in grid.get_children():
 				grid.remove_child(tile)
 				tile.queue_free()
 		for car: Dictionary in _official_listing():
-			_official_grids[player].add_child(_tile(player, car.id, car.name))
+			_official_grids[player].add_child(
+				_tile(player, car.id, car.name, portraits[car.id], faces))
 		for car: Dictionary in added:
-			_unofficial_grids[player].add_child(_tile(player, car.id, car.name))
+			_unofficial_grids[player].add_child(
+				_tile(player, car.id, car.name, portraits[car.id], faces))
 		# An empty half says so. Left blank, it reads as a half that failed to
 		# draw rather than a garage nobody has put anything in yet.
 		_nothing_added[player].visible = added.is_empty()
@@ -258,7 +267,8 @@ func _fill() -> void:
 			else _driven(focused[0]))
 
 
-func _tile(player: int, id: String, called: String) -> Button:
+func _tile(player: int, id: String, called: String, picture: Texture2D,
+		faces: Dictionary) -> Button:
 	var tile := Button.new()
 	tile.custom_minimum_size = TILE_SIZE
 	tile.toggle_mode = true
@@ -269,14 +279,14 @@ func _tile(player: int, id: String, called: String) -> Button:
 	# file was called, and somebody's file will be called something long.
 	tile.clip_text = true
 	tile.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	tile.icon = Garage.portrait(id)
+	tile.icon = picture
 	tile.expand_icon = true
 	tile.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tile.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
 	tile.add_theme_font_size_override("font_size", 18)
 	tile.disabled = _busy
-	for state in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
-		tile.add_theme_stylebox_override(state, _tight(state))
+	for state in faces:
+		tile.add_theme_stylebox_override(state, faces[state])
 	tile.set_meta("car", id)
 	tile.pressed.connect(_choose.bind(player, id))
 	# The car being talked about follows the keyboard and the mouse both, so
@@ -284,6 +294,14 @@ func _tile(player: int, id: String, called: String) -> Button:
 	tile.focus_entered.connect(_talk_about.bind(id))
 	tile.mouse_entered.connect(_talk_about.bind(id))
 	return tile
+
+
+## Every face a tile wears, one per state, to be shared by all of them.
+func _tile_faces() -> Dictionary:
+	var faces := {}
+	for state in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+		faces[state] = _tight(state)
+	return faces
 
 
 ## The theme's face for a button with most of its padding taken off. The theme

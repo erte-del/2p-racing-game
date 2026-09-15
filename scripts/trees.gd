@@ -165,6 +165,9 @@ func _scatter(curve: Curve3D) -> void:
 	# that fills the field simply gets a thinner wood.
 	var attempts: int = tree_count * 8
 	var planted := 0
+	# Into the track's own space, where the curve is. Worked out once rather
+	# than for each of the thousands of spots tried.
+	var to_track := _track.global_transform.affine_inverse()
 	for _attempt in attempts:
 		if planted >= tree_count:
 			break
@@ -174,7 +177,7 @@ func _scatter(curve: Curve3D) -> void:
 		var radius := field_radius * sqrt(rng.randf())
 		var spot := Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
 
-		if _on_the_course(curve, spot):
+		if _on_the_course(curve, to_track, spot):
 			continue
 		if _crowded(buckets, spot):
 			continue
@@ -194,8 +197,8 @@ func _scatter(curve: Curve3D) -> void:
 
 ## True if a spot is on the road, on its shoulder, or on the built-up ground
 ## holding up a raised section.
-func _on_the_course(curve: Curve3D, spot: Vector3) -> bool:
-	var local: Vector3 = _track.global_transform.affine_inverse() * spot
+func _on_the_course(curve: Curve3D, to_track: Transform3D, spot: Vector3) -> bool:
+	var local: Vector3 = to_track * spot
 	var offset := curve.get_closest_offset(local)
 	var centre := curve.sample_baked(offset)
 	var gap := Vector2(local.x - centre.x, local.z - centre.z).length()

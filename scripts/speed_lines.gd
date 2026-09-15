@@ -104,8 +104,6 @@ func _draw() -> void:
 		var direction := Vector2.from_angle(_angles[i])
 		var from: float = lerpf(inner_reach, outer_reach, along)
 		var to := from + line_length * _rush
-		# In and out again across the sweep, so a streak never pops into or
-		# out of the frame at full strength.
 		var colour := line_color
 		if wild:
 			colour = Color.from_hsv(
