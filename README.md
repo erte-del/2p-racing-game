@@ -798,6 +798,12 @@ An earlier version scaled the turn *rate* by speed. That cancelled the speed
 out of the turning-circle equation entirely and left one fixed 13.9 m circle at
 every speed, so no hairpin was drivable however slowly it was taken.
 
+With no road under it the car keeps only `air_steer` (0.25) of its steering.
+Held hard over through the whole of a tuned jump it turns 32 degrees rather than
+the 134 it used to, which is enough to straighten up for the landing it is
+already heading at and not enough to pick a different one - a car that turned
+as well in the air as on the ground would take a jump as just another corner.
+
 ## Race loop
 
 Reaching the finish line swaps in a freshly generated course, then holds both
@@ -1204,8 +1210,8 @@ worked out: the launch is capped, so range does not follow the clean projectile
 square of speed.
 
 The landing is long - 90 m - because the range of a jump is decided by the speed
-it is taken at. The same ramp puts a car down 19.4 m past the lip on the
-slowest, heaviest roll the game makes and 95.0 m past it on the fastest,
+it is taken at. The same ramp puts a car down 19.5 m past the lip on the
+slowest, heaviest roll the game makes and 95.2 m past it on the fastest,
 lightest one, and the road has to reach the far end of that.
 
 Nothing else is built on a jump. The pads and barriers keep off the stretch a
@@ -1215,6 +1221,16 @@ the road at a ramp would go over the edge with no run up, and one put back in
 the hole would drop straight through. Falling in is recovered the way falling
 off has always been recovered: the reset that puts a car back at its last
 checkpoint.
+
+In the air a car has nothing to push against and nothing to brake on. Throttle,
+brake and engine braking all stop the moment it leaves the road, so it flies at
+the speed it left with, and its steering drops to `air_steer` (see Steering).
+Before that a car could brake a jump away in mid air, or coast and come down
+short. Flying the tuned jump off the lip at 28.9 m/s with nothing held, a car
+used to land at 21.5 m/s, 31.0 m on; it now lands at the 28.9 it left with,
+35.6 m on, whether the throttle, the brake or nothing at all is held. Held on
+the brake it used to come down 17.1 m on and rolling backwards - short of a
+17.5 m hole. Chaos leaves `air_steer` alone.
 
 `tools/checks/jump_flight.gd` drives a car off a real ramp at every corner of
 what chaos can roll - speed from 0.78 to 1.7 of tuned, gravity from 0.65 to
@@ -1227,13 +1243,23 @@ be testing a course the game never lays down:
 Godot --path . --headless --script tools/checks/jump_flight.gd
 ```
 
-At tuned speed and gravity that is a 17.5 m hole cleared by 19.4 m; at the
-slowest, heaviest roll chaos can produce it is a 10 m hole cleared by 9.4 m.
-The longest flight is 95.0 m against 107.5 m of road to come down on, and no
+At tuned speed and gravity that is a 17.5 m hole cleared by 19.5 m; at the
+slowest, heaviest roll chaos can produce it is a 10 m hole cleared by 9.5 m.
+The longest flight is 95.2 m against 107.5 m of road to come down on, and no
 roll crosses without leaving the ground. It then asks the opposite question,
 because a jump every car clears whatever it does is scenery rather than a risk:
-a car crawling at 10.5 m/s at the 17.5 m hole flies 7.5 m, comes down 10 m
+a car crawling at 10.5 m/s at the 17.5 m hole flies 7.3 m, comes down 10.2 m
 short and ends up on the grass.
+
+Each run lets the car down onto the run up 30 m before the ramp, leaves it to
+settle at a standstill, and only then holds it flat out, stopping the run as
+soon as it lands from the jump. It used to be dropped onto the run up 18 m out
+already at speed, and a fast roll was still falling when it reached the ramp. A
+car that meets a ramp in the air can catch its nose on it and stop dead - when
+air control moved one run by a fraction of a metre, the 51 m/s car did exactly
+that, 5.6 m up the ramp - and that is not a jump any player driving up a level
+straight takes. Arriving on the ground, no speed from 20 to 80 m/s stopped on
+the ramp; dropped onto it the old way, 78 m/s did.
 
 That longest flight is what sets the ceiling on the cars' top speed. The
 landing is 90 m of road and the ramp puts the fastest car chaos rolls, under
@@ -1300,7 +1326,7 @@ then over a plain climb:
 Godot --path . --headless --script tools/checks/tilt_trace.gd
 ```
 
-Level road reads 0.0 degrees, the ramp +24.1, the fall -28.0, and a 2.9 degree
+Level road reads 0.0 degrees, the ramp +24.1, the fall -27.9, and a 2.9 degree
 climb reads +3.4.
 
 What it reads is the road pitch the car works out, `Car._pitch`, not the angle
@@ -1870,7 +1896,7 @@ The lap it drives is a bad one - flat out, aimed fourteen metres ahead on the
 centreline, giving back speed wherever that point is not straight in front of
 it - and on the harder tracks it does not finish at all, because driving the
 centreline into a slalom is driving into a barrier. What makes it useful is
-that it is the same bad lap everywhere: on First Light it comes home in 34.63,
+that it is the same bad lap everywhere: on First Light it comes home in 34.62,
 against the 33 the track asks for gold. Gold is a little under the best the
 road allows, silver and bronze are spaced further apart the harder the track
 gets, and the whole ladder is set from that one ratio.

@@ -14,7 +14,7 @@ extends SceneTree
 ## to change, compared between the car given a new model and the one that was
 ## not.
 const TUNING := [
-	"max_speed", "gravity", "tight_turn_radius", "roof_bounce",
+	"max_speed", "gravity", "tight_turn_radius", "air_steer", "roof_bounce",
 	"roll_per_accel", "max_roll", "dive_per_accel", "max_dive",
 	"landing_give", "max_squash", "body_spring", "body_damping",
 	"air_wheel_fade",

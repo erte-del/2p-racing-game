@@ -33,6 +33,11 @@ const OBSTACLE_GROUP := &"obstacle"
 ## car can take. Radius grows with speed, the way a real car washes wide.
 @export var tight_turn_radius := 6.5
 @export var fast_turn_radius := 16.0
+## How much of its steering a car keeps with no road under it, as a fraction.
+## Enough to straighten up for the landing it is already heading for, not
+## enough to pick a different one: a car that turned as well in the air as on
+## the ground would take a jump as just another corner.
+@export_range(0.0, 1.0) var air_steer := 0.25
 @export var gravity := 24.0            ## m/s^2, tuned for arcade feel
 ## How much of the climb a car was making when it ran out of road it carries
 ## into the air. One is what the ramp actually gave it; anything less reads as
@@ -320,8 +325,16 @@ func _physics_process(delta: float) -> void:
 	_hit_recovery = maxf(_hit_recovery - delta, 0.0)
 	_update_slipstream(delta)
 	_update_boost(delta)
-	_apply_throttle(throttle, delta)
-	_apply_steering(steer, delta)
+	# With no road under it the car has nothing to push against and nothing
+	# to brake on, so its speed is whatever it left the road with, and only a
+	# little of its steering is left. Decided here rather than inside the
+	# throttle and the steering, so anything that works those directly -
+	# boost_trace, which has no road at all - gets the car's own sums.
+	if is_on_floor():
+		_apply_throttle(throttle, delta)
+		_apply_steering(steer, delta)
+	else:
+		_apply_steering(steer * air_steer, delta)
 	_drive(delta)
 	_tilt(delta)
 	_lean(delta)

@@ -16,6 +16,12 @@ const SPEEDS := {
 	"chaos fastest": 1.7,
 }
 const GRAVITIES := {"light": 0.65, "tuned": 1.0, "heavy": 1.4}
+## Metres of level run up the car is let go on before the ramp. The planner
+## never lays a jump after less than 45.
+const RUN_UP := 30.0
+## Frames off the ground that are the car skipping over the join at the foot
+## of the ramp rather than flying.
+const SKIP := 5
 
 
 func _init() -> void:
@@ -123,68 +129,63 @@ func _init() -> void:
 ## nearest point on it to a car lying in the hole is somewhere up the ramp.
 func _fly(main: Node, track: Track, car: Car, jump: TrackLayout.Piece) -> Array:
 	var curve := track.curve()
-	var at: float = jump.start_offset - 18.0
+	var at: float = jump.start_offset - RUN_UP
 	var here: Vector3 = curve.sample_baked(at)
-	var ahead: Vector3 = curve.sample_baked(at + 2.0)
+	var ahead: Vector3 = track.global_transform * curve.sample_baked(at + 2.0)
 
-	# Put it where it is going first and only then clear its motion: the car
-	# works out the climb it is carrying from the height it was at last step,
-	# so clearing that before the teleport hands the next run the drop from
-	# wherever the last one finished.
-	# Parked, dropped onto the road and left to settle before the run starts.
-	# Without that the car begins each run carrying whatever the last one left
-	# it doing, and a run that starts half in the air measures that rather
-	# than the jump.
+	# Let down onto the run up at a standstill and left to settle before the
+	# run starts, the way tilt_trace does it. A car let go flat out while it
+	# is still falling reaches the ramp in the air on a fast roll, and a car
+	# that meets a ramp in the air can catch its nose on it and stop dead.
+	# That is a real hazard, but it is not one a player driving up a level
+	# straight meets - arriving on the ground, no speed from 20 to 80 m/s does
+	# it - and it is not what this is measuring.
+	#
+	# Put where it is going first and only then cleared: the car works out the
+	# climb it is carrying from the height it was at last step, so clearing it
+	# before the teleport hands the run the drop from wherever the last one
+	# finished. Aimed level with itself, for the reason tilt_trace gives.
 	car.frozen = true
 	car.global_position = track.global_transform * (
 		here + Vector3.UP * (car.wheel_radius + 0.6))
-	car.look_at(track.global_transform * ahead, Vector3.UP)
-	car.reset_motion()
-	for i in 12:
-		await physics_frame
+	car.look_at(Vector3(ahead.x, car.global_position.y, ahead.z), Vector3.UP)
 	car.frozen = false
 	car.reset_motion()
-	car._speed = car.max_speed
+	for i in 25:
+		car._speed = 0.0
+		await physics_frame
+	car.reset_motion()
 
-	# Settled, then airborne, then down. The car is dropped onto the road
-	# rather than placed exactly on it, so it is off the ground for the first
-	# frame or two, and it can skip once over the join at the foot of the
-	# ramp; neither of those is the jump.
-	# Settled, then airborne, then down. The car is dropped onto the road
-	# rather than placed exactly on it, so it is off the ground for the first
-	# frame or two, and it can skip once over the join at the foot of the
-	# ramp. The longest time it spent in the air is the jump; the rest is
-	# noise, and no time in the air at all is worth saying out loud.
-	var settled := false
+	# On the ground, then airborne, then down. It can skip for a frame or two
+	# over the join at the foot of the ramp; that is not the jump, which is the
+	# first time it is off the ground for longer. The run stops the moment that
+	# comes down, before the car can drive on into whatever the course does
+	# next and fly off that instead.
 	var airborne := 0
-	var from := Vector3.ZERO
-	var best := 0
 	var took_off := Vector3.ZERO
-	var landed := Vector3.ZERO
-	for i in 300:
+	for i in 600:
 		# Held at the ceiling: nothing here is testing the engine, and a car
 		# coasting up the ramp would be measuring a different speed each run.
 		car._speed = car.max_speed
 		await physics_frame
-		if car.is_on_floor():
-			settled = true
-			if airborne > best:
-				best = airborne
-				took_off = from
-				landed = car.global_position
-			airborne = 0
-		elif settled:
+		if not car.is_on_floor():
 			if airborne == 0:
-				from = car.global_position
+				took_off = car.global_position
 			airborne += 1
-	if best == 0:
-		# It never left the ground. Where it ended up still matters: a car
-		# that crept across the hole without flying is a different failure
-		# from one that stopped dead on the ramp.
-		return [0.0, _what_is_under(main, car, car.global_position), false]
-
-	var flown := Vector2(landed.x - took_off.x, landed.z - took_off.z).length()
-	return [flown, _what_is_under(main, car, landed), true]
+		elif airborne > SKIP:
+			var landed := car.global_position
+			var flown := Vector2(landed.x - took_off.x, landed.z - took_off.z).length()
+			return [flown, _what_is_under(main, car, landed), true]
+		else:
+			airborne = 0
+	if airborne > SKIP:
+		# Still in the air when time ran out: a car that went off the edge of
+		# the world rather than one that came down anywhere.
+		return [0.0, "nothing at all", true]
+	# It never left the ground. Where it ended up still matters: a car that
+	# crept across the hole without flying is a different failure from one
+	# that stopped dead on the ramp.
+	return [0.0, _what_is_under(main, car, car.global_position), false]
 
 
 ## What a car is standing on, by name rather than by offset.
