@@ -80,7 +80,6 @@ const REAR_WHEELS := ["Wheel_BL", "Wheel_BR"]
 
 @export_group("Wheels")
 @export var max_wheel_steer := 0.5     ## rad the front wheels visually turn
-@export var wheel_steer_speed := 4.0   ## how fast the wheels visually turn
 
 ## The model itself, and whether it is the one the game ships with.
 ##
@@ -227,9 +226,10 @@ func repaint(colour: Color) -> void:
 ## no wheels quietly has nothing to do here.
 func animate_wheels(steer: float, speed: float, wheel_radius: float,
 		delta: float) -> void:
-	_wheel_steer = move_toward(
-		_wheel_steer, steer * max_wheel_steer, wheel_steer_speed * delta
-	)
+	# The car has already eased the steering, so the wheels show it as it is:
+	# one steering state, rather than a second, slower one of their own lagging
+	# behind what the car is actually doing.
+	_wheel_steer = steer * max_wheel_steer
 	# wrap so the angle cannot grow without bound over a long race
 	_wheel_roll = fposmod(
 		_wheel_roll - speed * delta / maxf(wheel_radius, 0.001), TAU)

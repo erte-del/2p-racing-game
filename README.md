@@ -804,6 +804,33 @@ the 134 it used to, which is enough to straighten up for the landing it is
 already heading at and not enough to pick a different one - a car that turned
 as well in the air as on the ground would take a jump as just another corner.
 
+The steering is eased rather than set. A key is either down or up, and a car
+that snapped to full lock the instant one went down twitched rather than turned
+in, so the car keeps one steering value that goes out to full lock over
+`steer_rise` (0.12 s) and back to straight over the quicker `steer_fall`
+(0.06 s) - quicker, because a car slow to straighten feels as though it is
+still turning on its own. Crossing from one lock to the other goes back through
+straight at the quicker rate and then out the other side, and a stick held part
+of the way over is eased to rather than jumped to. Both times shrink with speed
+and are nothing at a standstill, so a hairpin or a three-point turn at a crawl
+answers the keys at once, the way it always did. That one value turns the car
+and turns the wheels; the wheels used to ease on their own, a second steering
+state lagging behind the first.
+
+`tools/checks/steer_trace.gd` steps the easing by hand, the way boost_trace
+steps the throttle:
+
+```
+Godot --path . --headless --script tools/checks/steer_trace.gd
+```
+
+Flat out, full lock takes 0.133 s and straightening 0.067 s - the tuned times,
+rounded up to the physics step - lock to lock takes 0.183 s, and a stick held
+half over is reached in 0.067 s. At 3 m/s full lock takes a single step,
+0.017 s. The bot drivers turn the car directly rather than through the keys, so
+none of their laps moved. What the easing costs a dodge between barriers is
+under Barriers.
+
 ## Race loop
 
 Reaching the finish line swaps in a freshly generated course, then holds both
@@ -1062,6 +1089,23 @@ On the tuned numbers that is 5.7 barriers a course, none with fewer than one,
 no way past narrower than the 3.4 m rule, and no faults. Driving square into
 one takes 30 m/s to 8.4 and wipes the boost; taking the gap beside it costs
 nothing at all.
+
+The spacing assumes the car goes to full lock the instant a key goes down, and
+it no longer does: the steering eases out over `steer_rise` and back over
+`steer_fall` (see Steering). A dodge stepped through the car's own steering,
+with the switch across and the letting go timed to finish square, takes about
+speed × (steer_rise + steer_fall) / 2 more road than instant lock does: 2.9 to
+3.1 m at the tuned 30 m/s. At rows' closest spacing that still leaves 1.3 m of
+the margin for seeing and deciding across a 2 m shift, 3.8 m across 4 m and
+7.4 m across 8 m; on a boost at 46.5 m/s a 2 m shift is 1.0 m short.
+
+At the fast end of what chaos rolls it does not fit, and did not fit well
+before either. `dodge_radius` stays at the tuned car's 16 m while a chaos-fast
+car turns no tighter than 21.6 m, or 23.8 m on its widest roll, so at 51 m/s an
+instant dodge across 2 m already took 13.6 to 14.0 m of the 15.8 m the rows are
+given. Easing adds another 4.8 to 5.4 m, which puts 2 m and 4 m shifts 1.3 to
+3.5 m short; on a boost at chaos speed, 79 m/s, it adds 7.7 to 8.6 m, and every
+shift is 2.3 to 7.1 m short. The spacing has not been changed for it.
 
 How many barriers a course carries is mostly decided by `same_side_chance`
 (0.55) rather than by any count. Two rows holding the same side of the road

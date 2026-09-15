@@ -38,6 +38,17 @@ const OBSTACLE_GROUP := &"obstacle"
 ## enough to pick a different one: a car that turned as well in the air as on
 ## the ground would take a jump as just another corner.
 @export_range(0.0, 1.0) var air_steer := 0.25
+## How long the steering takes to go from straight ahead to full lock, and
+## from full lock back to straight, in seconds at top speed. A key is either
+## down or up, and a car that snapped to full lock the instant one went down
+## would twitch rather than turn in. Letting go is the quicker of the two,
+## because a car slow to straighten feels as though it is still turning of its
+## own accord, and crossing from one lock to the other goes back through
+## straight at that quicker rate. Both shrink with speed, down to nothing at a
+## standstill, so a hairpin or a three-point turn taken at a crawl answers the
+## keys the way it always did.
+@export var steer_rise := 0.12
+@export var steer_fall := 0.06
 @export var gravity := 24.0            ## m/s^2, tuned for arcade feel
 ## How much of the climb a car was making when it ran out of road it carries
 ## into the air. One is what the ramp actually gave it; anything less reads as
@@ -186,6 +197,10 @@ var frozen := false
 
 ## Signed speed along local -Z. Positive is forwards.
 var _speed := 0.0
+## Where the steering is, from -1 at full right lock to +1 at full left, eased
+## towards what the keys ask for. It is the one steering state the car has: it
+## is what turns the car, and what turns the wheels.
+var _steer := 0.0
 ## Current slipstream strength, 0 to 1, smoothed.
 var _slipstream := 0.0
 ## Extra top speed from the last boost pad, as a fraction, and the seconds it
@@ -325,6 +340,7 @@ func _physics_process(delta: float) -> void:
 	_hit_recovery = maxf(_hit_recovery - delta, 0.0)
 	_update_slipstream(delta)
 	_update_boost(delta)
+	_ease_steering(steer, delta)
 	# With no road under it the car has nothing to push against and nothing
 	# to brake on, so its speed is whatever it left the road with, and only a
 	# little of its steering is left. Decided here rather than inside the
@@ -332,19 +348,20 @@ func _physics_process(delta: float) -> void:
 	# boost_trace, which has no road at all - gets the car's own sums.
 	if is_on_floor():
 		_apply_throttle(throttle, delta)
-		_apply_steering(steer, delta)
+		_apply_steering(_steer, delta)
 	else:
-		_apply_steering(steer * air_steer, delta)
+		_apply_steering(_steer * air_steer, delta)
 	_drive(delta)
 	_tilt(delta)
 	_lean(delta)
 	_roll_wheels(delta)
-	_shell.animate_wheels(steer, _wheel_speed, wheel_radius, delta)
+	_shell.animate_wheels(_steer, _wheel_speed, wheel_radius, delta)
 
 
 ## Stop dead and forget any slipstream. Used when the track is replaced.
 func reset_motion() -> void:
 	_speed = 0.0
+	_steer = 0.0
 	_slipstream = 0.0
 	_boost = 0.0
 	_boost_hold = 0.0
@@ -472,6 +489,35 @@ func _apply_throttle(throttle: float, delta: float) -> void:
 	else:
 		var rate := braking if _speed > 0.0 else acceleration
 		_speed = move_toward(_speed, -max_reverse_speed, rate * -throttle * delta)
+
+
+## Ease the steering towards what the keys are asking for.
+##
+## Heading back towards straight - letting go, easing off, or on the way over
+## to the other lock - goes at the steer_fall rate, and heading out from it at
+## the steer_rise rate. A change of side spends whatever is left of the step
+## after reaching straight turning in the other way, so a flick across is not
+## charged a whole step at the slower rate for passing through the middle. A
+## stick held part of the way over is eased to in the same way, rather than
+## jumped to.
+func _ease_steering(wanted: float, delta: float) -> void:
+	# Both times shrink with speed. What the easing is for is a car at speed
+	# twitching on a key press; at a crawl the same key has always turned the
+	# car at once, and it still should.
+	var pace := clampf(absf(_speed) / maxf(max_speed, 0.001), 0.0, 1.0)
+	var rise := 1.0 / maxf(steer_rise * pace, 0.0001)
+	var fall := 1.0 / maxf(steer_fall * pace, 0.0001)
+	var time := delta
+	if not is_zero_approx(_steer) and (
+			signf(wanted) != signf(_steer) or absf(wanted) < absf(_steer)):
+		var back_to := wanted if signf(wanted) == signf(_steer) else 0.0
+		var needed := absf(_steer - back_to) / fall
+		if needed >= time:
+			_steer = move_toward(_steer, back_to, fall * time)
+			return
+		_steer = back_to
+		time -= needed
+	_steer = move_toward(_steer, wanted, rise * time)
 
 
 ## Rotate the car. Steering has no effect when stopped and inverts in
