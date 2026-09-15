@@ -21,7 +21,12 @@ const SAVE_PATH := "user://times.cfg"
 ##
 ## Two: the cars were retuned from 25 m/s to 30, so every time set before it
 ## was set by a slower car and none of them stand.
-const GEOMETRY := 2
+##
+## Three: a car keeps its speed in the air and steers less there, eases its
+## steering in, is thrown back off barriers, and only counts on the road with
+## every checkpoint banked - so a time set before could have been set across
+## the grass from a jump hole, and none of them stand.
+const GEOMETRY := 3
 
 ## Emitted when a time is beaten, so a screen showing one can follow it.
 signal beaten(track: String, seconds: float)

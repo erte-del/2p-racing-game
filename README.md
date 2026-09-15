@@ -1896,8 +1896,9 @@ track. Edit a corner on track seven and every time set on the old track seven
 stops meaning anything: it was a different road. Those records are dropped the
 first moment anything asks for them, rather than standing as walls nobody can
 get over because nobody ever drove them. `GEOMETRY` is bumped by hand for the
-same reason when something outside the track files changes the road they are
-all built from - the sampling step, the size of a jump, what a pad is worth.
+same reason when something outside the track files changes what a lap of them
+is worth - the sampling step, the size of a jump, what a pad is worth, how the
+car handles, or what it takes to finish.
 
 A section per track rather than one section of many keys, so what a track has
 to its name can grow - when the time was set, how many runs it took - without
