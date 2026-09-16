@@ -18,12 +18,26 @@ extends SceneTree
 # edge and holds the shell clear of the surface the car is plainly driving on -
 # over a metre of it at the lip of a ramp - and the car sinks the shell back
 # down by as much. This reads what is left.
+#
+# And it reads the wheels apart from the body, because they are posed apart
+# from it: they are held where a body sitting square on the road would carry
+# them, so that they stay down through a lean the body takes on its springs.
+# Square on the road has to include the sink - a wheel that skips it stands a
+# metre over the ramp while the body it belongs to is down on it - and nothing
+# read off the body can tell whether it did.
 
 const RUN_UP := 24.0
 ## The most daylight there may be under the shell, in metres, and the furthest
 ## it may be buried in the road. A ramp that steepens under a rigid shell puts
 ## a centimetre or two either way whatever is done, so neither is zero.
 const CLEARANCE := 0.1
+## The same for a wheel, measured against the road under that wheel. Looser
+## than the body's, which is read at the middle of the car where a rigid shell
+## on a curving ramp is closest to right: the wheels are read at the ends of
+## it, where a ramp that is still steepening leaves one axle a little proud,
+## and at a lip the front pair are out over the hole while the shell holds
+## where it was.
+const WHEEL_CLEARANCE := 0.3
 ## Further under the shell than this, in metres, and what the ray found is not
 ## the road the car is on. The box is 4.87 m long and tips no further than 32
 ## degrees, so it can hold its middle 1.5 m clear at the very most; a reading
@@ -88,6 +102,9 @@ func _init() -> void:
 	var highest := 0.0
 	var deepest := 0.0
 	var lifted := 0.0
+	# And the worst any one wheel sat off the road under it, and in it.
+	var wheels_highest := 0.0
+	var wheels_deepest := 0.0
 	var over_the_hole := 0
 	var on_the_road := 0
 	for i in 300:
@@ -109,6 +126,7 @@ func _init() -> void:
 			up = maxf(up, pitch)
 			down = minf(down, pitch)
 		var clear := _clearance(car)
+		var wheels := _wheel_clearance(car)
 		if where != "in the air":
 			lifted = maxf(lifted, car._sink)
 			if clear > NO_ROAD:
@@ -117,6 +135,20 @@ func _init() -> void:
 				on_the_road += 1
 				highest = maxf(highest, clear)
 				deepest = minf(deepest, clear)
+				# A wheel out over the hole reads the landing the same way the
+				# body does, so those steps are left out of the wheels too.
+				#
+				# So is the step the car lands on. The shell comes down still
+				# carrying the pitch of the flight and eases out of it over the
+				# next few steps, which puts the nose in the road and the tail
+				# in the air at both ends of a car this long. That is the pitch
+				# easing, which is deliberate, and it moves the body and the
+				# wheels alike; reading it here would only be this check
+				# complaining about a different part of the game.
+				if where != "landed" and absf(wheels.x) < NO_ROAD \
+						and absf(wheels.y) < NO_ROAD:
+					wheels_highest = maxf(wheels_highest, wheels.x)
+					wheels_deepest = minf(wheels_deepest, wheels.y)
 		if i % 8 == 0 or where == "landed":
 			print("%3d  y %5.2f  pitch %+6.1f deg  sunk %4.2f m  clear %+5.2f m   %s"
 				% [i, car.global_position.y, pitch, car._sink, clear, where])
@@ -150,6 +182,14 @@ func _init() -> void:
 	if deepest < -CLEARANCE:
 		print("  the shell is buried in the road it is standing on")
 		faults += 1
+	print("the wheels were %+.2f m off the road at worst and %+.2f m into it"
+		% [wheels_highest, wheels_deepest])
+	if wheels_highest > WHEEL_CLEARANCE:
+		print("  a wheel hangs off the road the car is standing on")
+		faults += 1
+	if wheels_deepest < -WHEEL_CLEARANCE:
+		print("  a wheel is buried in the road the car is standing on")
+		faults += 1
 	faults += await _over_a_hill(main, track, car)
 	print("%d faults" % faults)
 	quit(1 if faults > 0 else 0)
@@ -170,6 +210,35 @@ func _clearance(car: Car) -> float:
 	if hit.is_empty():
 		return 0.0
 	return shell.global_position.y - (hit["position"] as Vector3).y
+
+
+## The worst any one wheel sits above the road beneath it, and the worst it
+## sits in it, in metres - as [highest, deepest].
+##
+## Each wheel is read against the road under that wheel rather than under the
+## middle of the car: on a ramp those are different heights, and the question
+## is whether that wheel is on the road it is over.
+func _wheel_clearance(car: Car) -> Vector2:
+	var highest := -INF
+	var deepest := INF
+	var shell: Node3D = car.get_node(^"Body")
+	for name in CarShell.FRONT_WHEELS + CarShell.REAR_WHEELS:
+		var wheel := shell.find_child(name, true, false) as Node3D
+		if wheel == null:
+			continue
+		var bottom := wheel.global_position - Vector3.UP * car.wheel_radius
+		var from := wheel.global_position + Vector3.UP * 2.0
+		var query := PhysicsRayQueryParameters3D.create(
+			from, from + Vector3.DOWN * 8.0, car.collision_mask, [car.get_rid()])
+		var hit := car.get_world_3d().direct_space_state.intersect_ray(query)
+		if hit.is_empty():
+			continue
+		var clear := bottom.y - (hit["position"] as Vector3).y
+		highest = maxf(highest, clear)
+		deepest = minf(deepest, clear)
+	if is_inf(highest):
+		return Vector2.ZERO
+	return Vector2(highest, deepest)
 
 
 ## And the case a jump does not cover: a plain climb, which is a gentle grade

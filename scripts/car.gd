@@ -501,7 +501,7 @@ func reset_motion() -> void:
 	_last_ground_speed = 0.0
 	_wheel_speed = 0.0
 	if _shell != null:
-		_shell.pose(0.0, 0.0, 0.0, 0.0)
+		_shell.pose(0.0, 0.0, 0.0, 0.0, 0.0)
 	velocity = Vector3.ZERO
 
 
@@ -1005,9 +1005,10 @@ func _lean(delta: float) -> void:
 	_drop = drop.x
 	_drop_rate = drop.y
 	# The sink is not a lean and does not ride on the springs: it is the shell
-	# being put down on the road the box has lifted it off. It is added to the
-	# spring's drop at the last moment, so nothing about the lean has to know.
-	_shell.pose(_pitch, _dive, _roll, _drop - _sink)
+	# being put down on the road the box has lifted it off. It goes to the
+	# shell on its own rather than folded into the spring's drop, because the
+	# wheels have to come down with it and they do not come down with the drop.
+	_shell.pose(_pitch, _dive, _roll, _drop, _sink)
 
 
 ## One step of a damped spring pulling `value` towards `target`, with the target

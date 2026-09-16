@@ -1578,6 +1578,23 @@ behind it, where there is no road under the shell to be off: the shell holds
 where it was until the car is either back over road or off the ground, which at
 a lip is the next thing that happens anyway.
 
+And it reads the four wheels apart from the body, each against the road under
+that wheel, because they are posed apart from it (see Body motion). Over the
+same run the worst any wheel managed was 0.24 m of daylight and 0.18 m of road
+- at the lip, where the front pair are out over the hole and the shell is
+holding where it was. The body is read at the middle of the car, which is where
+a rigid shell on a curving ramp is closest to right, and the wheels at the ends
+of it, where a ramp that is still steepening leaves one axle slightly proud, so
+the wheels are allowed 0.3 m against the body's 0.1. Leave the sink out of
+where the wheels are put and the same run reads 1.19 m of daylight, which is
+the whole lift and was what the wheels did.
+
+The step the car lands on is left out of the wheel reading. The shell comes
+down still carrying the pitch of the flight and eases out of it over the next
+few steps, which at 24 degrees on a car this long puts the nose in the road and
+the tail in the air. That is the pitch easing doing what it is meant to, and it
+moves the body and the wheels alike.
+
 Metres say the sums are right and not what a player sees, so
 `tools/checks/ramp_shot.gd` stands a car four fifths of the way up a ramp - the
 steep end, where the lift is worst - and photographs it twice from the side:
@@ -1627,8 +1644,20 @@ dead.
 The wheels do not lean. They are on the road rather than on the springs, so each
 one is put where the body sitting square would carry it, and a car rolling
 through a corner keeps all four on the road instead of lifting one and burying
-another. The driver's eye goes where the body takes it but keeps only `eye_roll`
-of its roll, which is none, for the reason Views gives.
+another.
+
+Square there means square *on the road*, which is the one thing the sink above
+is not allowed to be left out of. The sink is not the body moving over its
+wheels, it is the whole car being lowered onto a road the collision box is
+propped up off, so the wheels come down with it. They used not to: the shell was
+posed with the sink folded into the spring's drop, the wheels were held at the
+un-sunk height, and on a ramp - where the sink is over a metre, most of a car's
+height - the body dropped onto the road and left its wheels standing in the air
+above the roof. The car now hands the shell the sink and the drop separately,
+and the wheels follow the one and not the other.
+
+The driver's eye goes where the body takes it but keeps only `eye_roll` of its
+roll, which is none, for the reason Views gives.
 
 Traced on the tuned numbers: taking a corner at 25.9 m/s rolls the body 3.2
 degrees; braking at the full 24 m/s² puts the nose down 2.6 degrees, one small

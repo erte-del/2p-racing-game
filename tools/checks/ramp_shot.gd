@@ -81,8 +81,8 @@ func _init() -> void:
 		# thing that can differ between the pictures is the sink.
 		car.frozen = true
 		for shot in [["01_off_the_ramp", 0.0], ["02_on_the_ramp", car._sink]]:
-			car._shell.pose(car._pitch, car._dive, car._roll,
-				car._drop - (shot[1] as float))
+			car._shell.pose(car._pitch, car._dive, car._roll, car._drop,
+				shot[1] as float)
 			for i in 4:
 				await process_frame
 			root.get_texture().get_image().save_png("%s/%s.png" % [out, shot[0]])

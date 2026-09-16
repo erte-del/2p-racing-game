@@ -16,7 +16,10 @@ extends Node3D
 ## shell with both, so the shell leans into a climb and out of a corner while
 ## the collision box it hangs off stays upright. The wheels are the exception:
 ## they are on the road rather than on the springs, so they are held where the
-## body would carry them sitting square.
+## body would carry them sitting square. Square means square on the road,
+## though, not square in the air: the sink that puts the shell back down on a
+## road the collision box is holding it off moves the whole car, wheels and
+## all, so that one the wheels do follow.
 ##
 ## Everything below is written to work on a model that has none of what the
 ## car that shipped with the game has. A model with no wheels simply has no
@@ -107,9 +110,11 @@ var _rear_wheels: Array[Node3D] = []
 # rotations, and so a wheel can be put where a square body would carry it
 # however the body is leaning.
 var _wheel_home: Array[Transform3D] = []
-## The road pitch and the roll the shell was last posed with. The road pitch is
-## what the wheels follow; the roll is what the driver's eye mostly leaves out.
+## The road pitch, the sink and the roll the shell was last posed with. The
+## road pitch and the sink are what the wheels follow; the roll is what the
+## driver's eye mostly leaves out.
 var _road_pitch := 0.0
+var _sink := 0.0
 var _roll := 0.0
 
 ## Visual-only wheel state.
@@ -176,16 +181,25 @@ func eye_transform() -> Transform3D:
 	return Transform3D(global_transform.basis * level, global_transform * eye_point)
 
 
-## Pose the shell: tipped by the road, and leaned and sunk on its springs on
-## top of that. Roll and pitch are in radians, the drop in metres, down
-## negative. The road pitch is remembered apart from the lean because the
-## wheels follow the one and not the other.
-func pose(road_pitch: float, dive: float, roll: float, drop: float) -> void:
+## Pose the shell: tipped by the road, put down on it by `sink`, and leaned and
+## dropped on its springs on top of that. Roll and pitch are in radians, the
+## drop and the sink in metres - the drop down negative, the sink a distance to
+## come down by.
+##
+## The road pitch and the sink are remembered apart from the lean because the
+## wheels follow those two and not the rest: the lean and the drop are the body
+## moving on its springs above wheels that stay on the road, while the sink is
+## the whole car being lowered onto a road its collision box is propped up off.
+## The sink is asked for rather than defaulted, because a caller that forgot it
+## is the bug this signature was split to stop.
+func pose(road_pitch: float, dive: float, roll: float, drop: float,
+		sink: float) -> void:
 	_road_pitch = road_pitch
+	_sink = sink
 	_roll = roll
 	transform = Transform3D(
 		Basis.from_euler(Vector3(road_pitch + dive, 0.0, roll)),
-		Vector3(0.0, drop, 0.0))
+		Vector3(0.0, drop - sink, 0.0))
 
 
 ## Switch the headlights on, off, or part way. 0 is off, 1 is full night.
@@ -498,10 +512,14 @@ func _set_wheel(wheel: Node3D, home: Transform3D, steer_angle: float) -> void:
 
 
 ## Where the shell's own space would be in the world with the body sitting
-## square: tipped by the road and by nothing else.
+## square: tipped by the road and lowered onto it, and moved by nothing else.
+## The sink is in because it is the car meeting the road rather than the body
+## moving over its wheels - leave it out and the wheels hang in the air the
+## shell has just been dropped out of, which on a ramp is a metre of it.
 func _square() -> Transform3D:
 	var road := Transform3D(
-		Basis.from_euler(Vector3(_road_pitch, 0.0, 0.0)), Vector3.ZERO)
+		Basis.from_euler(Vector3(_road_pitch, 0.0, 0.0)),
+		Vector3(0.0, -_sink, 0.0))
 	var car := get_parent_node_3d()
 	return car.global_transform * road if car != null else road
 
