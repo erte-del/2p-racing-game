@@ -803,6 +803,9 @@ Held hard over through the whole of a tuned jump it turns 32 degrees rather than
 the 134 it used to, which is enough to straighten up for the landing it is
 already heading at and not enough to pick a different one - a car that turned
 as well in the air as on the ground would take a jump as just another corner.
+What that turning moves is the nose; where the car is flying is settled the
+moment it leaves the lip, and the two are put back together on the landing (see
+Grip).
 
 The steering is eased rather than set. A key is either down or up, and a car
 that snapped to full lock the instant one went down twitched rather than turned
@@ -830,6 +833,68 @@ half over is reached in 0.067 s. At 3 m/s full lock takes a single step,
 0.017 s. The bot drivers turn the car directly rather than through the keys, so
 none of their laps moved. What the easing costs a dodge between barriers is
 under Barriers.
+
+## Grip
+
+A car does not go quite where it is pointing. Steering turns the nose at once,
+the way it always did; what the car is *doing* is the direction it was already
+going, dragged round after it. The gap between the two is the slip angle, and
+`grip` (12 per second) is how fast it closes. That is the whole of the model:
+the car's velocity is its heading turned back by however far the travel is
+still lagging it.
+
+A car holding a corner settles at its turn rate divided by grip. At top speed
+through the 16 m circle that is 1.875 / 12, or **9 degrees of slide**, about
+half a second after the key goes down. Set grip high enough and the gap closes
+inside a single step, which is the car exactly as it drove before any of this
+existed - that is a test the check runs, not a figure of speech.
+
+The step is written out as the exact answer to *the nose turned this far and
+grip is pulling the travel after it* over the whole step, rather than as a turn
+added and a decay applied one after the other. Done the second way the settled
+slide comes out at 8.1 degrees instead of 9.0, and would move again if the
+physics rate ever did; the settled slide is meant to be one number.
+
+**The corner is still the same corner.** Once the slide has settled the nose
+and the travel turn at the same rate, so the circle a car actually holds is
+still `turn_radius_at()` - 16.09 m measured, against the 16.00 m the track
+planner lays its corners out to. Nothing about the planner, the fork or the
+barrier radii had to move for this. What grip costs is the entry and the exit,
+where the car is still gathering the angle up or giving it back, and that is
+counted under Barriers.
+
+**In the air there is none.** Grip is the tyres biting and a car in the air has
+nothing under its, so whatever angle it left the ground at it keeps until it
+lands: it flies where it was thrown. Air steering still turns the nose, and all
+that decides is which way the car will be pointing when the grip catches it on
+the landing. Off a tuned ramp the nose comes round 31.3 degrees over 74 steps
+of flight while the way the car is flying does not move at all, and the slide
+it lands with is worked off 0.30 s later. The flight is a straight line either
+way, so every number under Jumps is the number it was.
+
+**Only steering slides a car.** The angle is taken from the turn the steering
+applied rather than from the yaw the body ended the step at, so everything else
+that turns a car - one put on the grid, one put back on the course at a
+checkpoint, a bot driver aiming its own body - is picking the car up and
+pointing it somewhere else, not sliding it. That is also why no bot lap moved:
+like the steering easing, the drivers never see it.
+
+`max_drift` (45 degrees) is where the model stops rather than something to
+tune. Past it a car is not sliding, it is spinning, and a single signed speed
+along the car's own heading stops describing anything. Ordinary driving never
+comes near it; the most a tuned car holds is about 9 degrees.
+
+Chaos does not roll grip. It already rolls the turning circle, and a car rolled
+both loose *and* wide would be one no corner on the course could be taken in.
+
+`tools/checks/grip_trace.gd` reads all of it - the settled slide, the corner
+that slide is held through, a very high grip against the car as it was, what a
+dodge costs, and then a real ramp for the half a car with no floor cannot be
+asked:
+
+```
+Godot --path . --headless --script tools/checks/grip_trace.gd
+```
 
 ## Race loop
 
@@ -1182,6 +1247,17 @@ speed × (steer_rise + steer_fall) / 2 more road than instant lock does: 2.9 to
 the margin for seeing and deciding across a 2 m shift, 3.8 m across 4 m and
 7.4 m across 8 m; on a boost at 46.5 m/s a 2 m shift is 1.0 m short.
 
+Sideways grip (see Grip) takes a little more again, and for the same kind of
+reason: the car has to gather an angle up before the path starts moving, and
+give it back before the path stops. Stepped through the car's own steering
+against the same car with the slide taken out of it, a dodge that ends with the
+car *travelling* square - not merely pointing square, which a sliding car does
+while still crossing the road - costs 2.6 to 3.5 m more at the tuned 30 m/s,
+3.5 to 5.9 m at a chaos-fast 51 m/s, and 5.6 to 7.8 m at 79 m/s. Neither cost
+has been designed out, and the spacing has not been changed for either; the
+numbers are here so that a course that stops being driveable is a known figure
+rather than a surprise.
+
 At the fast end of what chaos rolls it does not fit, and did not fit well
 before either. `dodge_radius` stays at the tuned car's 16 m while a chaos-fast
 car turns no tighter than 21.6 m, or 23.8 m on its widest roll, so at 51 m/s an
@@ -1358,6 +1434,11 @@ used to land at 21.5 m/s, 31.0 m on; it now lands at the 28.9 it left with,
 35.6 m on, whether the throttle, the brake or nothing at all is held. Held on
 the brake it used to come down 17.1 m on and rolling backwards - short of a
 17.5 m hole. Chaos leaves `air_steer` alone.
+
+It has nothing to grip with either, so the way it is flying is whatever it was
+doing as it left the lip and does not move again until it is down (see Grip).
+That is what keeps every flight here a straight line, and every distance on
+this page the distance it always was, with the steering held over or not.
 
 `tools/checks/jump_flight.gd` drives a car off a real ramp at every corner of
 what chaos can roll - speed from 0.78 to 1.7 of tuned, gravity from 0.65 to

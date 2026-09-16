@@ -59,6 +59,29 @@ const ROAD_GROUP := &"road"
 ## keys the way it always did.
 @export var steer_rise := 0.12
 @export var steer_fall := 0.06
+## How quickly the way a car is travelling is pulled back to the way it is
+## pointing, in 1/s. Steering turns the car's nose at once, the way it always
+## did; what the car is doing is the direction it was already going, dragged
+## round after it. The gap between the two is the slip angle, and this is how
+## fast the tyres close it.
+##
+## Held rather than a force, so it is one number with one meaning: a car
+## holding a corner settles at its turn rate divided by this, which at top
+## speed through the 16 m circle is 1.875 / 12, or 9 degrees of slide. High
+## enough and the gap closes inside a step, which is exactly how the car drove
+## before this existed.
+##
+## What it deliberately does not change is the corner itself. Once the slip
+## has settled the nose and the travel are turning at the same rate, so the
+## circle a car holds is still turn_radius_at() and the track planner's radii
+## still mean what they say. What it costs is the entry and the exit, where
+## the car is still gathering the angle up or giving it back.
+@export var grip := 12.0
+## The most the travel may lag the heading, in degrees. Past this a car is no
+## longer sliding, it is spinning, and a single signed speed along the heading
+## stops describing anything. Ordinary driving never comes near it: the
+## tightest a tuned car can hold is about 9 degrees.
+@export var max_drift := 45.0
 @export var gravity := 24.0            ## m/s^2, tuned for arcade feel
 ## How much of the climb a car was making when it ran out of road it carries
 ## into the air. One is what the ramp actually gave it; anything less reads as
@@ -246,6 +269,14 @@ var _speed := 0.0
 ## towards what the keys ask for. It is the one steering state the car has: it
 ## is what turns the car, and what turns the wheels.
 var _steer := 0.0
+## How far the way the car is travelling lags the way it is pointing, in
+## radians, as a rotation about up applied to the heading. Steering adds to it
+## - the nose turns, the travel does not - and grip takes it away again. It is
+## the one thing standing between the heading and where the car actually goes.
+var _drift := 0.0
+## How far the steering turned the nose on this step, in radians, waiting for
+## the travel to be asked to catch up with it.
+var _turned := 0.0
 ## Current slipstream strength, 0 to 1, smoothed.
 var _slipstream := 0.0
 ## Extra top speed from the last boost pad, as a fraction, and the seconds it
@@ -408,8 +439,11 @@ func _physics_process(delta: float) -> void:
 	if is_on_floor():
 		_apply_throttle(throttle, delta)
 		_apply_steering(_steer, delta)
+		_slide(grip, delta)
 	else:
 		_apply_steering(_steer * air_steer, delta)
+		# No grip at all: the nose turns and the travel does not.
+		_slide(0.0, delta)
 	_drive(delta)
 	_tilt(delta)
 	_lean(delta)
@@ -421,6 +455,8 @@ func _physics_process(delta: float) -> void:
 func reset_motion() -> void:
 	_speed = 0.0
 	_steer = 0.0
+	_drift = 0.0
+	_turned = 0.0
 	_slipstream = 0.0
 	_boost = 0.0
 	_boost_hold = 0.0
@@ -598,7 +634,46 @@ func _apply_steering(steer: float, delta: float) -> void:
 	if is_zero_approx(steer) or is_zero_approx(_speed):
 		return
 	var speed := absf(_speed)
-	rotate_y(steer * (speed / turn_radius_at(_speed)) * signf(_speed) * delta)
+	var turn := steer * (speed / turn_radius_at(_speed)) * signf(_speed) * delta
+	rotate_y(turn)
+	# Handed to _slide, which is what the travel has to catch up with. Taken
+	# here rather than from the yaw the body ended the step at, because only
+	# steering slides a car: everything else that turns one - a car put on the
+	# grid, or back on the course at a checkpoint, or a bot driver aiming its
+	# own body - is picking the car up and pointing it somewhere else, not
+	# sliding it.
+	_turned += turn
+
+
+## Put this step's steering into the slip angle and let grip work it off.
+##
+## The nose has turned and the travel has not, so the whole of the turn is owed
+## to the slip angle; grip closes it at a rate of its own. Written out as the
+## exact answer to that pair over the step rather than as a turn added and a
+## decay applied one after the other, because the order and the length of the
+## step would then both show up in the slide a car settles at, and the settled
+## slide is meant to be one number - the turn rate over grip - whatever rate
+## the physics happens to be running at.
+##
+## How much grip there is, is asked of it rather than worked out here, for the
+## reason the throttle and the steering are: it is _physics_process that knows
+## whether there is road under the car, and a check driving a car with no floor
+## at all gets the car's own sums either way. Nothing but a car in the air is
+## ever given none, and none is the whole turn kept as slide - which is a car
+## flying where it was thrown. Air steering still turns the nose, and all that
+## decides is which way the car will be pointing when the grip catches it on
+## landing; the flight itself is a straight line either way, so what a ramp is
+## worth has not moved.
+func _slide(rate: float, delta: float) -> void:
+	var turn := _turned
+	_turned = 0.0
+	var limit := deg_to_rad(max_drift)
+	var fade := rate * delta
+	if fade < 0.0001:
+		_drift = clampf(_drift - turn, -limit, limit)
+		return
+	var kept := exp(-fade)
+	_drift = clampf(_drift * kept - turn * (1.0 - kept) / fade, -limit, limit)
 
 
 ## The tightest corner the car can hold at a given speed, in metres.
@@ -618,13 +693,15 @@ func turn_radius_at(speed: float) -> float:
 ## road was giving it is measured while it is still on the ground and handed
 ## to it as it goes, which is what turns a ramp into a launch.
 func _drive(delta: float) -> void:
-	var forward := -global_transform.basis.z
+	# Where the car is actually going, which is where it is pointing turned
+	# back by however far the travel is still lagging the nose.
+	var travel := (-global_transform.basis.z).rotated(Vector3.UP, _drift)
 	# A push from the other car rides on top of the car's own speed rather
 	# than changing it, and fades away.
 	_shove = _shove.move_toward(Vector3.ZERO,
 		side_push / maxf(push_fade, 0.001) * delta)
-	velocity.x = forward.x * _speed + _shove.x
-	velocity.z = forward.z * _speed + _shove.z
+	velocity.x = travel.x * _speed + _shove.x
+	velocity.z = travel.z * _speed + _shove.z
 	if _rebound > 0.0:
 		# Thrown back off a barrier just hit. Whatever of the car's own speed
 		# is still carrying it into the face is taken out of where it goes -
@@ -697,6 +774,13 @@ func _bounce_off_a_roof(falling: float) -> void:
 ## Signed speed along the car's own heading, in m/s. Positive is forwards.
 func speed() -> float:
 	return _speed
+
+
+## The slip angle: how far the way the car is travelling lags the way it is
+## pointing, in radians. Positive is travelling to the left of the nose, which
+## is what a car set into a right-hand corner is doing.
+func drift() -> float:
+	return _drift
 
 
 ## Whether the last thing the car stood on was the road, for the race to ask
