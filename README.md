@@ -2307,3 +2307,99 @@ that is not chaotic:
 ```
 Godot --path . --headless --fixed-fps 60 --script tools/checks/chaos_colour.gd
 ```
+
+## Damage
+
+A setting, off until a player turns it on, that gives each car a condition as
+well as a speed. Hitting barriers wears the car down, and a car worn down to
+nothing is finished.
+
+Off by default is the important half of that. The game has one punishment for a
+mistake and it is time: a car that hits a barrier loses speed and carries on,
+and that is what makes the endless course and the twenty tracks bearable to
+practise on. Damage is a second punishment on top, and a player who never chose
+it should never meet it. It lives in `GameSettings.damage`, saved under
+`[race] damage`, and is switched on from the settings screen, with a line under
+it saying what it does - "Damage" alone does not tell anyone that it ends runs.
+
+**What a hit costs** is worked out from the two numbers the speed a hit costs
+already uses, and nothing new:
+
+```
+cost = full_hit * head_on * (speed / max_speed)
+```
+
+`full_hit` (34) is a square hit at the car's own top speed, out of
+`max_condition` (100). Three of those is 102, so the third one breaks the car,
+and every softer hit is a fraction of one: half the speed is half the cost, and
+a scrape along a face costs next to nothing, because it is not a crash. A run
+can carry five or six clumsy moments or three bad ones.
+
+It is against the car's own `max_speed`, so a chaos car rolled fast hits no
+harder at its top speed than a tuned car does at its own - three flat-out hits
+break any car. A car on a pad is over its top speed, though, and pays for it: a
+boosted square hit costs about 53. Carrying a pad into a barrier was already the
+risk the pad is offered against, and this is that risk counted twice on
+purpose.
+
+**What counts** is what already costs speed: bodies in the `obstacle` group,
+and nothing else. The rails do not, for the reason they cost no speed - a car
+scraping down one is already being put back where it belongs. The grass does
+not, landings do not, and running into the other car does not: if ramming did
+damage, two players with the setting on would be playing a different game. The
+charge sits behind `obstacle_recovery`, so a car held against a face is charged
+once per 0.4 s rather than once a step, which would take a single mistake from
+full to broken inside a second.
+
+**A checkpoint does not mend a car.** If it did, damage would be something a
+player undoes by pressing R. Condition is kept out of `reset_motion` for that
+reason, and only `repair` puts it back - which only happens when the car is put
+back on the line, for a restart or a new course.
+
+**Breaking** stops the car where it is, in the air if that is where it was:
+dropping a car that broke over a jump into the hole under it would be a second
+thing happening that the player did nothing to earn.
+
+- **Solo**: the run is over, and sets no time, because the car never finished.
+  The panel says BROKEN, the clock where it stopped and how much of the way to
+  the flag the car got, and Enter runs again as instantly as it does after a
+  finish. The endless course does not roll on by itself afterwards the way it
+  does after a finish - a player whose run just ended should see that it did.
+- **Two players**: the broken car is out and the other one wins the course
+  without having to drive the rest of it. Breaks are settled at the top of the
+  step after the cars move, before the finish, so two cars that broke on the
+  same step are a draw rather than a win for whichever the physics moved
+  first, and a car that broke on the step it reached the line did not finish.
+
+**Nothing about how the car drives changes.** Not its grip, not its top speed,
+not its steering, however worn it is. The moment condition touched handling, a
+time set with damage on would be a time set in a different car, and
+`TrackTimes.GEOMETRY` would have to be bumped - throwing away every time
+anyone has set. The check drives the same hit with damage on and off and
+compares where the car is on every step.
+
+**Seeing it coming.** A bar under each player's clock, in their own paint, so
+on a split screen each reads their own where they already read their time. It
+is readable without being counted: once a car is down to `warning_at` (a third)
+the bar goes red and flashes white - white as well as red, because a red car's
+bar is already red - which is the only warning anyone at 30 m/s has time to
+take in, and smoke starts coming off the bonnet, thin at first and thicker the
+closer the car is to breaking. Smoke rather than dents, because it works on
+a model the game has never seen; `CarShell` places it off the model's own
+bounds. With the setting off the bar is not there at all.
+
+Like chaos, none of this reads the setting from the car. The race tells each
+car whether it can be hurt, because the title screen backdrop is a race scene
+too and nothing behind the menu is being driven.
+
+`tools/checks/damage.gd` drives a car into a wall and a rail built for the
+purpose - so every hit is exactly as square and as fast as it says - and then
+breaks cars in both race scenes:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/damage.gd
+```
+
+Headless, it ends with one leaked dummy shader at exit. That is the smoke's
+material in the dummy renderer, and it is one however many cars have smoked -
+a cache not freed on the way out, not a car's worth of anything per race.

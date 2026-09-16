@@ -113,6 +113,40 @@ toggle_mode = true
 text = "Always night"
 theme_override_font_sizes/font_size = 22
 
+[node name="Damage" type="VBoxContainer" parent="SettingsPage/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Label" type="Label" parent="SettingsPage/Panel/Margin/Box/Damage"]
+layout_mode = 2
+text = "Damage"
+
+[node name="Row" type="HBoxContainer" parent="SettingsPage/Panel/Margin/Box/Damage"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Off" type="Button" parent="SettingsPage/Panel/Margin/Box/Damage/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+button_pressed = true
+text = "Off"
+theme_override_font_sizes/font_size = 22
+
+[node name="On" type="Button" parent="SettingsPage/Panel/Margin/Box/Damage/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "On"
+theme_override_font_sizes/font_size = 22
+
+[node name="Note" type="Label" parent="SettingsPage/Panel/Margin/Box/Damage"]
+layout_mode = 2
+text = "Hitting barriers wears the car down. Three hard hits break it and end the run."
+autowrap_mode = 3
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 18
+
 [node name="Controls" type="Button" parent="SettingsPage/Panel/Margin/Box"]
 layout_mode = 2
 text = "CONTROLS"

@@ -133,6 +133,12 @@ var _bounds := AABB()
 var _paint := Color.WHITE
 var _light_level := 0.0
 
+## Smoke off the bonnet of a car that is nearly finished, and how thick it is,
+## 0 for none. Built the first time a car is hurt badly enough to need it, so
+## a race without damage never carries one.
+var _smoke: GPUParticles3D
+var _smoke_level := 0.0
+
 
 func _ready() -> void:
 	_build_headlights()
@@ -228,6 +234,110 @@ func _light_the_lamps() -> void:
 		_lamp_material.emission_energy_multiplier = lamp_glow * _light_level
 
 
+## Smoke from under the bonnet, 0 for none and 1 for as thick as it gets.
+##
+## Smoke rather than dents, because it works on a model the game has never
+## seen: denting panels needs to know where the panels are, and the whole point
+## of this node is that it does not.
+func smoke(level: float) -> void:
+	var clamped := clampf(level, 0.0, 1.0)
+	# Asked every step, and it only changes when the car is hit or repaired.
+	if clamped == _smoke_level:
+		return
+	_smoke_level = clamped
+	if _smoke == null:
+		if clamped <= 0.0:
+			return
+		_build_smoke()
+	_smoke.emitting = clamped > 0.0
+	_smoke.amount_ratio = clamped
+
+
+## Whether smoke is coming off the car, and how thick it is.
+func smoke_level() -> float:
+	return _smoke_level
+
+
+func _build_smoke() -> void:
+	var process := ParticleProcessMaterial.new()
+	process.direction = Vector3.UP
+	process.spread = 18.0
+	process.initial_velocity_min = 1.2
+	process.initial_velocity_max = 2.2
+	# Rising, not falling: warm smoke drifts up and the car drives out from
+	# under it.
+	process.gravity = Vector3(0.0, 0.6, 0.0)
+	process.damping_min = 0.8
+	process.damping_max = 1.4
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	process.emission_box_extents = Vector3(0.35, 0.05, 0.3)
+	process.scale_min = 0.6
+	process.scale_max = 1.0
+	var grow := Curve.new()
+	grow.add_point(Vector2(0.0, 0.35))
+	grow.add_point(Vector2(1.0, 1.6))
+	var grow_texture := CurveTexture.new()
+	grow_texture.curve = grow
+	process.scale_curve = grow_texture
+	var fade := Gradient.new()
+	fade.set_color(0, Color(0.32, 0.32, 0.33, 0.75))
+	fade.set_color(1, Color(0.55, 0.55, 0.56, 0.0))
+	var fade_texture := GradientTexture1D.new()
+	fade_texture.gradient = fade
+	process.color_ramp = fade_texture
+
+	var puff := StandardMaterial3D.new()
+	puff.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	puff.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	puff.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	puff.vertex_color_use_as_albedo = true
+	puff.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	# A soft round puff. A bare quad draws as a grey square, which reads as
+	# a rendering fault rather than as smoke.
+	var soft := Gradient.new()
+	soft.set_color(0, Color(1.0, 1.0, 1.0, 1.0))
+	soft.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+	var round_puff := GradientTexture2D.new()
+	round_puff.gradient = soft
+	round_puff.fill = GradientTexture2D.FILL_RADIAL
+	round_puff.fill_from = Vector2(0.5, 0.5)
+	round_puff.fill_to = Vector2(1.0, 0.5)
+	round_puff.width = 64
+	round_puff.height = 64
+	puff.albedo_texture = round_puff
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.9, 0.9)
+	quad.material = puff
+
+	_smoke = GPUParticles3D.new()
+	_smoke.name = "Smoke"
+	_smoke.amount = 40
+	_smoke.lifetime = 1.3
+	# Left behind in the world rather than carried along, so a car driving on
+	# trails its smoke instead of wearing a grey hat.
+	_smoke.local_coords = false
+	_smoke.process_material = process
+	_smoke.draw_pass_1 = quad
+	_smoke.emitting = false
+	add_child(_smoke)
+	_place_smoke()
+
+
+## Over the front of the model, a little above the top of the bonnet, measured
+## off the shape so it comes out of the front of anything.
+func _place_smoke() -> void:
+	if _smoke == null:
+		return
+	if _bounds.size.is_zero_approx():
+		_smoke.position = Vector3(0.0, 1.0, -1.6)
+		return
+	_smoke.position = Vector3(
+		_bounds.get_center().x,
+		_bounds.position.y + _bounds.size.y * 0.6,
+		# The car faces -Z, so the front of the model is the near edge of it.
+		_bounds.position.z + _bounds.size.z * 0.2)
+
+
 ## Paint the car. The material is this shell's own copy rather than the one
 ## the model shipped with, so this repaints one car and not both.
 func repaint(colour: Color) -> void:
@@ -296,6 +406,7 @@ func _take_up_the_model(stock: bool) -> void:
 	# Put on outright rather than through set_headlights, which would see the
 	# level has not changed and skip the fresh lamp material.
 	_light_the_lamps()
+	_place_smoke()
 
 
 ## Found by name rather than by path: the glTF importer decides how deeply it

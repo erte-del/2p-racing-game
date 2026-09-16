@@ -15,7 +15,9 @@ extends Node3D
 ## The clock is the whole point. It starts on GO and stops on the line, and
 ## nothing that happens in between stops it - going off the road, hitting a
 ## barrier and being put back at the last checkpoint all cost time rather than
-## ending the run, because time is already the punishment this mode has.
+## ending the run, because time is already the punishment this mode has. The
+## one exception is a player who turned damage on and wore the car out: that
+## ends the run, and sets no time, because the car never finished.
 
 ## Where BACK goes.
 @export_file("*.tscn") var menu_scene := "res://scenes/menu.tscn"
@@ -50,6 +52,7 @@ extends Node3D
 @onready var _day_night: DayNight = $DayNight
 @onready var _clock: Label = $Hud/Corner/Box/Clock
 @onready var _tally: Label = $Hud/Corner/Box/Tally
+@onready var _condition: ConditionBar = $Hud/Corner/Box/Condition/Bar
 @onready var _best_label: Label = $Hud/Best
 @onready var _countdown: Label = $Hud/Countdown
 @onready var _result: Control = $Hud/Result
@@ -99,6 +102,11 @@ func _ready() -> void:
 	_endless = _track_file.is_empty()
 	# Nothing to draft behind and nothing to be shown an arrow to.
 	_car.rival = null
+	# Told to the car rather than left for it to read, for the reason Car.damage
+	# gives. Read once, the way chaos is: a race does not change what it is
+	# being driven under halfway down the road.
+	_car.damage = GameSettings.damage
+	_condition.watch(_car)
 
 	if _endless:
 		# Chaos rolls the car and the shape of the course, so it has to be in
@@ -167,6 +175,11 @@ func _physics_process(delta: float) -> void:
 		_restart()
 		return
 	if not _running:
+		return
+	# Broken on the step before this one. The clock is stopped where the car
+	# stopped, not a step after it.
+	if _car.is_broken():
+		_break_down()
 		return
 
 	_time += delta
@@ -359,6 +372,44 @@ func _finish() -> void:
 	_badge.drop_in()
 
 
+## The car is finished, and so is the run.
+##
+## Not a reset to the last checkpoint: damage is the one thing a checkpoint
+## does not fix. Nothing is offered to the record either, since a broken car
+## never finished and there is no time to keep - but the panel says how far it
+## got, which is the one thing about the run that is still worth knowing. The
+## car is left where it broke, in the air if that is where it was.
+func _break_down() -> void:
+	_running = false
+	_car.frozen = true
+	_clock.text = RaceClock.format(_time)
+	_result_time.text = RaceClock.format(_time)
+	_result_medal.text = "BROKEN"
+	_result_medal.add_theme_color_override("font_color", _condition.warning_colour)
+	_result_note.text = "%d%% OF THE WAY" % roundi(_how_far_along() * 100.0)
+	_badge.show_medal(Medal.NONE)
+	_result.show()
+	if _endless:
+		# The endless course usually rolls on by itself after a finish. Not
+		# after this: a player whose run just ended should see that it did, and
+		# Enter is right there for the next one.
+		_hint.show()
+		return
+	_offer_the_way_on(Medal.NONE)
+
+
+## How far from the start line to the finish the car got, from 0 to 1. A car
+## that is off somewhere in the scenery is measured from the last checkpoint it
+## banked, since the nearest point on the road to it could be anywhere.
+func _how_far_along() -> float:
+	var offset := _track.offset_of(_car.global_position)
+	if not _on_course(offset):
+		offset = _respawn
+	var start := _track.start_offset()
+	var run: float = maxf(_track.finish_offset() - start, 0.001)
+	return clampf((offset - start) / run, 0.0, 1.0)
+
+
 ## Hang the medal on the top left corner of the panel.
 ##
 ## The disc sits *on* the corner rather than beside it, so the panel's own
@@ -517,6 +568,8 @@ func _place_on_the_line() -> void:
 	_car.global_position = here + Vector3.UP * grid_clearance
 	_car.look_at(_car.global_position + forward.normalized(), Vector3.UP)
 	_car.reset_motion()
+	# Back on the line is the one place a car is mended. A checkpoint is not.
+	_car.repair()
 	# Put there, not driven there, so it is drawn on the line straight away
 	# rather than sliding across the world for a frame.
 	_car.reset_physics_interpolation()

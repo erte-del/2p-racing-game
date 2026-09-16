@@ -35,6 +35,12 @@ const CONTROL_ROWS := [
 	$SettingsPage/Panel/Margin/Box/Sky/Row/Day,
 	$SettingsPage/Panel/Margin/Box/Sky/Row/Night,
 ]
+## Off first, then on, so the button a player lands on is the one the game
+## starts with.
+@onready var _damage_buttons: Array[Button] = [
+	$SettingsPage/Panel/Margin/Box/Damage/Row/Off,
+	$SettingsPage/Panel/Margin/Box/Damage/Row/On,
+]
 @onready var _controls_button: Button = $SettingsPage/Panel/Margin/Box/Controls
 @onready var _close_button: Button = $SettingsPage/Panel/Margin/Box/Close
 @onready var _controls_back: Button = $ControlsPage/Panel/Margin/Box/Back
@@ -54,6 +60,8 @@ func _ready() -> void:
 	_volume.value_changed.connect(_on_volume_changed)
 	for i in _sky_buttons.size():
 		_sky_buttons[i].pressed.connect(_on_sky_pressed.bind(i))
+	for i in _damage_buttons.size():
+		_damage_buttons[i].pressed.connect(_on_damage_pressed.bind(i == 1))
 	_controls_button.pressed.connect(_show_controls)
 	_close_button.pressed.connect(close)
 	_controls_back.pressed.connect(_show_settings)
@@ -68,6 +76,7 @@ func open() -> void:
 	_volume.set_value_no_signal(GameSettings.volume * 100.0)
 	_show_volume_value()
 	_show_sky_choice()
+	_show_damage_choice()
 	show()
 	_show_settings()
 
@@ -122,6 +131,11 @@ func _on_sky_pressed(index: int) -> void:
 	_show_sky_choice()
 
 
+func _on_damage_pressed(on: bool) -> void:
+	GameSettings.damage = on
+	_show_damage_choice()
+
+
 func _show_volume_value() -> void:
 	_volume_value.text = "%d%%" % roundi(_volume.value)
 
@@ -133,6 +147,12 @@ func _show_sky_choice() -> void:
 	for i in _sky_buttons.size():
 		_sky_buttons[i].set_pressed_no_signal(
 			_sky_values[i] == GameSettings.time_of_day)
+
+
+## The same for damage: the button left held down is the one that is true.
+func _show_damage_choice() -> void:
+	for i in _damage_buttons.size():
+		_damage_buttons[i].set_pressed_no_signal((i == 1) == GameSettings.damage)
 
 
 ## Lay out one player's half of the controls sheet: what the key does on the

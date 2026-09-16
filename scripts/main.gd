@@ -37,6 +37,9 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @onready var _places: Array[Label] = [$Hud/Top/Box/Place, $Hud/Bottom/Box/Place]
 @onready var _results: Array[Label] = [$Result/Top/Label, $Result/Bottom/Label]
 @onready var _tallies: Array[Label] = [$Progress/Top/Label, $Progress/Bottom/Label]
+@onready var _conditions: Array[ConditionBar] = [
+	$Hud/Top/Box/Condition/Bar, $Hud/Bottom/Box/Condition/Bar,
+]
 @onready var _pause: PauseMenu = $Pause
 
 ## Where leaving the race goes.
@@ -141,6 +144,12 @@ func _ready() -> void:
 	_lines1.wild = _chaos != null
 	_lines2.wild = _chaos != null
 	($Trees as Trees).wild = _chaos != null
+	# Damage the same way, and for the same reason: parked cars behind the
+	# title are not being driven, and a bar under a clock nobody can see is
+	# not something the menu should be carrying.
+	for i in _cars.size():
+		_cars[i].damage = not attract_mode and GameSettings.damage
+		_conditions[i].watch(_cars[i])
 
 	# A laid-out track if one was picked on the way in, and the endless course
 	# otherwise. Never in attract mode: the title backdrop rolls its own
@@ -241,6 +250,12 @@ func _physics_process(delta: float) -> void:
 	# for the countdown, so this sits ahead of the racing check.
 	_poll_view_toggles()
 	if not _racing:
+		return
+	# Settled before anything else, including the finish: a car that broke on
+	# the step it reached the line did not finish.
+	var broken := _broken_cars()
+	if not broken.is_empty():
+		_break_down(broken)
 		return
 	_race_time += delta
 	_show_clock(RaceClock.format(_race_time))
@@ -443,18 +458,51 @@ func _new_course(course_seed: int) -> void:
 
 
 ## Show who won and how long they took, then swap in a fresh course.
+func _finish_course(winner: int) -> void:
+	_end_course("%s WINS\n%s" % [
+		_colour_name(_cars[winner].body_color), RaceClock.format(_race_time)])
+
+
+## Which cars have broken, by index. Asked once a step, at the top of the step
+## after the cars moved, so two cars that broke on the same step are both in
+## it: neither was first, since the step they did it on is the smallest piece
+## of time the race has.
+func _broken_cars() -> Array[int]:
+	var broken: Array[int] = []
+	for i in _cars.size():
+		if _cars[i].is_broken():
+			broken.append(i)
+	return broken
+
+
+## A broken car is out, and the other one wins the course without having to
+## drive the rest of it: there is nobody left to race. Both breaking together is
+## a draw, and says so, rather than handing it to whichever car the physics
+## happened to move first.
+func _break_down(broken: Array[int]) -> void:
+	if broken.size() >= _cars.size():
+		_end_course("DRAW\nBOTH CARS BROKEN")
+		return
+	var loser := broken[0]
+	var winner := 1 - loser
+	_end_course("%s WINS\n%s BROKE DOWN" % [
+		_colour_name(_cars[winner].body_color),
+		_colour_name(_cars[loser].body_color)])
+
+
+## Stop the race, put `text` up, and swap in a fresh course once it has been
+## read.
 ##
 ## The result is held on the finished course, before the new one is built, so
 ## the players see where they ended up rather than the announcement flashing
 ## over a track they have not driven yet.
-func _finish_course(winner: int) -> void:
+func _end_course(text: String) -> void:
 	_racing = false
 	for car in _cars:
 		car.frozen = true
 		car.reset_motion()
 
-	_show_result("%s WINS\n%s" % [
-		_colour_name(_cars[winner].body_color), RaceClock.format(_race_time)])
+	_show_result(text)
 	var run := _countdown_run
 	await get_tree().create_timer(result_seconds, false).timeout
 	# A player who restarted from the pause screen rather than waiting has
@@ -604,6 +652,9 @@ func _place_on_grid() -> void:
 
 	for i in _cars.size():
 		var car := _cars[i]
+		# A fresh course, or the same one from the top, is a fresh car. Being
+		# put back at a checkpoint is not, and does not come through here.
+		car.repair()
 		car.global_position = (here
 				+ across * (side if i % 2 == 1 else -side)
 				+ Vector3.UP * grid_clearance)

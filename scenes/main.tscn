@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://scripts/trees.gd" id="7_trees"]
 [ext_resource type="Script" path="res://scripts/day_night.gd" id="8_daynight"]
 [ext_resource type="PackedScene" path="res://scenes/pause.tscn" id="10_pause"]
+[ext_resource type="Script" path="res://scripts/condition_bar.gd" id="11_condition"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
 
@@ -172,6 +173,19 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 10
 theme_override_font_sizes/font_size = 46
 
+[node name="Condition" type="MarginContainer" parent="Hud/Top/Box"]
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_bottom = 4
+
+[node name="Bar" type="Control" parent="Hud/Top/Box/Condition"]
+custom_minimum_size = Vector2(200, 14)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("11_condition")
+
 [node name="Bottom" type="MarginContainer" parent="Hud"]
 layout_mode = 2
 size_flags_vertical = 3
@@ -202,6 +216,19 @@ theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 10
 theme_override_font_sizes/font_size = 46
+
+[node name="Condition" type="MarginContainer" parent="Hud/Bottom/Box"]
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_bottom = 4
+
+[node name="Bar" type="Control" parent="Hud/Bottom/Box/Condition"]
+custom_minimum_size = Vector2(200, 14)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("11_condition")
 
 [node name="Progress" type="VBoxContainer" parent="."]
 anchors_preset = 15

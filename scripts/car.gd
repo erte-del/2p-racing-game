@@ -153,6 +153,24 @@ const ROAD_GROUP := &"road"
 @export var obstacle_bounce := 6.0
 @export var obstacle_bounce_time := 0.4
 
+@export_group("Damage")
+## What a car can take before it is finished, and what a square hit at its own
+## top speed costs of that. Every other hit is a fraction of it: scaled by how
+## square it was and by how fast the car was going as a share of max_speed, the
+## same two numbers the speed a hit costs is worked out from. Three flat-out
+## square hits is 102, so the third one breaks the car and a run can carry five
+## or six clumsy moments or three bad ones.
+##
+## Against the car's own max_speed rather than a fixed one, so a chaos car
+## rolled fast hits no harder at its top speed than a tuned car does at its
+## own. A car over its top speed on a pad is over one, and pays for it: a
+## boosted square hit costs more than full_hit.
+@export var max_condition := 100.0
+@export var full_hit := 34.0
+## How much condition is left, as a fraction, when the car starts to show it:
+## the bar goes red and the bonnet starts to smoke.
+@export_range(0.0, 1.0) var warning_at := 0.33
+
 @export_group("Contact")
 ## Coming down on the other car's roof throws a car back up, where coming down
 ## on anything else puts it down and keeps it there. Nothing needs it; it is
@@ -273,6 +291,10 @@ var rival: Car
 ## While frozen the car ignores input and holds still, used for the pause
 ## between generated tracks.
 var frozen := false
+## Whether hits wear this car down. Told to it by whatever built the race
+## rather than read from GameSettings, because the title screen backdrop is a
+## race scene too and nothing behind the menu is being driven.
+var damage := false
 
 ## Signed speed along local -Z. Positive is forwards.
 var _speed := 0.0
@@ -296,6 +318,10 @@ var _boost := 0.0
 var _boost_hold := 0.0
 ## Seconds left before another obstacle can cost anything.
 var _hit_recovery := 0.0
+## What the car has left of max_condition. Kept out of reset_motion on purpose:
+## a car put back at a checkpoint is the same car, and if that repaired it,
+## damage would be a thing a player undoes by pressing R.
+var _condition := 100.0
 ## After hitting an obstacle: the seconds left of being thrown back off it,
 ## which way that is, flat on the ground, and how fast the throw started.
 var _rebound := 0.0
@@ -359,6 +385,7 @@ var _steer_right: StringName
 
 func _ready() -> void:
 	_shell = $Body
+	_condition = max_condition
 	# Read off the box rather than written down, so a box that is ever resized
 	# takes the sink that goes with it along.
 	var box := ($Collision as CollisionShape3D).shape as BoxShape3D
@@ -441,7 +468,10 @@ func _physics_process(delta: float) -> void:
 	# drives itself into the ground.
 	rotation.x = 0.0
 	rotation.z = 0.0
-	if frozen:
+	# A broken car stops where it broke, in the air as well: dropping one that
+	# broke over a jump through the hole under it would be a second thing
+	# happening to it that the player did nothing to earn.
+	if frozen or is_broken():
 		velocity = Vector3.ZERO
 		return
 
@@ -466,6 +496,7 @@ func _physics_process(delta: float) -> void:
 		# No grip at all: the nose turns and the travel does not.
 		_slide(0.0, delta)
 	_drive(delta)
+	_shell.smoke(_smoke_level())
 	_tilt(delta)
 	_lean(delta)
 	_roll_wheels(delta)
@@ -503,6 +534,38 @@ func reset_motion() -> void:
 	if _shell != null:
 		_shell.pose(0.0, 0.0, 0.0, 0.0, 0.0)
 	velocity = Vector3.ZERO
+
+
+## Put the car back to full condition. Only a fresh start does this - the car
+## back on the line, or a new course - never a checkpoint.
+func repair() -> void:
+	_condition = max_condition
+	if _shell != null:
+		_shell.smoke(0.0)
+
+
+## How much condition the car has left, from 1 for untouched to 0 for broken.
+func condition() -> float:
+	return clampf(_condition / maxf(max_condition, 0.001), 0.0, 1.0)
+
+
+## Whether the car has been worn down to nothing. Only ever true with damage
+## on, since nothing else takes condition away.
+func is_broken() -> bool:
+	return _condition <= 0.0
+
+
+## Whether the car is far enough gone to warn about.
+func is_failing() -> bool:
+	return damage and condition() <= warning_at
+
+
+## How thick the smoke off the bonnet is: none until the warning, thin there,
+## and thickening all the way down to broken.
+func _smoke_level() -> float:
+	if not is_failing():
+		return 0.0
+	return lerpf(0.25, 1.0, 1.0 - condition() / maxf(warning_at, 0.001))
 
 
 ## How much top speed the car currently has, including any slipstream and any
@@ -874,6 +937,12 @@ func _take_the_hits() -> void:
 		# driving straight at one has its heading directly opposed to it.
 		var forward := -global_transform.basis.z
 		var head_on := clampf(-forward.dot(collision.get_normal()), 0.0, 1.0)
+		# Charged on the speed the car hit with, before the hit takes it away,
+		# and behind the same recovery gate: one hit, one charge, however many
+		# frames the car spends touching the face.
+		if damage:
+			_condition = maxf(_condition
+				- full_hit * head_on * maxf(_speed, 0.0) / maxf(max_speed, 0.001), 0.0)
 		_speed *= 1.0 - obstacle_scrub * head_on
 		_hit_recovery = obstacle_recovery
 		# And thrown back off the face, for the reason obstacle_bounce gives,

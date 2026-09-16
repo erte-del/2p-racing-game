@@ -60,6 +60,17 @@ var chaos := false:
 		chaos = value
 		changed.emit()
 
+## Whether hits wear the cars down until they break. Off until a player asks
+## for it: the game has one punishment for a mistake and it is time, and a
+## player who never chose a second one should never meet it. What it actually
+## does lives in `Car` - this is only the choice.
+var damage := false:
+	set(value):
+		if value == damage:
+			return
+		damage = value
+		changed.emit()
+
 ## The laid-out track a race is about to be run on, or an empty string for
 ## the endless course. Not written to disk: it is what was picked on the way
 ## into this race rather than a preference, and a game that opened straight
@@ -161,6 +172,7 @@ func save_settings() -> void:
 	file.set_value("audio", "volume", volume)
 	file.set_value("world", "time_of_day", time_of_day)
 	file.set_value("race", "chaos", chaos)
+	file.set_value("race", "damage", damage)
 	file.set_value("race", "solo", solo)
 	for i in car_colours.size():
 		file.set_value("cars", "colour_%d" % (i + 1), car_colours[i])
@@ -176,6 +188,7 @@ func load_settings() -> void:
 	volume = float(file.get_value("audio", "volume", volume))
 	time_of_day = int(file.get_value("world", "time_of_day", time_of_day))
 	chaos = bool(file.get_value("race", "chaos", chaos))
+	damage = bool(file.get_value("race", "damage", damage))
 	solo = bool(file.get_value("race", "solo", solo))
 	for i in car_colours.size():
 		# Checked rather than trusted: this file is on the player's disk, and
