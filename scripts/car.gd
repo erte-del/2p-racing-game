@@ -206,6 +206,17 @@ const ROAD_GROUP := &"road"
 ## How far it may tip, in degrees, and how quickly it follows. The limit is
 ## there for the odd bad surface normal - a car reading one triangle of a kerb
 ## should not stand on its nose.
+##
+## Tipping it is only half of standing it on a ramp, and both of these do the
+## other half as well. The box does not tip, so on a slope it rests on one
+## bottom edge - the nose going up a ramp, the tail coming down one - and the
+## point the shell turns about, the middle of that bottom face, is held clear
+## of the road by however far the slope has fallen away underneath it: over a
+## metre at the lip of a tuned ramp. So the shell is sunk back down onto the
+## road by as much as the box has lifted it, which _sink_to_the_road works out.
+## The limit is what says how far that can possibly be, since a box this long
+## cannot hold its middle any higher than tipping it this far would, and the
+## ease is what it comes back up at when the car leaves the ground.
 @export var max_pitch := 32.0
 @export var pitch_ease := 9.0
 ## On top of the road, the body leans with what the car is doing: out of a
@@ -316,6 +327,11 @@ var _off_road := false
 var _shell: CarShell
 ## How far the road tips the shell, in radians, nose up positive.
 var _pitch := 0.0
+## How far the shell is sunk to meet the road the box has lifted it off, in
+## metres, and how far the box can lift it: half the box's length, which is how
+## far its nose and tail reach from the point the shell turns about.
+var _sink := 0.0
+var _box_reach := 0.0
 ## How far the body leans on its springs on top of that - roll in radians,
 ## right side up positive; pitch in radians, nose up positive; and how far it
 ## has sunk, in metres, down negative - each with how fast it is moving.
@@ -343,6 +359,11 @@ var _steer_right: StringName
 
 func _ready() -> void:
 	_shell = $Body
+	# Read off the box rather than written down, so a box that is ever resized
+	# takes the sink that goes with it along.
+	var box := ($Collision as CollisionShape3D).shape as BoxShape3D
+	if box != null:
+		_box_reach = box.size.z * 0.5
 
 	_accelerate = StringName(input_prefix + "_accelerate")
 	_brake = StringName(input_prefix + "_brake")
@@ -468,6 +489,7 @@ func reset_motion() -> void:
 	_shove = Vector3.ZERO
 	_off_road = false
 	_pitch = 0.0
+	_sink = 0.0
 	_roll = 0.0
 	_roll_rate = 0.0
 	_dive = 0.0
@@ -895,6 +917,49 @@ func _tilt(delta: float) -> void:
 	var limit := deg_to_rad(max_pitch)
 	target = clampf(target, -limit, limit)
 	_pitch = lerpf(_pitch, target, 1.0 - exp(-pitch_ease * delta))
+	_sink_to_the_road(delta)
+
+
+## Sink the shell onto the road the box is holding it off, and let it back up
+## again once the car leaves the ground.
+##
+## Measured straight down from the middle of the car rather than worked out
+## from the slope, because the slope only gives the right answer where the road
+## is flat under the whole car. A ramp that steepens the whole way up is
+## already not, and a crest with the car astride it is the case that would
+## bury the shell: the road under the middle is right there under the wheels
+## while the surface the box is resting on reads as a slope.
+##
+## Not eased, either, unlike the pitch. The pitch is eased because what the car
+## is standing on changes in steps - one triangle's normal to the next, and all
+## at once on landing - but the height of the road under the middle of the car
+## does not. It is one surface and the car is driving along it, and easing it
+## only ever puts the shell where the road was a moment ago, which on the way
+## up a ramp is a shell still hanging off it.
+func _sink_to_the_road(delta: float) -> void:
+	if not is_on_floor():
+		# Nothing to sit on. Eased back up rather than dropped, at the rate the
+		# tipping eases at, so a car that leaves a lip with its shell sunk onto
+		# it does not pop up off it as it goes.
+		_sink = lerpf(_sink, 0.0, 1.0 - exp(-pitch_ease * delta))
+		return
+	# A box this long cannot hold its middle further off the road than tipping
+	# it to max_pitch would lift it, so that is as far down as there is any
+	# point in looking.
+	var reach := _box_reach * tan(deg_to_rad(max_pitch))
+	var from := global_position + Vector3.UP * 0.5
+	var query := PhysicsRayQueryParameters3D.create(
+		from, from + Vector3.DOWN * (reach + 0.5), collision_mask, [get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		# Road under the box but none under the middle of it: the car is out
+		# over the hole a jump is made of, or past the edge of a bridge, with
+		# the box still resting on what is behind it. There is nothing to
+		# measure against, so the shell stays where it is until the car is
+		# either back over road or off the ground - which at a lip is the next
+		# thing that happens anyway.
+		return
+	_sink = clampf(global_position.y - (hit["position"] as Vector3).y, 0.0, reach)
 
 
 ## Lean the body on its springs with what the car is doing, and put the road
@@ -939,7 +1004,10 @@ func _lean(delta: float) -> void:
 	_dive_rate = dive.y
 	_drop = drop.x
 	_drop_rate = drop.y
-	_shell.pose(_pitch, _dive, _roll, _drop)
+	# The sink is not a lean and does not ride on the springs: it is the shell
+	# being put down on the road the box has lifted it off. It is added to the
+	# spring's drop at the last moment, so nothing about the lean has to know.
+	_shell.pose(_pitch, _dive, _roll, _drop - _sink)
 
 
 ## One step of a damped spring pulling `value` towards `target`, with the target

@@ -1525,6 +1525,38 @@ part of its speed into the floor and quietly runs slow. The body is now levelled
 every physics step, which is also what makes the jump numbers above right; they
 were measured before against a car that had been leaning the whole way.
 
+Tipping the shell turned out to be only half of standing it on a ramp. The box
+does not tip, so on any slope it rests on one bottom edge - the nose going up a
+ramp, the tail coming down one - and the point the shell turns about, the
+middle of that bottom face, is held clear of the road by however far the slope
+has fallen away underneath it. At the lip of a tuned ramp that is **1.17 m**: a
+car crossing it hung in the air with its wheels well off the surface it was
+plainly driving on, on every ramp, in every race the game has ever run.
+
+So the shell is sunk back down onto the road by as much as the box has lifted
+it. Sinking the shell rather than lowering the box keeps the rule the pitch
+already follows - the box is what the car drives on, and nothing about the way
+the car looks is allowed to move it.
+
+How far is measured straight down from the middle of the car rather than worked
+out from the slope, because the slope is only right where the road is flat
+under the whole car. A ramp that steepens the whole way up is already not, and a
+crest with the car astride it is the case that would bury the shell: the road
+under the middle is right there under the wheels while the surface the box is
+resting on still reads as a slope. The slope is used for one thing only -
+knowing what to believe. A box this long cannot hold its middle further off the
+road than tipping it to `max_pitch` would, so anything past 1.5 m is not the
+road but the ray having gone over an edge and found the ground below.
+
+Unlike the pitch, the sink is not eased on the way down. The pitch is eased
+because what a car is standing on changes in steps - one triangle's normal to
+the next, and all at once on landing - but the height of the road under the
+middle of the car does not: it is one surface and the car is driving along it.
+Easing it only ever put the shell where the road was a moment ago, which on the
+way up a ramp is a shell still hanging off it. Coming back up *is* eased, at
+`pitch_ease`, so a car that leaves a lip with its shell down on the ramp does
+not pop up off it as it goes.
+
 `tools/checks/tilt_trace.gd` drives a car over a jump, which has every case in
 it in order - level road, a ramp, the nose coming up off the lip, the nose
 dropping through the top of the flight, and the road again on landing - and
@@ -1536,6 +1568,30 @@ Godot --path . --headless --script tools/checks/tilt_trace.gd
 
 Level road reads 0.0 degrees, the ramp +24.1, the fall -27.9, and a 2.9 degree
 climb reads +3.4.
+
+It also reads what is left of the lift, off the shell's own node rather than
+off anything the car worked out. Over a whole run at the jump the box lifted
+the shell by up to 1.17 m, and what was left of that was 0.00 m of daylight and
+0.02 m of road, across the 83 steps that had road under the middle of the car.
+The other 5 are the car out over the hole with its box resting on the lip
+behind it, where there is no road under the shell to be off: the shell holds
+where it was until the car is either back over road or off the ground, which at
+a lip is the next thing that happens anyway.
+
+Metres say the sums are right and not what a player sees, so
+`tools/checks/ramp_shot.gd` stands a car four fifths of the way up a ramp - the
+steep end, where the lift is worst - and photographs it twice from the side:
+
+```
+Godot --path . --script tools/checks/ramp_shot.gd -- /tmp/shots
+```
+
+Both pictures are the same car on the same step in the same place, posed by
+hand with the same pitch and the same lean, and the only thing that differs is
+whether the shell was put down on the road. Standing there the box holds it
+1.11 m clear at 25.2 degrees, which is most of a car's height: in the first
+picture it hangs over the ramp with its shadow well below it, and in the second
+its wheels are on the road.
 
 What it reads is the road pitch the car works out, `Car._pitch`, not the angle
 the shell ends up at. The shell also leans on its springs now (see Body motion),
