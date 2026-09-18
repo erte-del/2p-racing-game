@@ -62,6 +62,7 @@ extends Node3D
 @onready var _result_note: Label = $Hud/Result/Centre/Panel/Margin/Box/Note
 @onready var _badge: MedalBadge = $Hud/Result/Badge
 @onready var _hint: Label = $Hud/Hint
+@onready var _lost: LostPrompt = $Hud/Lost
 @onready var _choice: Control = $Hud/Result/Centre/Panel/Margin/Box/Choice
 @onready var _again_button: Button = $Hud/Result/Centre/Panel/Margin/Box/Choice/Row/Restart
 @onready var _next_button: Button = $Hud/Result/Centre/Panel/Margin/Box/Choice/Row/Next
@@ -142,6 +143,9 @@ func _ready() -> void:
 	GameSettings.changed.connect(_apply_paint)
 	Garage.changed.connect(_apply_cars)
 	_lines.watch(_car)
+	# One player, one keyboard: solo is always driven on player one's keys,
+	# whichever they have been moved to.
+	_lost.watch(_car, _track, "p1_reset")
 	_place_on_the_line()
 	_camera.follow(_car)
 	_show_best()
@@ -155,8 +159,14 @@ func _ready() -> void:
 	_result_panel.resized.connect(_pin_the_badge)
 	_again_button.pressed.connect(_restart)
 	_next_button.pressed.connect(_on_next_track)
-	_hint.text = "%s        R  back to the last checkpoint        C  view        ESC  pause" % [
-		"ENTER  next course" if _endless else "ENTER  run again"]
+	# The keys are read out of the input map rather than typed here, for the
+	# reason the line that comes up off the road reads them: a key that moves
+	# should move everywhere it is named, or nowhere.
+	_hint.text = "%s  %s        %s  back to the last checkpoint        %s  view        ESC  pause" % [
+		Controls.key_for("restart").to_upper(),
+		"next course" if _endless else "run again",
+		Controls.key_for("p1_reset").to_upper(),
+		Controls.key_for("p1_view").to_upper()]
 	_start_after_countdown()
 
 
@@ -178,6 +188,8 @@ func _physics_process(delta: float) -> void:
 		_restart()
 		return
 	if not _running:
+		# A car held on the line, or sat on a finished run, is not lost.
+		_lost.forget()
 		return
 	# Broken on the step before this one. The clock is stopped where the car
 	# stopped, not a step after it.
@@ -196,6 +208,7 @@ func _physics_process(delta: float) -> void:
 	# Looked up once for both, because finding the nearest point on the curve
 	# is a walk along the whole of it.
 	var offset := _track.offset_of(_car.global_position)
+	_lost.check(delta, offset)
 	_bank_checkpoints(offset)
 	if _has_finished(offset):
 		_finish()
@@ -583,6 +596,8 @@ func _back_to_checkpoint() -> void:
 	_car.reset_physics_interpolation()
 	_was = _car.middle()
 	_camera.follow(_car)
+	# Asked for and given: the line has said what it had to say.
+	_lost.forget()
 
 
 ## Line the car up on the start line, facing down the course.
@@ -611,6 +626,7 @@ func _place_on_the_line() -> void:
 	for mark in _banked.size():
 		_track.show_ring(mark, false)
 	_show_tally()
+	_lost.forget()
 
 
 func _show_tally() -> void:

@@ -40,6 +40,7 @@ const ALL_LAYERS := 0xFFFFF  # Godot's 20 visual layers
 @onready var _conditions: Array[ConditionBar] = [
 	$Hud/Top/Box/Condition/Bar, $Hud/Bottom/Box/Condition/Bar,
 ]
+@onready var _losts: Array[LostPrompt] = [$Lost/Top/Label, $Lost/Bottom/Label]
 @onready var _pause: PauseMenu = $Pause
 
 ## Where leaving the race goes.
@@ -153,6 +154,9 @@ func _ready() -> void:
 	for i in _cars.size():
 		_cars[i].damage = not attract_mode and GameSettings.damage
 		_conditions[i].watch(_cars[i])
+		# Each player is told about their own car, in their own half, and named
+		# their own key: the two resets are different keys on the one keyboard.
+		_losts[i].watch(_cars[i], _track, _cars[i].input_prefix + "_reset")
 
 	# A laid-out track if one was picked on the way in, and the endless course
 	# otherwise. Never in attract mode: the title backdrop rolls its own
@@ -212,7 +216,7 @@ func _dress_for_the_title_screen() -> void:
 	_day_night.night_seconds = attract_phase_seconds
 	for car in _cars:
 		car.frozen = true
-	for overlay in [$Split, $Hud, $Progress, $Countdown, $Result, _pause]:
+	for overlay in [$Split, $Hud, $Progress, $Lost, $Countdown, $Result, _pause]:
 		overlay.hide()
 	# The menu is not a paused race, and this scene is its backdrop. Turned off
 	# outright rather than merely hidden, so there is no second screen behind
@@ -253,6 +257,9 @@ func _physics_process(delta: float) -> void:
 	# for the countdown, so this sits ahead of the racing check.
 	_poll_view_toggles()
 	if not _racing:
+		# Cars held for a countdown, or stopped on a result, are not lost.
+		for lost in _losts:
+			lost.forget()
 		return
 	# Settled before anything else, including the finish: a car that broke on
 	# the step it reached the line did not finish.
@@ -275,6 +282,7 @@ func _physics_process(delta: float) -> void:
 		if Input.is_action_just_pressed(_cars[i].input_prefix + "_reset"):
 			_reset_to_checkpoint(i)
 			continue
+		_losts[i].check(delta, offsets[i])
 		_bank_checkpoints(i, offsets[i], marks)
 		if _has_finished(i, offsets[i]):
 			_finish_course(i)
@@ -448,6 +456,8 @@ func _reset_to_checkpoint(index: int) -> void:
 	# next frame instead of streaking there from wherever it was.
 	car.reset_physics_interpolation()
 	_was[index] = car.middle()
+	# Asked for and given: the line has said what it had to say.
+	_losts[index].forget()
 	var arrows: Array[RivalArrow] = [_arrow1, _arrow2]
 	arrows[index].snap()
 
@@ -693,6 +703,8 @@ func _place_on_grid() -> void:
 	_was = PackedVector3Array()
 	for car in _cars:
 		_was.append(car.middle())
+	for lost in _losts:
+		lost.forget()
 	_arrow1.snap()
 	_arrow2.snap()
 

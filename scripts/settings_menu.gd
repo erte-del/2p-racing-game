@@ -176,21 +176,12 @@ func _fill_controls(grid: GridContainer, prefix: String) -> void:
 
 
 ## The key currently bound to an action, named the way it is printed on the
-## keyboard in front of the player.
+## keyboard in front of the player, and a dash where nothing is bound.
 ##
-## The bindings are physical, which is what keeps WASD a square on a keyboard
-## that is not laid out like this one - so the physical code has to be turned
-## back into whatever this particular keyboard actually calls that key.
+## Naming it is Controls' job rather than this screen's, because the line that
+## comes up when a car is off the road names one of these same keys in the
+## middle of a race, and a sheet that disagreed with it would be worse than
+## either on its own.
 func _key_for(action: String) -> String:
-	if not InputMap.has_action(action):
-		return "–"
-	for event in InputMap.action_get_events(action):
-		var key := event as InputEventKey
-		if key == null:
-			continue
-		var code := key.keycode
-		if key.physical_keycode != 0:
-			code = DisplayServer.keyboard_get_keycode_from_physical(
-				key.physical_keycode)
-		return OS.get_keycode_string(code)
-	return "–"
+	var key := Controls.key_for(action)
+	return key if not key.is_empty() else "–"

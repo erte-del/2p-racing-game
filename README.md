@@ -1382,6 +1382,75 @@ seconds. And on none of the laid-out tracks does a car dropped into the first
 jump hole finish across the grass any more: where it reaches the flag at all,
 the race does not count it.
 
+## Saying so
+
+A car that has come off the road can still be driven, and that is the problem.
+The grass is only slower, nothing out there stops it, and the course is right
+where it can be seen - so a player heads back towards it, and the lap they are
+driving is already over, because off the road no checkpoint banks and the
+finish does not count. The way out is the reset key, which they were shown
+once, on the controls sheet, before the race.
+
+So it is said again at the moment it is worth knowing. `scripts/lost_prompt.gd`
+puts a line across the top of that player's own half of the screen:
+
+```
+OFF THE ROAD      PRESS  R  TO GET BACK ON
+```
+
+It names the key that is bound now, not the one that was bound when this was
+written. `scripts/controls.gd` reads it out of the input map, and the controls
+sheet on the settings screen reads the same function, so a key that moves moves
+in both places at once or in neither. Player one is told about R and player two
+about M, each in their own half, because the two resets are different keys on
+the one keyboard. An action with nothing bound to it says `OFF THE ROAD` and
+stops there.
+
+It waits `patience` (1.2 s) first. Clipping the verge through a corner is not
+being lost, and a line that flashed up every time a wheel touched grass is one
+players would learn not to read. It fades in over a quarter of a second, and
+goes as soon as the car is back on the road or has been put back at a
+checkpoint - the count goes with it, so nobody is told twice for one mistake.
+
+Two things count as off the road. Standing on anything that is not in
+`Car.ROAD_GROUP` answers itself. Falling does not: a car the physics has not
+reported touching anything keeps whatever it last stood on, which is the right
+answer over a jump and the wrong one over the edge of a floating road, so a car
+that had run out of road would believe it was still on it the whole way down
+and only be told once it landed. What tells the two apart is where the course
+is. Across a jump the road runs straight from the lip to the landing and a car
+in flight follows a curve that falls away from it, which puts it above that line
+the whole way over; come up short and it is under it, by as much as it is going
+to miss by. So being `drop` (5 m) under the course with nothing at all beneath
+the wheels is a car on its way down. The wheels are part of the rule because a
+car riding a lift down is under the course as well - measured at 3.7 m under on
+the lift course - and it is standing on the thing carrying it.
+
+`tools/checks/lost_prompt.gd` drives cars off real roads and reads the label
+back:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/lost_prompt.gd
+```
+
+Five seconds down the middle of the road says nothing. Out on the grass beside
+it the line comes up 1.3 s after the car leaves the road, naming R; with the
+reset moved to K it names K. A car put back at the checkpoint is not still
+being told a second later. Off the side of the floating road on each of the
+seven acrobatic tracks that have one, it comes up 1.3 s after the car goes over
+- while it is still falling, rather than after it lands. Four seconds parked on
+a lift says nothing. And on a split screen, with player two on the grass and
+player one on the road, the bottom half names M and the top half says nothing at
+all.
+
+Whether it can be read from the driving seat is the one part measuring does not
+settle, so `tools/checks/lost_shot.gd` puts a car on the grass in each mode and
+takes a picture:
+
+```
+Godot --path . --script tools/checks/lost_shot.gd -- /tmp/shots
+```
+
 ## Slipstream
 
 Tucking in behind the other car raises top speed by up to `slipstream_bonus`

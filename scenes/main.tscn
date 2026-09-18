@@ -11,6 +11,7 @@
 [ext_resource type="Script" path="res://scripts/day_night.gd" id="8_daynight"]
 [ext_resource type="PackedScene" path="res://scenes/pause.tscn" id="10_pause"]
 [ext_resource type="Script" path="res://scripts/condition_bar.gd" id="11_condition"]
+[ext_resource type="Script" path="res://scripts/lost_prompt.gd" id="12_lost"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
 
@@ -270,6 +271,51 @@ theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 10
 theme_override_font_sizes/font_size = 46
+
+[node name="Lost" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Top" type="MarginContainer" parent="Lost"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/margin_top = 62
+
+[node name="Label" type="Label" parent="Lost/Top"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(1, 0.84, 0.35, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.8)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 26
+script = ExtResource("12_lost")
+
+[node name="Bottom" type="MarginContainer" parent="Lost"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/margin_top = 62
+
+[node name="Label" type="Label" parent="Lost/Bottom"]
+visible = false
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(1, 0.84, 0.35, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.8)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 26
+script = ExtResource("12_lost")
 
 [node name="Countdown" type="VBoxContainer" parent="." unique_id=99635084]
 anchors_preset = 15
