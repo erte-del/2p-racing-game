@@ -2,7 +2,8 @@
 
 Five things to add to the game, written out properly: what each one is, why it
 is worth having, the rules it has to obey, and the files it lands in. Damage
-mode and traps are built (2026-09-16); nothing else here is yet.
+mode and traps are built (2026-09-16), and the acrobatic tracks with them
+(2026-09-18); nothing else here is yet.
 
 The order below is the order they should be built in, and that order is not
 arbitrary - damage needs nothing, traps need nothing, but the bot needs a
@@ -25,7 +26,7 @@ drives it and says so, and none of the five below is an exception.
 
 1. [Damage mode](#1-damage-mode) - **done**
 2. [Traps](#2-traps) - **done**
-3. [Acrobatic tracks](#3-acrobatic-tracks)
+3. [Acrobatic tracks](#3-acrobatic-tracks) - **done**
 4. [The bot, and the medal gate](#4-the-bot-and-the-medal-gate)
 5. [Coins](#5-coins)
 6. [The shop](#6-the-shop)
@@ -371,6 +372,50 @@ loss once and do all of it in one go.
 
 ## 3. Acrobatic tracks
 
+> **Done, 2026-09-18.** Ten tracks behind ACROBATIC, built to the ground rules
+> below, all written up in the README under Rings, Platforms, Lifts, Floating
+> road, High roads and Acrobatic tracks. Differences from the spec:
+>
+> - **`jump(scale)` was not built, and should not be.** The question this
+>   section was written around - do acrobatic tracks size their own jumps -
+>   turned out to be the wrong question. What the tracks actually needed was
+>   jumps that land somewhere *else*: `jump(rise, landing)` sets how much
+>   higher or lower the landing is and how far away, and the ramp and the gap
+>   stay the game's. So a player still reads a ramp and knows what it asks,
+>   and a track can still send them up a staircase. Scaling the gap would have
+>   broken the first of those to get the second.
+> - **Rings are placed by measurement, not by rule.** The spec assumed a ring
+>   over a scaled jump would need its height scaled with it. Instead the flight
+>   was measured - 6.8 m at the ring - and every ring stands where a car taking
+>   that jump actually flies.
+> - **Lifts, floating road, high roads and kickers** are not in the spec at
+>   all. They came out of wanting variety: landing on a mover that carries you
+>   onto road that climbs further, rather than ten tracks of jump-and-land.
+> - **The first three tracks were built twice.** Rings on otherwise empty road
+>   were boring, which is a thing only driving them showed. The rebuilt ones
+>   carry pads, barriers and traps alongside the new mechanics, which is now
+>   the seventh ground rule.
+> - **A pad before a platform is not bait.** The spec said it was. Driving it
+>   showed a boosted car reaches the lip at 43.8 m/s against 30 and clears the
+>   platform onto the road beyond, so a pad there skips the timing rather than
+>   punishing it. Pinball was redesigned around the truth.
+>
+> Not done, and deliberately:
+>
+> - **The medal times are the check driver's, scaled, not driven by hand.**
+>   `tools/checks/acrobatic_drive.gd` finishes all ten, and Lift Off's ratios
+>   set the ladder from those laps. Kept as they are for now; they are meant
+>   to be replaced by a player's own times.
+> - **The jump-clearability check covers the acrobatic ten, not all thirty.**
+>   `acrobatic_drive.gd` drives every ring and jump on those ten with a real
+>   car and reports no retries; `tools/checks/jump_flight.gd` is still the
+>   place to extend it to the other twenty.
+> - **A hard landing costs no condition under damage mode.** Settled as the
+>   default the spec suggested: an exemption only some tracks had would be a
+>   rule players could not learn.
+>
+> Everything below is the original spec, kept for the reasoning.
+
 ### What it is
 
 Tracks built around being in the air rather than around corners: runs of
@@ -427,13 +472,15 @@ track cannot ask for a gap no car can cross.
 	  car has to fly through. `ring_jump(lane)` and `ring(lane, height)` in a
 	  track file; `tools/checks/rings.gd`. What they do is under Rings in the
 	  README.
-- [ ] `jump(scale)` above, with the clamp and the clearability guard. A ring
-	  over a scaled jump needs its height scaled with it - the height was
-	  measured for the standard jump only, so measure again rather than
-	  multiplying.
-- [ ] A check that every jump on every track can be cleared by the tuned car at
-	  the speed the road before it allows - `tools/checks/jump_flight.gd`
-	  exists and is the place to extend.
+- [x] **Not `jump(scale)`, but `jump(rise, landing)`** (2026-09-17). Settled
+	  the other way: the ramp and the gap stay the game's, and what a track
+	  gets to choose is where the landing is - how much higher or lower, and
+	  how far off. Rings are placed from measured flight (6.8 m at the ring)
+	  rather than by scaling a number, so there is nothing to multiply.
+- [x] Jumps proved clearable on the acrobatic ten (2026-09-18):
+	  `tools/checks/acrobatic_drive.gd` drives every one of them with a real
+	  car and finishes all ten with no retries at any ring. The other twenty
+	  are still not covered; `tools/checks/jump_flight.gd` is the place.
 - [x] The acrobatic grid: ACROBATIC opens ten slots of its own, slots 20-29
 	  in `TrackRoster` (2026-09-17).
 - [x] **Moving rings and platforms** (2026-09-17). `moving_ring_jump()` and
@@ -506,16 +553,18 @@ one needs something the game does not have yet, it says what.
 10. **Last Leap** - *built.* The finale: fast platforms that barely stop, two moving
 	rings back to back, a climb to the top, and one long drop through a ring
 	onto the finish straight.
-- [ ] Medal times for each, driven rather than guessed: `tools/lap_times.gd`
-	  points the crude driver at every track and times it, and the ladder is
-	  set from that one ratio ([README.md, Where the numbers come from](README.md)).
-	  The crude driver will be worse than usual here - it aims fourteen metres
-	  ahead on the centreline and an acrobatic track is mostly not on the
-	  centreline - so expect to drive these by hand as well.
-- [ ] Decide whether a hard landing costs condition under damage mode. Default
-	  no. If yes, acrobatic tracks need their own exemption or they are
-	  unplayable with the setting on, and an exemption that only some tracks
-	  have is a rule players cannot learn.
+- [x] Medal times for each, driven rather than guessed (2026-09-18) - by the
+	  check driver, not by hand. The crude driver is worse than usual here, as
+	  expected, so `tools/checks/acrobatic_drive.gd` drives these instead: it
+	  aims at the next ring rather than at the centreline, and finishes all
+	  ten. The ladder is scaled off those laps by Lift Off's ratios
+	  ([README.md, Where the numbers come from](README.md)). **Kept for now,
+	  meant to be replaced by a player's own times** - a driver that steers
+	  perfectly with no reaction time can say whether a track is *drivable*,
+	  never how *hard* it is.
+- [x] Decided (2026-09-18): a hard landing costs no condition under damage
+	  mode. The default the spec suggested, for the reason it gave - an
+	  exemption only some tracks had would be a rule players could not learn.
 
 ### Ground rules
 
