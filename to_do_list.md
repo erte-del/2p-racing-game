@@ -2,7 +2,7 @@
 
 Five things to add to the game, written out properly: what each one is, why it
 is worth having, the rules it has to obey, and the files it lands in. Damage
-mode is built (2026-09-16); nothing else here is yet.
+mode and traps are built (2026-09-16); nothing else here is yet.
 
 The order below is the order they should be built in, and that order is not
 arbitrary - damage needs nothing, traps need nothing, but the bot needs a
@@ -24,7 +24,7 @@ drives it and says so, and none of the five below is an exception.
 ## Contents
 
 1. [Damage mode](#1-damage-mode) - **done**
-2. [Traps](#2-traps)
+2. [Traps](#2-traps) - **done**
 3. [Acrobatic tracks](#3-acrobatic-tracks)
 4. [The bot, and the medal gate](#4-the-bot-and-the-medal-gate)
 5. [Coins](#5-coins)
@@ -239,6 +239,28 @@ It should show, from a car it drives itself:
 
 ## 2. Traps
 
+> **Done, 2026-09-16.** Built to the spec below, with these changes, all
+> written up under Traps in the README:
+>
+> - Traps went onto existing tracks - Switchback, The Hook, Relentless,
+>   Grinder, The Wringer and Last Light - and those six lost their times.
+>   No `GEOMETRY` bump was needed: a time is kept against a fingerprint of its
+>   own track file, so editing a track only ever costs that track.
+> - Traps are on chaos courses too, not laid-out tracks only. Chaos turns them
+>   on and rolls how many rows are traps; every chaos course that has room
+>   for one gets at least one. The endless course without chaos is unchanged.
+> - `trap(from, to, width := 0.6, dwell := 1.6, travel := 1.0)`: `from` and
+>   `to` are where the middle of the row stands, and `width` is how much road
+>   it covers.
+> - Checking every *phase* was not enough. A row sliding across the road is
+>   usually narrowest halfway, so the checker follows each trap through every
+>   place it passes, 5 cm at a time.
+> - A trap closing on the kerb with a car in the way lifted the car onto the
+>   rail. Cars in a closing lane are now shoved along the road out of the row.
+>
+> Not done: the medal targets on the six tracks were not re-measured with
+> `tools/lap_times.gd`, and their overhead thumbnails were not redrawn.
+
 ### What it is
 
 Obstacles that move: barriers that switch which part of the road they block,
@@ -305,27 +327,27 @@ Practically:
 
 ### What to build
 
-- [ ] `TrackFeatures.TRAP` - a new kind beside `BOOST_PAD`, `OBSTACLE`, `FORK`
+- [x] `TrackFeatures.TRAP` - a new kind beside `BOOST_PAD`, `OBSTACLE`, `FORK`
       ([scripts/track_features.gd:19](scripts/track_features.gd:19)).
-- [ ] Phases on `Placement`: an array of `{lateral, half_span}`, plus `dwell`
+- [x] Phases on `Placement`: an array of `{lateral, half_span}`, plus `dwell`
       and `travel`. Static barriers are the one-phase case and change nothing.
-- [ ] `TrackDefinition.trap(from, to, dwell := 1.6, travel := 1.0)`
+- [x] `TrackDefinition.trap(from, to, dwell := 1.6, travel := 1.0)`
       ([scripts/track_definition.gd:132](scripts/track_definition.gd:132)), as
       a sibling of `barrier()`.
-- [ ] `TrackFurniture` builds it as a moving body, not a static one: the same
+- [x] `TrackFurniture` builds it as a moving body, not a static one: the same
       striped panels `_build_barrier` already makes
       ([scripts/track_furniture.gd:157](scripts/track_furniture.gd:157)), on
       an `AnimatableBody3D` so `move_and_slide` pushes the car properly instead
       of letting it through. It stays in the `obstacle` group, so it costs the
       speed a barrier costs and the condition damage mode charges - no new
       collision code at all.
-- [ ] Drive it off the race clock, not `delta` accumulated per node, so a trap
+- [x] Drive it off the race clock, not `delta` accumulated per node, so a trap
       reset with the race is where the race says it is.
-- [ ] Extend `TrackFeatures.faults()` to the all-phases rule above.
-- [ ] Traps are for laid-out tracks only at first. The generator plans courses
-      it has never seen, and getting the phase-pair rule right on rolled
-      courses is a second project. `obstacles_enabled` has a sibling,
-      `traps_enabled`, off for the endless course.
+- [x] Extend `TrackFeatures.faults()` to the all-phases rule above.
+- [x] `traps_enabled`, a sibling of `obstacles_enabled`, off for the endless
+      course. *Changed: chaos turns it on, so rolled chaos courses have traps
+      as well as the laid-out tracks - see the note at the top of this
+      section.*
 
 ### The check
 
@@ -398,13 +420,92 @@ track cannot ask for a gap no car can cross.
 
 ### What to build
 
-- [ ] `jump(scale)` above, with the clamp and the clearability guard.
+- [x] The way in: TRACKS slides NORMAL and ACROBATIC down from under itself.
+	  NORMAL opens the grid there is now; ACROBATIC is greyed until there are
+	  acrobatic tracks for it to open (2026-09-17).
+- [x] **Rings** (2026-09-17). On an acrobatic track the checkpoints are rings a
+	  car has to fly through. `ring_jump(lane)` and `ring(lane, height)` in a
+	  track file; `tools/checks/rings.gd`. What they do is under Rings in the
+	  README.
+- [ ] `jump(scale)` above, with the clamp and the clearability guard. A ring
+	  over a scaled jump needs its height scaled with it - the height was
+	  measured for the standard jump only, so measure again rather than
+	  multiplying.
 - [ ] A check that every jump on every track can be cleared by the tuned car at
 	  the speed the road before it allows - `tools/checks/jump_flight.gd`
 	  exists and is the place to extend.
-- [ ] Three or four acrobatic tracks, as tracks 21-24 or as a second row on the
-	  select screen: `TrackRoster.COUNT` becomes 24, `FILES` grows, and the
-	  grid already draws slots for tracks that do not exist yet.
+- [x] The acrobatic grid: ACROBATIC opens ten slots of its own, slots 20-29
+	  in `TrackRoster` (2026-09-17).
+- [x] **Moving rings and platforms** (2026-09-17). `moving_ring_jump()` and
+	  `platform_jump()`; `tools/checks/platforms.gd`.
+- [x] Ten acrobatic tracks (2026-09-18), challenging, using the old mechanics -
+	  pads, barriers, traps - alongside the new ones. The first three were
+	  rebuilt after they turned out plain rings on empty road was boring. All
+	  ten have targets scaled from the check driver's lap, to be replaced by
+	  the best times a player drives:
+	  1. **Lift Off** (2026-09-17) - boost, barrier into a ring, a trap into a
+		 moving platform, a moving ring, barriers, a boost into a ring.
+	  2. **Sky Stairs** (2026-09-17) - a moving platform onto floating road,
+		 climbing jump by jump to 9.5 m over its own start, and back down.
+	  3. **Island Hopper** (2026-09-17) - floating islands with a moving
+		 platform in every gap, in chains of two and three.
+	  4. **Tightrope** (2026-09-17) - half-width floating road climbing to
+		 11.5 m, with barriers, narrow traps and off-centre rings.
+	  5. **Elevator** (2026-09-17) - two lifts to nearly 20 m, a sliding
+		 platform and a moving ring back down.
+	  6. **High Road, Low Road** (2026-09-17) - two splits: a high road with a
+		 platform, and one with a lift, over low roads with barriers and traps.
+	  7. **Freefall** (2026-09-17) - up to 26.5 m by grades and a lift, then
+		 three falls through moving rings onto trap-swept road.
+	  8. **Pinball** (2026-09-18) - barriers and traps the whole way round, four
+		 rings, and a pad that skips a platform.
+	  9. **Knot** (2026-09-18) - three 270 degree climbing turns, each crossing
+		 back over its own road with a ring after it.
+	  10. **Last Leap** (2026-09-18) - fast platforms, two moving rings back to
+		 back, a lift to twenty metres, and a 28 m drop through a ring.
+- [x] **High roads** (2026-09-17). `high_road()` and `high_road_end()`,
+	  kickers, `BranchDefinition`; `tools/checks/high_road.gd`.
+- [x] **Lifts** (2026-09-17). `lift_jump()`; `tools/checks/lifts.gd`.
+- [x] **Floating road and climbing jumps** (2026-09-17). `floating()`, a `rise`
+	  on every jump, overpasses; `tools/checks/floating.gd`.
+
+### The ten tracks
+
+What each is for, in the order they are driven. Built ones are marked. Where
+one needs something the game does not have yet, it says what.
+
+1. **Lift Off** - *built.* One of everything, low down: a barrier into a ring,
+   a trap into a slow moving platform, a moving ring, a boost into the last
+   ring.
+2. **Sky Stairs** - *built.* Off a moving platform onto floating road, and up:
+   ring jumps landing higher each time to 9.5 m, curling back over its own
+   start, then a faster platform and a drop to the ground.
+3. **Island Hopper** - *built.* A chain of floating islands, each a short slab
+   of road with its own ramp, and a moving platform in every gap between them,
+   sliding the other way from the last. No ground after the first ring.
+4. **Tightrope** - *built.* High, narrow floating road, half the usual width, with traps
+   sweeping it and barriers leaving a car-and-a-half gap, and rings off to the
+   side. The rail is right there the whole way.
+5. **Elevator** - *built.* Platforms that move up and down rather than across.
+   Land on one while it is low and it lifts the car to a floating road it could
+   never have jumped to; miss the moment and it is at the wrong height.
+6. **High Road, Low Road** - *built.* The road splits: a high route of climbing ring
+   jumps and platforms that is shorter and faster, and a ground route round the
+   outside that is safe and slow, meeting again before the finish.
+   Built as a kicker in one lane onto a straight floating road that drops back
+   onto the course where the low road comes back underneath it.
+7. **Freefall** - *built.* Starts by climbing floating road to the highest point in the
+   game, then comes down in a string of big drop jumps, each through a moving
+   ring, each landing on a trap-swept floating road lower than the last.
+8. **Pinball** - *built.* Dense: floating road packed with barriers and traps
+   between quick ring jumps, boost pads placed as bait in front of platforms,
+   and the only safe lines through them narrow.
+9. **Knot** - *built.* A figure of eight in the sky that crosses over itself three times
+   at three heights, with a ring over each crossing so the road below is always
+   in view.
+10. **Last Leap** - *built.* The finale: fast platforms that barely stop, two moving
+	rings back to back, a climb to the top, and one long drop through a ring
+	onto the finish straight.
 - [ ] Medal times for each, driven rather than guessed: `tools/lap_times.gd`
 	  points the crude driver at every track and times it, and the ladder is
 	  set from that one ratio ([README.md, Where the numbers come from](README.md)).
@@ -415,6 +516,32 @@ track cannot ask for a gap no car can cross.
 	  no. If yes, acrobatic tracks need their own exemption or they are
 	  unplayable with the setting on, and an exemption that only some tracks
 	  have is a rule players cannot learn.
+
+### Ground rules
+
+Settled 2026-09-17, while building the rings:
+
+- **Ten acrobatic tracks** for now, on their own grid behind ACROBATIC, not
+  mixed into the twenty.
+- **Rings are the checkpoints.** An acrobatic track has rings and no painted
+  checkpoints; a track never has both. Every ring is needed to finish.
+- **A ring banks by going through it** - forwards, the middle of the car inside
+  the hole. Not by landing past it, not by driving under it.
+- **The game sets the ring's height, the track sets its lane.** A ring over a
+  jump stands where a car taking that jump flies. A track makes a ring hard by
+  where across the road it puts it, never by hanging it where nobody can reach.
+- **The rim is solid but not an obstacle.** Clipping it knocks the car off its
+  line and costs no damage and no speed penalty.
+- **A reset after a ring puts the car past the hole,** on the landing.
+- **Acrobatic tracks use everything.** Pads, barriers and traps stay; moving
+  rings and platforms are added. Empty road between jumps is boring.
+- **A platform is always visible from the run up** - it carries a gate that
+  shows over the lip - because a jump nobody can see cannot be timed.
+- **A boosted car clears a platform** and lands on the road past it, so a pad
+  before one skips its timing rather than punishing it. A ring still catches a
+  boosted car.
+- **Medals come from a player's best time** where the test driver cannot finish
+  a track; where it can, its lap sets them until a player's time replaces them.
 
 ### Where they go on the grid
 
@@ -467,15 +594,15 @@ to `scripts/bot_driver.gd` and made better:
 	  bot you beat by taking them, once, forever.
 - [ ] Decide what "hard to beat" is, in numbers: the bot should come in around
 	  the track's **gold** time. That is a target already tuned to be a little
-      under the best the road allows, it already exists per track, and it means
-      the gate and the race ask the same thing of the player. A player with five
-      golds can beat it; a player with five bronzes cannot, which is the gate
-      working.
+	  under the best the road allows, it already exists per track, and it means
+	  the gate and the race ask the same thing of the player. A player with five
+	  golds can beat it; a player with five bronzes cannot, which is the gate
+	  working.
 - [ ] The bot must not cheat. No extra speed, no rubber band, no ignoring
-      barriers. It drives the same car with the same tuning, and if it is too
-      easy it gets a better line rather than a bigger engine. A bot that
-      teleports when you get ahead is the fastest way there is to make a player
-      stop trusting a game.
+	  barriers. It drives the same car with the same tuning, and if it is too
+	  easy it gets a better line rather than a bigger engine. A bot that
+	  teleports when you get ahead is the fastest way there is to make a player
+	  stop trusting a game.
 
 ### The race itself
 
@@ -509,21 +636,21 @@ is not the same as a track that does not exist, and showing them the same way
 tells a player the game is unfinished when actually they are.
 
 - [ ] `scripts/progress.gd`, an autoload beside `TrackTimes`: which bot races
-      have been won, and therefore which blocks of ten are open. Saved to
-      `user://progress.cfg`.
+	  have been won, and therefore which blocks of ten are open. Saved to
+	  `user://progress.cfg`.
 - [ ] Medals are not stored and should stay that way. The gate counts them at
-      the moment it is asked, from `TrackTimes.best()` and
-      `TrackRoster.targets()` through `Medal.earned()` - so moving a target
-      moves the gate with it, which is what you want while tracks are being
-      tuned ([scripts/medal.gd:1](scripts/medal.gd:1)).
+	  the moment it is asked, from `TrackTimes.best()` and
+	  `TrackRoster.targets()` through `Medal.earned()` - so moving a target
+	  moves the gate with it, which is what you want while tracks are being
+	  tuned ([scripts/medal.gd:1](scripts/medal.gd:1)).
 - [ ] Three states on a cell: **open**, **locked** (built, greyed, with a small
-      lock and a tooltip saying exactly what is needed - "5 GOLD IN 1-10, you
-      have 3"), **not built yet** (the existing empty frame).
+	  lock and a tooltip saying exactly what is needed - "5 GOLD IN 1-10, you
+	  have 3"), **not built yet** (the existing empty frame).
 - [ ] The bot race as its own cell at the end of each block of ten, marked out
-      as different - it is not a track with a time, it is a door.
+	  as different - it is not a track with a time, it is a door.
 - [ ] A player who has the golds but has not won the bot race sees the bot cell
-      open and the next ten locked. A player who wins it sees the next ten open
-      immediately, without a restart.
+	  open and the next ten locked. A player who wins it sees the next ten open
+	  immediately, without a restart.
 
 ### The check
 
@@ -555,11 +682,11 @@ without the speed.
 
 - [ ] `TrackFeatures.COIN`, a fourth kind.
 - [ ] A `_place_coins` pass, after pads and obstacles so it knows what is
-      already there. Count rolled in `[5, 15]`.
+	  already there. Count rolled in `[5, 15]`.
 - [ ] Coins obey the same `keep_out` the pads do - not on the start line, not
-      on the finish, not on a checkpoint
-      ([scripts/track_features.gd:88](scripts/track_features.gd:88)). A free
-      coin for being reset is not a coin anyone earned.
+	  on the finish, not on a checkpoint
+	  ([scripts/track_features.gd:88](scripts/track_features.gd:88)). A free
+	  coin for being reset is not a coin anyone earned.
 - [ ] Never inside a barrier, never in the hole of a jump, never on a trap's
 	  path in any phase.
 - [ ] Put them where they are worth something. A coin in the middle of an empty
@@ -575,8 +702,8 @@ without the speed.
 - [ ] Both players' coins go to the same purse. The shop is the game's, not a
 	  player's, and two people on one keyboard share a machine.
 - [ ] Taking one shows something: the coin lifting and fading, a small number,
-      the purse in the corner ticking up. A pickup with no feedback reads as a
-      bug.
+	  the purse in the corner ticking up. A pickup with no feedback reads as a
+	  bug.
 - [ ] **A coin taken on a run that is abandoned still counts.** Keeping a run's
 	  coins in escrow until the flag punishes exactly the players who are
 	  struggling, and the purse is not a score.
@@ -718,9 +845,9 @@ live in the car's folder - they need their own store:
 
 - [ ] `user://decals.cfg`, a section per car id, `stock` for the empty id -
 	  the garage already uses that exact word for where the stock car's
-      portrait goes, so reuse it rather than inventing a second name.
+	  portrait goes, so reuse it rather than inventing a second name.
 - [ ] Hand-drawn strokes stored as points, not as a picture: it scales, it
-      stays small, and it can be redrawn at whatever size the car needs.
+	  stays small, and it can be redrawn at whatever size the car needs.
 - [ ] A car deleted from the garage takes its decoration with it.
 - [ ] Two players in the same model both see that model's decoration. That is
 	  correct - it is one car - but it means the paint is the only thing
@@ -743,10 +870,10 @@ live in the car's folder - they need their own store:
 	  the twelve, undo, clear. Undo is not optional - a player drawing with a
 	  mouse will make a mess on the first stroke.
 - [ ] Sticker placement: pick one, then drag it around a flat view of the car's
-      side with a size and rotation control. Do not try to make the player
-      place a sticker on a rotating 3D model with a mouse.
+	  side with a size and rotation control. Do not try to make the player
+	  place a sticker on a rotating 3D model with a mouse.
 - [ ] Both players get to decorate their own car, which means the screen asks
-      whose car first when two are playing.
+	  whose car first when two are playing.
 
 ### In chaos
 
@@ -767,13 +894,13 @@ Apply the same idea - each decal starts at its own place in the hue cycle and
 turns continuously.
 
 - [ ] The cycle runs on the decal material only. The body keeps its rolled
-      colour.
+	  colour.
 - [ ] Each decal gets its own phase, so a car with three stickers shimmers.
 - [ ] Like everything else chaotic, this is **told to the car by whatever built
-      the race**, not read from `GameSettings.chaos` - because the title screen
-      backdrop is a race scene too, and a strobing sticker behind the menu is
-      not what the menu is for. `chaos_colour.gd` already checks exactly this
-      distinction and should be extended to cover decals.
+	  the race**, not read from `GameSettings.chaos` - because the title screen
+	  backdrop is a race scene too, and a strobing sticker behind the menu is
+	  not what the menu is for. `chaos_colour.gd` already checks exactly this
+	  distinction and should be extended to cover decals.
 - [ ] The readability rule again: a decal cycling through hues must never land
 	  close enough to the other player's body colour to confuse a glance across
 	  a split screen. Keep decal value and saturation away from the body's.
@@ -802,8 +929,9 @@ Of the features here:
 
 - **Damage** did not need a bump: it only ends runs, and `damage.gd` checks
   that a hit drives the same with it on and off. *(done)*
-- **Traps** need one, if a trap is added to a track anyone has driven. Traps on
-  new tracks only need nothing.
+- **Traps** needed none. A time is kept against a fingerprint of its own track
+  file, so adding a trap to a track loses that track's times and nobody
+  else's. *(done)*
 - **Acrobatic tracks** need nothing - a new track has no old times.
 - **The bot** needs nothing - it is another car on the road, not a change to
   the road.
@@ -856,7 +984,7 @@ will re-decide from scratch.
 2. Coins and the purse - the shop cannot exist without them.
 3. The shop - needs the purse.
 4. Customisation - needs the shop to be bought from, and chaos work.
-5. Traps - needs the validator work, which is the riskiest part here.
+5. ~~Traps - needs the validator work, which is the riskiest part here.~~ Done.
 6. Acrobatic tracks - needs the jump scale, and wants traps to exist first.
 7. The bot driver - the biggest single piece of new code.
 8. Progress and the medal gate - needs the bot to be the thing it gates.

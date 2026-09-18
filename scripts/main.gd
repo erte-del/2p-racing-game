@@ -110,6 +110,9 @@ var _respawn := PackedFloat32Array()
 ## Which checkpoints each car has banked, a flag a checkpoint. They can be
 ## banked in any order, and every one of them is needed to finish.
 var _banked: Array[PackedByteArray] = []
+## Where the middle of each car was a step ago, on a track with rings, since a
+## ring is banked by a car's path going through it.
+var _was := PackedVector3Array()
 ## Who is currently ahead, or -1 while the cars are level.
 var _leader := -1
 ## Set only when the players chose chaos, and only outside attract mode. Every
@@ -259,6 +262,9 @@ func _physics_process(delta: float) -> void:
 		return
 	_race_time += delta
 	_show_clock(RaceClock.format(_race_time))
+	# Before the cars move, so what they drive into this step is where the
+	# clock says it is.
+	_track.set_race_time(_race_time)
 	# Where each car is along the course is looked up once and shared by
 	# everything below, because finding the nearest point on the curve is a
 	# walk along the whole of it.
@@ -389,6 +395,9 @@ func _has_finished(index: int, offset: float) -> bool:
 ## in any order, and whichever was banked last is where a reset sends the car.
 func _bank_checkpoints(index: int, offset: float, marks: PackedFloat32Array) -> void:
 	var car := _cars[index]
+	if _track.has_rings():
+		_bank_rings(index)
+		return
 	if not car.on_the_road() or not _on_course(car, offset):
 		return
 	for mark in mini(marks.size(), _banked[index].size()):
@@ -397,6 +406,20 @@ func _bank_checkpoints(index: int, offset: float, marks: PackedFloat32Array) -> 
 			_banked[index][mark] = 1
 			_respawn[index] = marks[mark]
 			_show_tally(index)
+
+
+## Bank any ring a car went through this step, the right way, inside the hole.
+## Rings are not put out as they are banked here: both players are looking at
+## the same rings, and one going dark would be telling each of them about the
+## other's run.
+func _bank_rings(index: int) -> void:
+	var now := _cars[index].middle()
+	for mark in _banked[index].size():
+		if _banked[index][mark] == 0 and _track.through_ring(mark, _was[index], now):
+			_banked[index][mark] = 1
+			_respawn[index] = _track.respawn_offset(mark)
+			_show_tally(index)
+	_was[index] = now
 
 
 ## How many checkpoints a car has banked.
@@ -424,6 +447,7 @@ func _reset_to_checkpoint(index: int) -> void:
 	# Put back rather than driven back, so it is drawn at the checkpoint on the
 	# next frame instead of streaking there from wherever it was.
 	car.reset_physics_interpolation()
+	_was[index] = car.middle()
 	var arrows: Array[RivalArrow] = [_arrow1, _arrow2]
 	arrows[index].snap()
 
@@ -524,6 +548,9 @@ func _start_after_countdown() -> void:
 	for car in _cars:
 		car.frozen = true
 		car.reset_motion()
+	# The traps wait at GO with the cars, so what the players read off the
+	# course while it counts down is what they will meet.
+	_track.set_race_time(0.0)
 
 	var steps: int = maxi(1, int(round(preview_seconds)))
 	var each := preview_seconds / float(steps)
@@ -663,6 +690,9 @@ func _place_on_grid() -> void:
 		# Put there, not driven there, so it is drawn on the grid straight
 		# away rather than sliding across the world for a frame.
 		car.reset_physics_interpolation()
+	_was = PackedVector3Array()
+	for car in _cars:
+		_was.append(car.middle())
 	_arrow1.snap()
 	_arrow2.snap()
 

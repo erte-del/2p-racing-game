@@ -34,13 +34,15 @@ func describe() -> void:
 	width(8.0)
 	straight(44.0)
 
-	# An esse, tight, with a row on the exit of it.
+	# An esse, tight, with a trap on the exit of it - a quick one, so where it
+	# is has to be read on the way out of the second corner rather than from
+	# the straight.
 	width(6.4)
 	corner(-84.0, 24.0)
 	corner(78.0, 22.0)
 	width(8.0)
 	straight(40.0)
-	barrier(-1.0, -0.3)
+	trap(-0.7, 0.7, 0.6, 1.2, 0.9)
 	straight(52.0)
 
 	# Third hairpin, uphill into it.

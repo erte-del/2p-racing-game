@@ -38,6 +38,16 @@ class Piece:
 	## the finish line and the checkpoints.
 	var start_offset: float
 	var end_offset: float
+	## For a jump, how long its hole is, or zero for the game's own jump. Only a
+	## platform jump sets it: the platform needs a hole long enough to stand in.
+	var gap: float
+	## Road standing in the air on nothing, rather than on an embankment down
+	## to the ground. Only a track file says so.
+	var floating: bool
+	## For a platform jump whose platform is a lift: the landing is reached off
+	## the top of the lift, not off the ramp, so it may be far higher than any
+	## jump could climb.
+	var lift: bool
 
 	func _init(p_kind: int, p_length: float, p_half_width: float) -> void:
 		kind = p_kind
@@ -46,6 +56,9 @@ class Piece:
 		turn = 0.0
 		radius = 0.0
 		rise = 0.0
+		gap = 0.0
+		floating = false
+		lift = false
 		start_offset = 0.0
 		end_offset = 0.0
 
@@ -111,6 +124,30 @@ var height_limit := 5.0
 ## margin above it is what decides how tightly the course may double back.
 var clearance := 20.0
 var extent := 480.0              ## the course must fit inside this half-size
+## How far above or below another part of the course a road has to pass to
+## cross it. Enough for the car, the underside of the road above, and room to
+## see the one below from the one above.
+var overpass_clearance := 9.0
+## The most a jump may climb from its lip-side road to its landing. The lip is
+## 5 m up and a car taking it at 23 m/s still has its wheels 5 m up 17 m on,
+## so a landing 3.5 m up is reached by anything that clears a level jump. A
+## platform jump lands off the end of a platform 4 m up, and loses a metre on
+## the drop.
+var max_jump_rise := 3.5
+var max_platform_rise := 3.0
+## Whether to move the course to stand centred on the ground. A high road is
+## laid out where the course it leaves puts it, so it is not.
+var centred := true
+## The shortest road a jump may land on. A car off the standard ramp on a
+## boost comes down 48 m past the hole, so a jump's landing has to reach past
+## that; off the end of a platform a car comes down within 17 m of the drop, and
+## needs a little more than that again to be on its wheels before whatever the
+## track does next.
+var min_jump_landing := 55.0
+## The highest a lift jump may land, above the road it was taken from: the top
+## of the highest lift the game builds, less the step down onto the landing.
+var max_lift_rise := 11.0
+var min_platform_landing := 35.0
 
 # --- results ------------------------------------------------------------
 
@@ -120,6 +157,8 @@ var half_widths := PackedFloat32Array()
 ## where the mesh, the kerbs and the rails all stop and a car that came up
 ## short has nothing under it.
 var road_present := PackedByteArray()
+## Whether the road at each sample is floating: standing on nothing.
+var floating := PackedByteArray()
 var pieces: Array[Piece] = []
 
 
@@ -162,7 +201,8 @@ static func adopt(
 		layout.set(key, tuning[key])
 	layout.pieces = written
 	layout._sample()
-	layout._centre()
+	if layout.centred:
+		layout._centre()
 	layout._smooth_widths()
 	return layout
 
@@ -178,6 +218,21 @@ func problems() -> PackedStringArray:
 		found.append("the course passes within %.0f m of itself" % clearance)
 	if not _fits():
 		found.append("the course does not fit inside %.0f m of ground" % extent)
+	for piece in pieces:
+		if piece.kind != JUMP:
+			continue
+		var platform := piece.gap > jump_gap
+		var most := max_platform_rise if platform else max_jump_rise
+		if piece.lift:
+			most = max_lift_rise
+		if piece.rise > most:
+			found.append("the %sjump at %.0f m lands %.1f m up; a car cannot reach more than %.1f"
+				% ["platform " if platform else "", piece.start_offset, piece.rise, most])
+		var landing := piece.length - ramp_length - gap_of(piece)
+		var shortest := min_platform_landing if platform else min_jump_landing
+		if landing < shortest - step * 0.5:
+			found.append("the %sjump at %.0f m has %.0f m to land on; it needs %.0f"
+				% ["platform " if platform else "", piece.start_offset, landing, shortest])
 	if pieces[0].kind != STRAIGHT or pieces[0].length < apron:
 		found.append("the course opens with %.0f m of straight; the grid needs %.0f"
 			% [pieces[0].length, apron])
@@ -272,6 +327,11 @@ func _make_jump() -> Piece:
 	return _quantise(piece)
 
 
+## How long the hole in a jump is: its own, or the game's.
+func gap_of(piece: Piece) -> float:
+	return piece.gap if piece.gap > 0.0 else jump_gap
+
+
 func _jump_length() -> float:
 	return ramp_length + jump_gap + landing_length
 
@@ -308,6 +368,7 @@ func _sample() -> void:
 	half_widths = PackedFloat32Array()
 
 	road_present = PackedByteArray()
+	floating = PackedByteArray()
 
 	var position := Vector3.ZERO
 	var yaw := 0.0
@@ -333,6 +394,7 @@ func _sample() -> void:
 			points.append(position)
 			half_widths.append(piece.half_width)
 			road_present.append(1 if _road_at(piece, along) else 0)
+			floating.append(1 if piece.floating else 0)
 			var heading := Vector3.FORWARD.rotated(Vector3.UP, yaw)
 			position += heading * step
 			# Positive turn is a right-hand turn, which is a negative rotation
@@ -344,6 +406,7 @@ func _sample() -> void:
 	points.append(position)
 	half_widths.append(pieces[-1].half_width if not pieces.is_empty() else wide_half_width)
 	road_present.append(1)
+	floating.append(1 if not pieces.is_empty() and pieces[-1].floating else 0)
 
 
 ## How high above the road either side of it a piece stands, a fraction of the
@@ -364,11 +427,15 @@ func _profile(piece: Piece, along: float) -> float:
 			# the road instead gives it nothing to catch on, and putting the
 			# steepest part at the top is what a ramp should be doing anyway.
 			return ramp_rise * pow(at / ramp_length, ramp_curve)
-		if at < ramp_length + jump_gap:
+		var hole := gap_of(piece)
+		if at < ramp_length + hole:
 			# The line the road would take if it were there, which is roughly
-			# what a car crossing the hole is doing anyway.
-			return ramp_rise * (1.0 - (at - ramp_length) / jump_gap)
-		return 0.0
+			# what a car crossing the hole is doing anyway: from the lip down to
+			# wherever the landing is.
+			return lerpf(ramp_rise, piece.rise, (at - ramp_length) / hole)
+		# A jump that climbs or falls lands at its new height all at once. The
+		# far side of the hole is a different road, not a slope.
+		return piece.rise
 	return piece.rise * smoothstep(0.0, 1.0, along)
 
 
@@ -380,7 +447,7 @@ func _road_at(piece: Piece, along: float) -> bool:
 	# The lip itself is road: it is the last cross-section the car has under
 	# it, and without it the road stops a whole sample short of the top of the
 	# ramp and the jump is taken from partway up.
-	return at <= ramp_length + 0.001 or at >= ramp_length + jump_gap - 0.001
+	return at <= ramp_length + 0.001 or at >= ramp_length + gap_of(piece) - 0.001
 
 
 ## Shift the whole course so it sits centred on the world origin and never
@@ -419,7 +486,10 @@ func _crosses_itself() -> bool:
 		for j in range(i + skip, coarse.size()):
 			var a := coarse[i]
 			var b := coarse[j]
-			if Vector2(a.x - b.x, a.z - b.z).length() < clearance:
+			# Two roads far enough apart in height are an overpass, not a
+			# collision.
+			if (Vector2(a.x - b.x, a.z - b.z).length() < clearance
+					and absf(a.y - b.y) < overpass_clearance):
 				return true
 	return false
 

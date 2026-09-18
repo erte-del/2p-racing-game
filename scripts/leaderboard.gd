@@ -206,8 +206,7 @@ func _push_local_bests(known: Array) -> void:
 		var entry: Dictionary = row
 		theirs[str(entry.get("track", ""))] = float(entry.get("seconds", 0.0))
 
-	for index in TrackRoster.FILES.size():
-		var file: String = TrackRoster.file(index)
+	for file: String in TrackRoster.all_files():
 		var mine := TrackTimes.best(file)
 		if mine < 0.0:
 			continue
@@ -302,8 +301,7 @@ func _load_outbox() -> void:
 ## under it: moving the tracks folder should not orphan everything anyone has
 ## driven.
 func _file_for(key: String) -> String:
-	for index in TrackRoster.FILES.size():
-		var file: String = TrackRoster.file(index)
+	for file: String in TrackRoster.all_files():
 		if file.get_file().get_basename() == key:
 			return file
 	return ""

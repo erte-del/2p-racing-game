@@ -969,6 +969,379 @@ Driven over the four checkpoints last to first, the tally goes from 1/4 to 4/4
 and a reset follows each one in turn; over the finish after that, the race
 ends.
 
+## Rings
+
+An acrobatic track has no painted checkpoints. It has rings: gold hoops
+standing up over the road, square to it, that a car banks by flying through.
+Everything else about a checkpoint holds - every ring is needed to finish, in
+any order, the tally counts them, and a reset goes to the one banked last.
+
+`ring_jump(lane)` puts a jump down with a ring over the middle of its hole.
+The track picks which lane the ring is in and nothing else: the height is the
+game's, the same way the jump is. It was measured rather than chosen - driven
+flat out at the standard jump, a car's body passes the middle of the hole
+between 6.2 m up at 18 m/s and 7.4 m up at 39 m/s, and `jump_ring_height`
+(6.8 m) is the middle of that. With a 3.5 m hole (`ring_radius`) a car taking
+the ramp at any speed the game can roll flies through, as long as it is lined
+up. So what a ring asks is the one thing the jump did not already ask: be in
+the right place before the lip, because nothing steers in the air.
+
+`ring(lane, height)` stands one over the road where it has got to, for
+anywhere else a car leaves the ground, where the track has to say how high the
+car will be. `TrackFeatures.faults()` refuses one whose rim is in the road or
+whose middle is off it.
+
+A ring banks when the middle of the car - not its origin, which is down at the
+wheels - crosses the plane of the ring going forwards, inside the hole.
+Backwards does not count, from outside the hole does not count, and neither
+does being put on the far side of one: a step longer than `ring_longest_step`
+(5 m) is a car being moved, not a car flying. It does not have to be on the
+road, by the nature of the thing.
+
+The rim is solid, and not an obstacle. Clipping it costs what the physics
+costs - on a jump that is usually the hole - and no speed penalty or damage on
+top of that, because missing the ring is already the price. A reset after a
+ring over a jump puts the car on the landing, `ring_landing_room` (8 m) past
+the hole: it made the jump, and sending it back up the ramp would charge it for
+one it already cleared.
+
+Alone, a banked ring goes dark, so the ones still owed are the ones still lit.
+Two players share one set of rings, so in a race they stay lit: one going dark
+would tell each player about the other's run.
+
+### Acrobatic tracks
+
+Acrobatic tracks are the ones built from rings. They live in
+`tracks/acrobatic/`, are listed in `TrackRoster.ACROBATIC_FILES`, and have
+their own grid of ten slots behind ACROBATIC on the track page. Every track has
+one slot number across both lists - the twenty normal tracks are 0 to 19 and
+the acrobatic ones start at 20 - so the leaderboard and the saved times need
+nothing new. Their files start with an `a` because a time is kept and sent
+under its file's name, and `a01_lift_off` can never be mistaken for
+`01_first_light`. NEXT after a gold moves on within the grid a track was
+picked from, never across.
+
+### Moving rings and platforms
+
+`moving_ring_jump(from, to, dwell, travel)` is a ring over a jump that slides
+from one lane to the other and back on the race clock, holding each end for
+`dwell` seconds and taking `travel` to cross, the way a trap does. The ring to
+line up with is where it will be when the car gets there.
+
+`platform_jump(from, to, width, dwell, travel)` is a jump with a much longer
+hole - 57 m instead of 17 - and a slab of road floating in it, sliding across
+the road the same way. A car has to come down on the platform, ride it to the
+far end and drop off onto the landing. Where it stands is the game's, measured
+off real flights: its top is 4 m up and it runs from 18 to 48 m past the lip,
+which catches a car off the ramp at anything from about 23 to 37 m/s. A car on
+a boost is still 5 m up at 50 m: it clears the platform altogether and comes
+down past the far end, on the road beyond. That cuts both ways - a pad in the
+run up to a platform is a way to skip its timing, for a car that arrives flat
+out and straight, and a platform is not something a boosted car can be made to
+land on. A platform is in the road group, so a car on it is on the road.
+
+A platform sits lower than the lip of its ramp, so from the run up it is hidden
+behind the ramp, and a platform that cannot be seen cannot be timed. Each one
+carries a lit violet gate at its near end - a post up each side and a bar
+across the top, 6 m tall, exactly as wide as the platform - that shows over the
+lip and moves with it. The gate is paint and has no collision.
+
+Both move on the same clock as the traps, set by the race every step, so two
+players see them in the same place and a restart puts them back where they were
+at GO.
+
+`tools/checks/platforms.gd` drives at them with the clock set both ways. The
+still platform is landed on and crossed at 24, 30 and 36 m/s, and on a boost the
+car clears it and comes down on the road past it; the moving one is landed on and crossed when the clock puts it under the
+car and fallen through when it does not; the moving ring banks when timed and
+does not when not; and a platform that slides past the kerbs is caught:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/platforms.gd
+```
+
+`tools/checks/platform_shot.gd` looks at the first platform on a track from the
+run up, in the air and on it.
+
+### Floating road, and jumps that climb
+
+`floating()` in a track file makes the road from there on stand in the air on
+nothing, until `floating(false)`. Raised road is otherwise drawn on an
+embankment down to the ground; floating road is drawn as a slab
+`floating_depth` (1.2 m) deep with sides and an underside, so from the ground it
+reads as a thing up there rather than a ribbon that vanishes when looked at from
+below. The rail is all that keeps a car on it, and a car that goes over it falls
+to the grass.
+
+Every jump takes a `rise`: `jump(rise)`, `ring_jump(lane, rise)`,
+`moving_ring_jump(..., rise)` and `platform_jump(..., rise)` land that many
+metres above - or below - the road they were taken from, so a track climbs into
+the air a jump at a time. Up is limited, down is not. A jump may climb 3.5 m and
+a platform jump 3 m, and `TrackLayout.problems()` refuses more: the lip is 5 m
+up, and a car taking it at 23 m/s still has its wheels 5 m up 17 m on, but a
+landing much higher than that is a wall the slowest cars fly into. A ring over a
+climbing jump stands where it always does, since the car flies the same way
+whatever the landing does.
+
+Every jump also takes a `landing`: how much road there is past the hole before
+whatever comes next, when a track wants less than the usual 90 m. A jump needs
+at least 55 m, since a car on a boost comes down 48 m past the hole; a platform
+jump needs 35, since off the end of a platform a car comes down within 17 m of
+the drop. That is short enough that one platform jump lands straight into the
+ramp of the next - an island - and `floating.gd` drives two back to back with
+35 m between them at 24, 30 and 36 m/s.
+
+Distances along a course are the layout's - a cross-section every
+`sample_step` metres, measured across the ground - and everything on a course
+is placed in them. The curve the game finds a car on measures its own length
+through the air instead, so every ramp and drop made it a little longer than
+the layout: about a metre and a half per jump on the normal tracks, and more
+than ten metres by the end of a course that climbs and falls. `Track.offset_of`
+and `Track.centre_at` now turn the curve's distances into the layout's, so a
+car, a reset and a finish line all agree about where on the course they are.
+
+A course may now pass over itself. Two parts of the road closer than
+`clearance` across the ground are still refused, unless one is at least
+`overpass_clearance` (9 m) above the other.
+
+`tools/checks/floating.gd` takes every climbing jump on a test course - 3.5 m up
+onto floating road, a platform 3 m higher, a ring 3.5 m higher again - at 23,
+30, 37 and 46 m/s (the platform not on a boost), and each has to put the car on
+the road above; then a 10 m drop and the 28 m one Last Leap ends with have to leave it on the
+road and driving; two platform jumps back to back with 35 m of island between
+them have to be crossed at 24, 30 and 36 m/s; and a jump 5 m up, or a platform
+jump with 20 m to land on, has to be refused:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/floating.gd
+```
+
+### Lifts
+
+`lift_jump(lane, lift, width, dwell, travel, landing)` is a jump with a lift in
+its hole: a platform 50 m long, `lane` across the road, that rises `lift` metres
+and comes back down on the race clock - holding the bottom for `dwell`, rising
+over `travel`, holding the top, and down. The landing on the far side is 0.6 m
+below the top of the lift, and 3 m past its end. The lift's bottom is where a
+platform's top always is, 4 m up, so a car off the ramp comes down on it only
+while it is low; the landing is only reached off the lift while it is high. A
+lift may rise 7 m, for a landing up to 11 m above the ramp's road - which no jump
+could reach, and `TrackLayout.problems()` refuses more.
+
+It is long so a car that comes down on it early can brake to a stop and wait,
+and the step off the top is short so a car pulling away from a standstill still
+makes it. A car on a rising lift carries the climb, the way it carries a ramp's,
+so driving off one still rising throws it up a little.
+
+`tools/checks/lifts.gd` sends a car at a lift that rises 6 m from every quarter
+second of its seven-second cycle, two ways. Flat out the whole way over, it gets
+across from 7 of the 28; landing, braking to a stop, waiting for the top and
+pulling away with the keys, from 12. It has to get across from some and not all
+of them both ways, since a lift nobody can cross is a wall and one everybody
+crosses is a floor:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/lifts.gd
+```
+
+`acrobatic_drive.gd` waits for lifts: it stops 50 m before the ramp until
+setting off will bring it down on the lift while the lift is low - working out
+how long that takes from how far it is, flat out from a standstill - and once on
+it, stops and waits for the top, and once it has pulled away from the top it
+keeps going even if the lift starts back down under it. A car waiting is not a
+car stuck. A lift wants a level run up to wait on, and a hold at the top long
+enough to pull away in: Freefall's first lift had its run up ending on a grade
+and held the top 1.4 s, and a car waiting on the slope reached the lift late and
+one pulling off the top was still on it when it went back down.
+
+### High roads
+
+`high_road(lane, rise)` splits the road. It puts a kicker - a ramp in one lane
+rather than across the road, rising 5 m over 15 m on the curve the course's
+ramps use - on 15 m of straight, and hands back a `BranchDefinition`: a second
+road, floating, that starts `kicker_gap` (26 m) straight ahead of the kicker's
+lip, `lane` across and `rise` up. The track file builds the high road the way it
+builds the course - straights, climbs, jumps, platforms, lifts, pads, traps - and
+then builds the course on as the low road, the long way round, until it comes
+back to the line it left along, heading the same way, and calls
+`high_road_end()`. The high road is stretched with straight road to reach that
+point and ends there in the air; a car on it drops off the end onto the course.
+
+The high road runs straight, with no corners, because a straight line is the
+one shape that can be checked to meet the course where the course comes back.
+It has no rings, because a checkpoint on one road of a split can never be banked
+from the other; the rings go on the road both routes share. So the race - its
+checkpoints, its finish, where a reset goes - knows nothing about high roads: a
+car on one is a car in the air over its own course, and a car that falls off one
+is put back at the last ring before it. Each high road is a `Track` of its own,
+a child of the course's, with no start, finish, checkpoints or rail ends, and
+the course passes the race clock on to it.
+
+A kicker's foot is sunk 8 cm into the road rather than resting on it: the car
+is one long flat box, and at 2 cm proud it caught its front edge on the kicker
+and stopped dead.
+
+`Track.branch_problems()`, which `track_check.gd` prints, refuses a high road
+the course does not come back under - more than 1.5 m to the side or 3 degrees
+off - one longer than the way round, one that ends less than 9 m above the
+course, one that drops onto anything but 60 m of straight, one with a ring on
+it, and one that passes closer to the course than two roads side by side, kerb
+to kerb, anywhere but where it leaves and lands.
+
+`tools/checks/high_road.gd` drives a test course straight off the kicker at
+25.5, 30 and 36 m/s - each goes over the high road, 12 to 13 m up, and back down
+onto the course - and down the middle lane past the kicker, which leaves the car
+on the course. Given a track, it drives that track's high roads instead, from
+every quarter second of the cycle of whatever moves on them, and each has to be
+crossed from one of those at least:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/high_road.gd
+Godot --path . --headless --fixed-fps 60 --script tools/checks/high_road.gd -- res://tracks/acrobatic/a06_high_road_low_road.gd
+```
+
+`tools/checks/high_road_shot.gd` looks at the first high road on a track from the
+run up, the lip, on it, and at the drop.
+
+### The acrobatic tracks
+
+The first is **Lift Off**: a boost off the line, a barrier that pushes the car
+to the side its ring is on, a trap sweeping the run up to a platform that slides
+slowly from side to side, a moving ring, two barriers to thread, and a boost pad
+dead ahead of the last ring - a ring catches a boosted car, where a platform
+does not. The hard parts each come just after a ring, so a fall costs a corner
+rather than a lap.
+
+The second is **Sky Stairs**: a barrier and a ring on the ground, a trap into a
+moving platform, and off the platform the road floats, 3 m up. A ring jump
+climbs to 6.5 m, a moving ring to 9.5 m, with corners, a pad and a trap between;
+four right handers curl the climb back over the ground it started from; a
+second, faster platform starts the way down, and a last ring drops the car to
+the ground for the run home.
+
+The third is **Island Hopper**: a ring on the grass, then no more ground. A chain
+of two floating islands with a moving platform in each gap, each platform
+sliding the other way from the last; an island with a corner and a trap; a ring
+climbing to 5.5 m; a chain of three faster, narrower hops; a last island with a
+pad, and a moving ring that drops the car to the grass. Each island is 40 or 50 m
+- enough to land, settle and go, or to brake and wait for a platform on the
+wrong side.
+
+The fourth is **Tightrope**: it climbs off the grass onto floating road and the
+road narrows to half its width - 8 m of asphalt, a rail either side, nothing
+past it - until the last jump. Two barriers leave one lane each; a ring a little
+right climbs to 7 m; a trap sweeps the rope; a platform as wide as the road
+climbs to 9 m; a second trap, and a moving ring to 11.5 m; a slalom of three
+barriers along the top; and an 11.5 m drop through the last ring to the grass.
+The traps are narrow rows, 1.8 m across, because anything wider closes the
+rope as it passes the middle.
+
+The fifth is **Elevator**: a barrier and a ring on the ground, then a lift in the
+middle of the road rising 6 m, holding each end two seconds, to floating road
+9 m up; a trap and a ring to 11 m; a second lift off to the right, narrower,
+rising 5 m and waiting less, to nearly 20 m; a pad and a sliding platform that
+takes the first step down; and a moving ring that drops the car the whole way
+to the grass.
+
+The sixth is **High Road, Low Road**: two splits. The first kicks off the right
+onto a high road with a platform sliding wide across it, a pad and a climbing
+jump, 9 m up at its end, while the low road goes out to the left along a
+straight with two barriers and a trap. The two meet over a moving ring both
+share. The second kicks off the left onto a high road with a lift, rising 5 m,
+while the low road goes out to the right past a trap. Straight off each kicker
+at tuned speed, `high_road.gd` crosses the first high road from 3 of 17 moments
+in its platform's cycle and the second from 7 of 21; a player who steers for the
+platform does better.
+
+The seventh is **Freefall**: a ring on the grass, then up - a floating grade to
+6 m, a barrier, a grade to 12, a lift off to the right to 21.5 with a level run
+up to wait on, and a last grade to 26.5 m, the highest road in the game. Then
+three falls, each a jump landing 8 or 10.5 m lower, each through a moving ring,
+the first two onto floating road with a trap sweeping it straight after the
+landing, and the last all the way to the grass.
+
+The eighth is **Pinball**: barriers and traps the whole way round, with only the
+run up to each ramp clear. Rows that sit close together are on the same side,
+since rows that swap sides need most of a straight between them for a car to
+cross. Four rings, a platform, and two pads late on: the one before the platform
+is worth 43.8 m/s at the lip against 30 without, which clears the platform and
+its timing altogether, and the one before the last ring is free speed, since a
+ring catches a boosted car.
+
+The ninth is **Knot**: three turns of 270 degrees that each come back over the
+road they left on. `corner()` takes a rise now, so a corner can climb across its
+arc the way a climb does, and these climb twelve metres, twelve more, and then
+fall fourteen - the road stacking at 8 m, 20 and 32 before it comes down. Each
+crossing has a ring on the road just after it, so what a player is lined up for
+has their own road underneath it. `track_check.gd` prints where a course passes
+over itself: three crossings here, 12.4, 12.4 and 13.1 m apart in height. The
+last turn needed a long straight out of the knot first - tied where it was, it
+came down through the first turn with 8.7 m between them, and two roads need 9.
+
+The tenth and last is **Last Leap**: two platforms that hold each side four
+tenths of a second and cross in nine, with a trap on the island between them;
+two moving rings back to back, sliding opposite ways, with only a landing
+between them; a lift to twenty metres; a trap and a ring above that; a grade to
+twenty-eight, the top of the track; a pad on the last of the road; and then a
+moving ring hanging in the air with the whole twenty-eight metres under it. The
+drop is the longest in the game, and `floating.gd` holds it to the rule every
+drop is held to: on the road and still driving at the bottom.
+
+Their targets are for now scaled from `tools/checks/acrobatic_drive.gd`, which
+laps Lift Off with the keys in 50.67 s, Sky Stairs in 1:04.42, Island Hopper in
+1:02.23, Tightrope in 52.33, Elevator in 1:14.10, High Road, Low Road in 1:15.13
+- always the long way round, since it never takes a kicker - Freefall in 1:10.95,
+Pinball in 1:06.83, Knot in 1:19.80 and Last Leap in 1:16.92. On Elevator it waits,
+stopped, at both ends of both lifts, so a player who takes one flat out at the
+right moment beats its targets by a long way. The medals on an acrobatic track are set from
+the best time a player drives on it where they can be; where the check cannot
+finish a track at all, the targets are set from a player's time and nothing
+else.
+
+`tools/checks/acrobatic_drive.gd` is the check that every acrobatic track can
+be driven. It presses the input actions a keyboard does, through all of the
+car's grip, threads the gaps the barriers leave, and lines up with the next ring
+or platform where it will be when the car arrives. A row of barriers in the way
+comes before a ring or platform beyond it, and it lines up with a row's gap
+35 m out, with a trap where it will be when the car gets there. It counts the
+times a car falls, strands itself on the grass or gets no further in three
+seconds, and is put back, and fails a track where one ring takes more than four
+tries or the lap never finishes:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/acrobatic_drive.gd
+```
+
+What it cannot say is how hard a track is. It steers with analogue precision
+and no reaction time: while building the first tracks nothing made it fall, not
+even an 18 m run up after a 100 degree corner to a ring more than halfway to
+the kerb. A track it clears is a track that can be cleared; how hard it feels is
+found by driving it.
+
+`lap_times.gd` and `track_thumbnails.gd` both take track files after `--`, to
+time or draw one track rather than all of them.
+
+`tools/checks/rings.gd` flies a car at the rings on a test course
+(`tools/checks/ring_course.gd`): lined up at the slowest chaos roll, tuned, on a
+boost and at the fastest roll, all of which bank; well to one side, into the
+rim, and under a ring standing over level road, none of which do; and lined up
+with a ring off the middle of the road, which does. It checks the rule itself
+without a car, that a reset after a ring lands on road, that a ring with its
+rim in the asphalt is caught, and that the two-player race banks for one car
+and leaves the ring lit:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/rings.gd
+```
+
+`tools/checks/ring_shot.gd` takes the view from the run up, the lip, through
+the ring and past it, for any ring on any track, timing a moving one to be in
+the middle of the road when the car gets there:
+
+```
+Godot --path . --fixed-fps 60 --script tools/checks/ring_shot.gd -- /tmp/shots [track file] [ring]
+```
+
 ## Off the road
 
 The ground is one flat box, the embankment under a raised road carries no
@@ -1328,6 +1701,159 @@ of road:
 
 ```
 Godot --path . --script tools/checks/barrier_shot.gd -- /tmp/shots
+```
+
+## Traps
+
+A trap is a row of barriers that moves. It holds one place across the road,
+slides to the next, holds that, and goes back, for as long as the race runs:
+
+```gdscript
+trap(-0.7, 0.7)                  # kerb to kerb and back
+trap(-0.6, 0.6, 0.8, 2.0, 1.2)   # wider, holding 2 s, crossing in 1.2
+```
+
+`from` and `to` are where the middle of the row stands at either end, in the
+same lane units as everything else; `width` (0.6) is how much of the road it
+covers, so the default reaches the kerb from either end of `trap(-0.7, 0.7)`.
+It holds each end for `dwell` seconds (1.6) and takes `travel` seconds (1.0)
+to cross, eased so it sets off and arrives rather than starting and stopping
+dead. At GO it is at `from`.
+
+It is timed, not random, and not reactive. The only way a moving hazard is
+fair is if it is the same every lap: a trap that rolled a die as the car came
+over the rise would sometimes be one nobody could avoid, and a track whose
+gold depended on how the dice fell would have no gold time. Timed from GO, a
+player who has driven it twice knows the rhythm, and driving the rhythm is
+the skill.
+
+### The clock
+
+Where a trap is is `Placement.lateral_at(seconds)` - a function of the race
+clock and nothing else. The race scenes hand `Track.set_race_time()` their own
+clock every step they are running, before the cars move, and zero when they
+count down. So a trap waits at GO through the countdown, and what a player
+reads off the course while it counts is what they will meet; it stops when
+the race stops; a restart puts it back where it started; and both players on
+a split screen meet the same trap in the same place, because a race where each
+car meets a different trap is not a race.
+
+### Every place, not every phase
+
+Everything a barrier has to obey a trap obeys - a way past at least
+`clear_lane` wide, reachable from the way past the row before - and it has to
+obey it everywhere it goes, not only where it rests. That is not the same
+thing. A row sliding from one kerb to the other leaves the road open in one
+piece at either end and in two pieces on the way across, and halfway is
+usually its narrowest moment. A row covering 1.4 of the road's 2.0 leaves
+4.8 m open at either end of its sweep on a 16 m road; halfway it leaves 2.4 m
+either side of it, and a car fits through neither.
+
+So `TrackFeatures.faults()` follows each trap across the road in steps no
+further apart than `sweep_step` (5 cm) and asks for a way past at every one.
+Reachability is asked for every place of one row against every place of the
+next, and the furthest apart the ways past can be is what the road between
+them is held to - in steps of `dodge_step` (25 cm), because that is every
+place of one against every place of the other and costs the square of it.
+That is the worst case rather than whatever the clock actually lines up, on
+purpose: a player slower or faster than the course expects meets a different
+pair of places, and a road that is only driveable at the right speed is a road
+some players cannot get down. The same goes for a sweeper whose ways past only
+line up where the two rest; a pair that is fine at GO can be 1.6 m apart with
+5 m to cross in once one of them has moved, and that one needs 22.9 m.
+
+Two traps may not stand beside each other along the road, because the checks
+follow one trap at a time with everything else where it stands at GO. A trap
+with no travel time is refused too: it is a barrier appearing on top of
+whoever was in its gap.
+
+### Building one
+
+`TrackFurniture` builds the same striped row a barrier is, around its own
+middle rather than drawn onto the road, on an `AnimatableBody3D` that is moved
+from there. It is in the `obstacle` group, so hitting one costs exactly what
+hitting a barrier costs - 30 m/s to 8.4 on a square hit, the boost gone, and
+condition in damage mode - with no new collision code.
+
+The body is an `AnimatableBody3D` rather than a static one moved by hand so the
+physics knows it is moving and pushes a car it sweeps into instead of finding
+it inside. Pushed towards open road that is all it takes. Pushed against the
+kerb it is not: the rail is on the other side, and a car squeezed between two
+walls was sorted out by the physics lifting it over the lower of them - it came
+down 0.97 m up, on top of the trap and the rail, and drove away along the top
+of the rail. So a car in the lane a trap is closing is shoved along the road
+out of the row instead, at `trap_shove` (10 m/s), towards whichever end of the
+row it is already heading for. That starts once the trap's leading edge is
+`trap_shove_reach` (3 m) from the car or `trap_shove_lead` (0.45 s) from
+reaching it, whichever comes first: the distance leaves a car threading the gap
+alone until it plainly is not going to make it, and the time gives a fast trap's
+shove long enough to clear the car before it arrives. A car parked in the row
+ends about 7 m back from it, still on the road, at the tuned crossing and at a
+0.5 s crossing faster than chaos ever rolls.
+
+### On the tracks
+
+Six tracks carry them, arriving gradually: Switchback has the first, slow and
+alone on its straight; The Hook moves the second of a pair of rows; Relentless
+turns a pair into two traps in step and opposite, so the way past both is
+always a crossing of the road; Grinder puts a quick one on the exit of an esse;
+The Wringer and Last Light each put one in a ramp's landing, and Last Light
+moves the middle row of its last slalom.
+
+Adding them cost those six tracks their times, and only those six. A time is
+kept against a fingerprint of its own track file, and the leaderboard posts it
+under a signature of the same file (see Track times), so editing a track
+throws away what was set on the old one without touching `TrackTimes.GEOMETRY`
+or any other track. The medal targets were not moved, and have not been
+re-measured with `tools/lap_times.gd` since the traps went in: a trap always
+leaves a way past, so a lap that reads it right should be no slower for it, but
+that is an argument rather than a number.
+
+### In chaos
+
+A rolled course gets traps only under chaos, which sets `Track.traps_enabled`
+and rolls `trap_chance` - how many of the rows are traps - between 0.2 and 0.6
+with the rest of the course. Without chaos the endless course is the course it
+was: the roll that decides whether a row is a trap is not made at all, so the
+same seed draws the same numbers and builds the same road, and
+`barrier_layout.gd` still reads 5.7 barriers a course.
+
+A rolled trap sweeps kerb to kerb, and is fitted to its halfway point: it takes
+no more of the road than leaves a clear lane either side of it there. Rows
+around it are spaced against its worst place the way they are against each
+other. And every course that asks for traps gets one, the way every course is
+promised a fork: chaos courses are short in the straight, and half of them
+rolled no loose rows at all, or only the fork's. So if the rolls left none, a
+row is turned into a trap wherever that still passes every rule, and failing
+that one is stood in the middle of the longest straight with room to see it
+coming. Rows in a fork's fast lane are left alone - a lane is too narrow for
+anything to cross it and leave a clear lane either side.
+
+`tools/checks/trap_layout.gd` checks the clock, every trap on every track and
+on a hundred chaos courses, hands the validator three plans that are fine
+wherever their traps rest and wrong in between, drives into a trap and past it
+while it holds each side, sweeps one into a car parked in the middle, parked
+against the kerb, rolling into the row and half in it, and runs both race
+scenes to see the traps held through the countdown, following the clock, and
+back at GO after a restart:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/trap_layout.gd
+```
+
+On the tuned numbers that is 8 traps on the tracks with never less than 5.28 m
+past any of them anywhere they go, and 109 traps among 306 rows on a hundred
+chaos courses, 6 with none - those have no straight long enough to hold one
+clear of the respawns - and never less than 4.44 m past. With the shove turned
+off the same check reports cars lifted onto the rail.
+
+`tools/checks/trap_shot.gd` looks at the first trap in the game from both cars,
+one either side of the road, holding its start, halfway across, and holding its
+end - so which half of the picture has the way past swaps between the first
+shot and the last:
+
+```
+Godot --path . --script tools/checks/trap_shot.gd -- /tmp/shots
 ```
 
 ## Jumps
@@ -1899,8 +2425,14 @@ description - a line that far under a button reads as a separate thing rather
 than as part of it. They ride in margins with a negative top, which closes that
 one gap without touching any of the others.
 
-Backing out walks the way in, in reverse: the track grid, the flavours, the
-modes, then the page.
+Tracks is a door the same way. It slides NORMAL and ACROBATIC down from under
+itself, and NORMAL is what opens the grid. Acrobatic tracks are a different
+thing to drive and get their own grid rather than a place in this one; until
+there are any, ACROBATIC is there but greyed and cannot be pressed, for the
+same reason the grid shows slots for tracks still to come.
+
+Backing out walks the way in, in reverse: the track grid, the flavours or the
+kinds of track, the modes, then the page.
 
 `tools/checks/mode_routing.gd` walks in and sees which scene comes out the far
 end. Two questions before a race and two scenes to run it in is four ways in

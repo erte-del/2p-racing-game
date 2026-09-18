@@ -88,6 +88,9 @@ var _targets := Vector3.ZERO
 ## checkpoint. They can be banked in any order; all of them are needed to finish.
 var _respawn := 0.0
 var _banked := PackedByteArray()
+## Where the middle of the car was a step ago, on a track with rings. A ring is
+## banked by the car's path going through it, and a path needs two ends.
+var _was := Vector3.ZERO
 ## Which countdown is the current one, so an older one that is still waiting
 ## on a timer cannot clear the screen out from under a newer one.
 var _countdown_run := 0
@@ -184,6 +187,9 @@ func _physics_process(delta: float) -> void:
 
 	_time += delta
 	_clock.text = RaceClock.format(_time)
+	# Before the car moves, so what it drives into this step is where the
+	# clock says it is.
+	_track.set_race_time(_time)
 	if Input.is_action_just_pressed("p1_reset"):
 		_back_to_checkpoint()
 		return
@@ -295,6 +301,9 @@ func _start_after_countdown() -> void:
 	_car.reset_motion()
 	_time = 0.0
 	_clock.text = RaceClock.format(0.0)
+	# The traps wait at GO with the car, so what the player reads off the
+	# course while it counts down is what they will meet.
+	_track.set_race_time(0.0)
 
 	var steps: int = maxi(1, int(round(preview_seconds)))
 	var each := preview_seconds / float(steps)
@@ -454,7 +463,10 @@ func _offer_the_way_on(medal: int) -> void:
 ## quietly meaning the first one.
 func _next_track() -> int:
 	var here := TrackRoster.index_of(_track_file)
-	if here < 0 or not TrackRoster.exists(here + 1):
+	# Not across from the last normal track into the first acrobatic one: the
+	# next track is the next one in the grid it was picked from.
+	if (here < 0 or not TrackRoster.exists(here + 1)
+			or TrackRoster.kind_of(here + 1) != TrackRoster.kind_of(here)):
 		return -1
 	return here + 1
 
@@ -525,6 +537,9 @@ func _has_finished(offset: float) -> bool:
 ## only just past it, so coming back onto the road further on does not bank the
 ## ones left behind. In any order; a reset goes to whichever was banked last.
 func _bank_checkpoints(offset: float) -> void:
+	if _track.has_rings():
+		_bank_rings()
+		return
 	if not _car.on_the_road() or not _on_course(offset):
 		return
 	var marks := _track.checkpoint_offsets()
@@ -534,6 +549,21 @@ func _bank_checkpoints(offset: float) -> void:
 			_banked[mark] = 1
 			_respawn = marks[mark]
 			_show_tally()
+
+
+## Bank any ring the car went through this step. Not on the road, by the nature
+## of the thing, and not in any window along the course: through the hole, the
+## right way, is the whole rule. A banked ring goes dark, so the ones still owed
+## are the ones still lit.
+func _bank_rings() -> void:
+	var now := _car.middle()
+	for mark in _banked.size():
+		if _banked[mark] == 0 and _track.through_ring(mark, _was, now):
+			_banked[mark] = 1
+			_respawn = _track.respawn_offset(mark)
+			_track.show_ring(mark, true)
+			_show_tally()
+	_was = now
 
 
 ## Put the car back on the course at its last checkpoint, facing the right way
@@ -551,6 +581,7 @@ func _back_to_checkpoint() -> void:
 	# Put back rather than driven back, so it is drawn at the checkpoint on the
 	# next frame instead of streaking there from wherever it was.
 	_car.reset_physics_interpolation()
+	_was = _car.middle()
 	_camera.follow(_car)
 
 
@@ -576,11 +607,15 @@ func _place_on_the_line() -> void:
 	_respawn = at
 	_banked = PackedByteArray()
 	_banked.resize(_track.checkpoint_offsets().size())
+	_was = _car.middle()
+	for mark in _banked.size():
+		_track.show_ring(mark, false)
 	_show_tally()
 
 
 func _show_tally() -> void:
-	_tally.text = "CHECKPOINT %d / %d" % [_banked.count(1), _banked.size()]
+	_tally.text = "%s %d / %d" % [
+		"RING" if _track.has_rings() else "CHECKPOINT", _banked.count(1), _banked.size()]
 
 
 func _on_course(offset: float) -> bool:

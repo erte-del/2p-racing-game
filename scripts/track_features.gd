@@ -23,6 +23,26 @@ const OBSTACLE := 1
 ## it and a clear one with neither - so the rest of the planner can keep off
 ## it and a check can find it and ask whether it can be driven.
 const FORK := 2
+## A row of barriers that moves: it holds one place across the road, slides to
+## the next, holds that, and loops, on the race clock. Everything a row has to
+## obey it obeys in every place it passes through, not only where it rests.
+const TRAP := 3
+## A ring standing up in the air, square to the road, that a car has to pass
+## through. On a track that has any, the rings are its checkpoints: nothing is
+## painted on the road, and a car banks one by going through it rather than by
+## driving over a line. They are not rows - a car goes through a ring, not past
+## it - so nothing that asks whether a barrier can be dodged looks at them.
+const RING := 4
+## A slab of road floating in the hole of a jump, sliding from one side of the
+## road to the other on the race clock. A car has to come down on it, ride it
+## to its far end, and drop off onto the landing. It is road - a car on it is
+## on the road - and it is not a row: nothing is dodged, it is landed on.
+const PLATFORM := 5
+## A kicker: a ramp in one lane of the road rather than across all of it, onto a
+## high road. It is road - a car on it is on the road - and it is not a row:
+## a car goes round it or up it, and the checks that ask whether a barrier can
+## be dodged leave it alone.
+const WEDGE := 6
 
 
 ## One piece of furniture, in course coordinates.
@@ -40,6 +60,27 @@ class Placement:
 	## What it does, read by whatever builds it. For a pad, the extra top
 	## speed as a fraction; negative means "whatever the car is tuned for".
 	var strength: float
+	## For a trap, the places across the road it moves between, as laterals, in
+	## the order it visits them before going back to the first. `lateral` is
+	## always the first of them, which is where it stands at GO. Empty for
+	## anything that stands still.
+	var phases := PackedFloat32Array()
+	## Seconds a trap holds each of those places, and seconds it takes to get
+	## from one to the next.
+	var dwell := 0.0
+	var travel := 0.0
+	## For a ring, how high its middle stands above the middle of the road at
+	## `centre()`, and the radius of the hole in it, both in metres. For a
+	## platform, `height` is how high its top stands above that same point. Metres
+	## rather than lane units because a car's height is not a fraction of
+	## anything.
+	var height := 0.0
+	var radius := 0.0
+	## For a lift: how far it rises above `height` and back, in metres, on the
+	## race clock - holding the bottom for `dwell`, rising over `travel`,
+	## holding the top for `dwell` and coming back down over `travel`. Zero for
+	## anything that does not go up and down.
+	var lift := 0.0
 
 	func _init(p_kind: int, p_offset: float, p_length: float) -> void:
 		kind = p_kind
@@ -53,6 +94,68 @@ class Placement:
 	## The middle of the placement, which is where it is anchored.
 	func centre() -> float:
 		return offset + length * 0.5
+
+	func moves() -> bool:
+		return phases.size() > 1
+
+	## Where it stands across the road at a time on the race clock.
+	##
+	## A function of the clock and nothing else, so two cars on a split screen
+	## meet the same trap in the same place, and a race put back on the line
+	## puts its traps back where they were at GO.
+	func lateral_at(seconds: float) -> float:
+		if not moves():
+			return lateral
+		var leg := dwell + travel
+		if leg <= 0.0:
+			return phases[0]
+		var into := fposmod(seconds, leg * phases.size())
+		var i := mini(int(into / leg), phases.size() - 1)
+		var moving := into - leg * i - dwell
+		if moving <= 0.0:
+			return phases[i]
+		# Eased, so it sets off and arrives rather than starting and stopping
+		# dead. Easing changes when it is where, never where it can be, so
+		# none of the checks below have to know about it.
+		var t := smoothstep(0.0, 1.0, moving / maxf(travel, 0.0001))
+		return lerpf(phases[i], phases[(i + 1) % phases.size()], t)
+
+	## How far above `height` a lift stands at a time on the race clock. Zero
+	## at GO, and for anything that is not a lift.
+	func lift_at(seconds: float) -> float:
+		if lift <= 0.0:
+			return 0.0
+		var leg := dwell + travel
+		if leg <= 0.0:
+			return 0.0
+		var into := fposmod(seconds, leg * 2.0)
+		var i := mini(int(into / leg), 1)
+		var moving := into - leg * i - dwell
+		if moving <= 0.0:
+			return 0.0 if i == 0 else lift
+		var t := smoothstep(0.0, 1.0, moving / maxf(travel, 0.0001))
+		return lerpf(0.0, lift, t) if i == 0 else lerpf(lift, 0.0, t)
+
+	## Every place across the road it passes through, no two further apart
+	## than `step`. What the checks hold a trap to, since its narrowest moment
+	## is not always a place it rests: a row sliding from one kerb to the other
+	## splits the road it leaves open in two on the way across.
+	func sweep(step: float) -> PackedFloat32Array:
+		if not moves():
+			return PackedFloat32Array([lateral])
+		var out := PackedFloat32Array()
+		# Two places are one stretch of road driven there and back, so it is
+		# only walked once.
+		var legs := phases.size() if phases.size() > 2 else 1
+		for i in legs:
+			var from := phases[i]
+			var to := phases[(i + 1) % phases.size()]
+			var count: int = maxi(1, ceili(absf(to - from) / maxf(step, 0.0001)))
+			for k in count:
+				out.append(lerpf(from, to, float(k) / float(count)))
+		if legs == 1:
+			out.append(phases[1])
+		return out
 
 
 # --- tunables, set by Track ---------------------------------------------
@@ -147,6 +250,26 @@ var dodge_radius := 16.0
 ## says is reachable. The player has to see the row, decide, and then turn;
 ## only the last of those three is what the reachable distance describes.
 var dodge_margin := 1.4
+
+## --- traps ---
+##
+## Rows that sweep from one kerb to the other and back on the race clock.
+## Laid-out tracks put them wherever their files say; this is whether a rolled
+## course gets any, and it is chaos that asks for them.
+var traps_enabled := false
+## The chance a row on a rolled course is a trap rather than a row that stands.
+var trap_chance := 0.35
+## Seconds a rolled trap holds each kerb, and seconds it takes to cross.
+var trap_dwell := Vector2(1.2, 2.2)
+var trap_travel := Vector2(0.8, 1.4)
+## How finely a trap is followed across the road, in metres: no edge of it
+## moves further than this between one place it is checked at and the next.
+## Fine for whether there is a way past, which is a hard rule; coarser for how
+## far apart the ways past two rows are, which is every place of one against
+## every place of the other and costs the square of it.
+var sweep_step := 0.05
+var dodge_step := 0.25
+
 ## --- the fork ---
 ##
 ## One stretch of every course where the road is split down the middle: a pad
@@ -179,6 +302,10 @@ var fork_block := Vector2(0.3, 0.6)
 
 # --- results ------------------------------------------------------------
 
+## How far a ring's rim reaches past its hole, for the check that it stands
+## clear of the road: the tube it is drawn with, both sides of it.
+var ring_rim := 0.7
+
 var placements: Array[Placement] = []
 ## Stretches of course the fork has taken, which nothing else may build on.
 var _claimed: Array[Vector2] = []
@@ -206,6 +333,8 @@ static func build(
 		features._place_pads(layout, rng)
 	if features.obstacles_enabled:
 		features._place_obstacles(layout, rng)
+		if features.traps_enabled:
+			features._make_sure_of_a_trap(layout, rng)
 	return features
 
 
@@ -237,9 +366,10 @@ func of_kind(kind: int) -> Array[Placement]:
 
 
 func summary() -> String:
-	return "%d boost pads, %d barriers, %d forks" % [
+	return "%d boost pads, %d barriers, %d traps, %d forks, %d rings" % [
 		of_kind(BOOST_PAD).size(), of_kind(OBSTACLE).size(),
-		of_kind(FORK).size()]
+		of_kind(TRAP).size(), of_kind(FORK).size(), of_kind(RING).size()] + (
+			", %d platforms" % of_kind(PLATFORM).size() if not of_kind(PLATFORM).is_empty() else "")
 
 
 # --- boost pads ---------------------------------------------------------
@@ -340,7 +470,7 @@ func _place_obstacles(layout: TrackLayout, rng: RandomNumberGenerator) -> void:
 		if at - last_at < min_obstacle_spacing:
 			at = last_at + min_obstacle_spacing
 		var previous: Placement = null
-		var previous_gaps: Array[Vector2] = []
+		var previous_sets: Array = []
 		var placed := 0
 
 		# Stepping past a pad or a fork is not a row, so it does not count
@@ -356,10 +486,11 @@ func _place_obstacles(layout: TrackLayout, rng: RandomNumberGenerator) -> void:
 			# Where this row can stand is not known until it is known what it
 			# blocks: a row taking the same side as the one before it can
 			# follow closely, and one taking the opposite side needs the whole
-			# width of the road to be crossed before it.
+			# width of the road to be crossed before it. Against a trap that
+			# is wherever the two of them are furthest apart.
 			if previous != null:
-				var gaps := gaps_at(layout, barrier.centre(), barrier)
-				var shift := (_shift_between(previous_gaps, gaps)
+				var sets := gap_sets(layout, barrier, Vector2(-1.0, 1.0), barrier)
+				var shift := (_worst_shift(previous_sets, sets)
 						* layout.half_width_at(barrier.centre()))
 				barrier.offset = maxf(barrier.offset,
 					previous.offset + previous.length + _run_for(shift, rng))
@@ -378,7 +509,7 @@ func _place_obstacles(layout: TrackLayout, rng: RandomNumberGenerator) -> void:
 			placed += 1
 			last_at = barrier.offset
 			previous = barrier
-			previous_gaps = gaps_past(layout, barrier)
+			previous_sets = gap_sets(layout, barrier)
 			at = barrier.offset + obstacle_length + min_row_gap
 
 
@@ -397,6 +528,16 @@ func _run_for(shift: float, rng: RandomNumberGenerator) -> float:
 ## wherever it has ended up on the road.
 func _fit(layout: TrackLayout, barrier: Placement) -> void:
 	var clear := _planned_clear(layout, barrier.centre())
+	if barrier.moves():
+		# A sweeper is narrowest halfway across, where the road it leaves is
+		# split either side of it, so that is the moment it is fitted to.
+		barrier.half_span = minf(barrier.half_span, maxf(1.0 - clear, 0.0))
+		var kerbs := PackedFloat32Array()
+		for phase in barrier.phases:
+			kerbs.append(signf(phase) * (1.0 - barrier.half_span))
+		barrier.phases = kerbs
+		barrier.lateral = kerbs[0]
+		return
 	if is_zero_approx(barrier.lateral):
 		barrier.half_span = minf(barrier.half_span, maxf(1.0 - clear, 0.0))
 		return
@@ -428,6 +569,13 @@ func _row_at(
 	if previous != null and rng.randf() < same_side_chance:
 		hold = signf(previous.lateral) if not is_zero_approx(previous.lateral) else 0.0
 
+	# Checked first and only when asked for, so a course rolled with traps off
+	# draws exactly the numbers it always did and comes out the same course.
+	if traps_enabled and rng.randf() < trap_chance:
+		var trap := _trap_at(at, clear, block, hold, rng)
+		if trap != null:
+			return trap
+
 	var barrier := Placement.new(OBSTACLE, at, obstacle_length)
 	if hold == 0.0 or (hold == INF and rng.randf() < 0.3):
 		# Down the middle, with a way past on either side. Both sides have to
@@ -448,6 +596,99 @@ func _row_at(
 		barrier.half_span = width * 0.5
 		barrier.lateral = side * (1.0 - barrier.half_span)
 	return barrier
+
+
+## Turn one row into a trap, if the rolls left a course that asked for traps
+## without any.
+##
+## A course asking for traps is a promise the same way the fork is: a chaos
+## race with nothing moving on it would be missing the feature rather than
+## simply being quiet, and with only two or three rows to a chaos course a roll
+## of the dice leaves most of them that way. The rows are tried in the order
+## they are met, each narrowed to fit a sweep and kept only if the whole plan
+## still passes every rule; one that would not - too close to the row either
+## side of it to be reached from wherever the trap has got to - is put back as
+## it was. Rows in a fork's fast lane are left alone: that lane has its own
+## slalom to be.
+func _make_sure_of_a_trap(layout: TrackLayout, rng: RandomNumberGenerator) -> void:
+	if not of_kind(TRAP).is_empty():
+		return
+	var standing := faults(layout).size()
+	for row in rows():
+		if _in_a_fork(row):
+			continue
+		var i := placements.find(row)
+		var clear := _planned_clear(layout, row.centre())
+		var hold := signf(row.lateral) if not is_zero_approx(row.lateral) else INF
+		var trap := _trap_at(row.offset, clear, row.half_span * 2.0, hold, rng)
+		if trap == null:
+			continue
+		placements[i] = trap
+		if faults(layout).size() <= standing:
+			return
+		placements[i] = row
+
+	# A chaos course is often too short in the straight to have rolled any
+	# loose rows at all - half of them had none, or only the fork's. A trap
+	# asks less of a straight than a run of rows does: room to be seen coming,
+	# and itself. So one is stood in the middle of the longest straight that
+	# has that, and kept on the same terms as a converted row.
+	var straights: Array[TrackLayout.Piece] = []
+	for piece in layout.pieces:
+		if (piece.kind != TrackLayout.CORNER
+				and piece.length >= obstacle_margin * 2.0 + obstacle_length):
+			straights.append(piece)
+	straights.sort_custom(func(a: TrackLayout.Piece, b: TrackLayout.Piece) -> bool:
+		return a.length > b.length)
+	for piece in straights:
+		var at := (piece.start_offset + piece.end_offset - obstacle_length) * 0.5
+		var clear := _planned_clear(layout, at + obstacle_length * 0.5)
+		var trap := _trap_at(at, clear,
+			rng.randf_range(obstacle_block.x, obstacle_block.y), INF, rng)
+		if (trap == null
+				or _too_close_to_keep_out(trap.centre())
+				or _on_a_pad(trap, of_kind(BOOST_PAD))
+				or _is_claimed(trap.offset, trap.offset + trap.length)):
+			continue
+		placements.append(trap)
+		if faults(layout).size() <= standing:
+			return
+		placements.pop_back()
+
+
+func _in_a_fork(row: Placement) -> bool:
+	for fork in of_kind(FORK):
+		if row.offset >= fork.offset and row.offset < fork.offset + fork.length:
+			return true
+	return false
+
+
+## A row that sweeps from one kerb to the other and back, or null if the road
+## is too narrow for one.
+##
+## It may take only as much of the road as leaves a clear lane either side of
+## it halfway across. Either end of the sweep leaves all of the rest of the
+## road open in one piece; the middle leaves the same road in two halves, and
+## that is the moment the width has to be good for.
+func _trap_at(
+	at: float, clear: float, block: float, hold: float,
+	rng: RandomNumberGenerator
+) -> Placement:
+	var most: float = 1.0 - clear
+	if most <= 0.1:
+		return null
+	# Starting from the side the last row held, if it held one, so the way
+	# past that row is still the way past this one at GO.
+	var side: float = hold if hold != INF and hold != 0.0 else (
+			-1.0 if rng.randf() < 0.5 else 1.0)
+	var trap := Placement.new(TRAP, at, obstacle_length)
+	trap.half_span = minf(block * 0.5, most)
+	var edge := 1.0 - trap.half_span
+	trap.phases = PackedFloat32Array([side * edge, -side * edge])
+	trap.lateral = trap.phases[0]
+	trap.dwell = rng.randf_range(trap_dwell.x, trap_dwell.y)
+	trap.travel = rng.randf_range(trap_travel.x, trap_travel.y)
+	return trap
 
 
 ## True if a row would be built on top of a pad, or close enough in front of
@@ -639,13 +880,16 @@ func _fill_the_fast_lane(
 ## is what lets the planner ask what a row it is about to lay down would leave
 ## open. Without it the answer comes back as the road with everything on it
 ## except the one thing being asked about.
+## `poses` says where a trap is standing for the question, as placement ->
+## lateral. A trap left out of it is asked about where it stands at GO.
 func gaps_at(
-	layout: TrackLayout, offset: float, extra: Placement = null
+	layout: TrackLayout, offset: float, extra: Placement = null,
+	poses := {}
 ) -> Array[Vector2]:
 	var clear := clear_lane / maxf(layout.half_width_at(offset), 0.001)
 	var open: Array[Vector2] = []
 	var edge := -1.0
-	for span in _blocked_at(offset, extra):
+	for span in _blocked_at(offset, extra, poses):
 		if span.x - edge >= clear:
 			open.append(Vector2(edge, span.x))
 		edge = maxf(edge, span.y)
@@ -659,22 +903,37 @@ func gaps_past(layout: TrackLayout, barrier: Placement) -> Array[Vector2]:
 	return gaps_at(layout, barrier.centre())
 
 
+## The ways past a row in every place it passes through, one set of gaps per
+## place - a single set for a row that stands still. `extra` is as for gaps_at,
+## and is usually the row itself, before it has been laid down.
+func gap_sets(
+	layout: TrackLayout, row: Placement, side := Vector2(-1.0, 1.0),
+	extra: Placement = null
+) -> Array:
+	var half_width := maxf(layout.half_width_at(row.centre()), 0.001)
+	var sets: Array = []
+	for at in row.sweep(dodge_step / half_width):
+		sets.append(_gaps_within(layout, row.centre(), side, extra, {row: at}))
+	return sets
+
+
 ## Everything standing across the road at one offset, merged, so two barriers
 ## that overlap - a row inside a lane and the divider beside it - count as the
 ## one obstruction they look like rather than as two.
-func _blocked_at(offset: float, extra: Placement = null) -> Array[Vector2]:
+func _blocked_at(
+	offset: float, extra: Placement = null, poses := {}
+) -> Array[Vector2]:
 	var spans: Array[Vector2] = []
 	var standing := placements.duplicate()
 	if extra != null:
 		standing.append(extra)
 	for placement in standing:
-		if placement.kind != OBSTACLE:
+		if placement.kind != OBSTACLE and placement.kind != TRAP:
 			continue
 		if offset < placement.offset or offset > placement.offset + placement.length:
 			continue
-		spans.append(Vector2(
-			placement.lateral - placement.half_span,
-			placement.lateral + placement.half_span))
+		var at: float = poses.get(placement, placement.lateral)
+		spans.append(Vector2(at - placement.half_span, at + placement.half_span))
 	spans.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x)
 
 	var merged: Array[Vector2] = []
@@ -696,13 +955,22 @@ func _blocked_at(offset: float, extra: Placement = null) -> Array[Vector2]:
 ## perfectly passable alone and are a dead end together, if they sit close
 ## enough that no car could cross between them.
 ##
+## A trap has to satisfy both in every place it passes through, not only the
+## places it rests, and against every place the row beside it can be. That is
+## the worst case rather than what the clock actually lines up, on purpose: a
+## player who is slower or faster than the course expects meets a different
+## pair of places, and a road that is only driveable at the right speed is a
+## road some players cannot get down.
+##
 ## Walls running along the road are stepped over rather than checked as rows.
 ## A divider is not something to be dodged; it is something that narrows what
 ## the rows either side of it leave open, and it does that by being merged
 ## into their gaps.
 func faults(layout: TrackLayout) -> PackedStringArray:
 	var found := PackedStringArray()
-	found.append_array(_check_the_way_past(layout, of_kind(OBSTACLE), ""))
+	found.append_array(_check_the_traps())
+	found.append_array(_check_the_way_past(
+		layout, of_kind(OBSTACLE) + of_kind(TRAP), ""))
 	found.append_array(_check_the_dodges(layout, rows(), ""))
 
 	# And the fast lane of every fork on its own. The divider means a car in
@@ -716,64 +984,149 @@ func faults(layout: TrackLayout) -> PackedStringArray:
 				inside.append(row)
 		found.append_array(_check_the_way_past(layout, inside, "the fast lane of ", side))
 		found.append_array(_check_the_dodges(layout, inside, "the fast lane of ", side))
+	found.append_array(_check_the_rings(layout))
 	return found
 
 
-## Every row that stands across the road, in the order they are met. Walls
-## running along it - a fork's divider - are not rows and are left out.
+## What a ring can get wrong where it stands. Whether a car can actually fly
+## through one is a question for a car, and tools/checks/rings.gd asks it.
+func _check_the_rings(layout: TrackLayout) -> PackedStringArray:
+	var found := PackedStringArray()
+	for ring in of_kind(RING):
+		var at := "ring at %.0f m" % ring.centre()
+		for lateral in ring.sweep(0.05):
+			if absf(lateral) > 1.0:
+				found.append("%s: it moves off the road, to %+.2f" % [at, lateral])
+				break
+		# Its rim clear of the road under it, with room for the tube. A ring
+		# with its foot in the asphalt is a wall with a hole in it. Over the
+		# hole in a jump there is no road under it to be in.
+		var sample := clampi(int(round(ring.centre() / layout.step)), 0, layout.road_present.size() - 1)
+		var over_road := layout.road_present.is_empty() or layout.road_present[sample] != 0
+		if over_road and ring.height < ring.radius + ring_rim:
+			found.append("%s: its rim is in the road (%.1f m up, %.1f m across)"
+				% [at, ring.height, ring.radius])
+		# Its middle over the road rather than over the grass, so a car
+		# lined up with it is a car on the road.
+		if absf(ring.lateral) > 1.0:
+			found.append("%s: its middle is off the road" % at)
+		if ring.centre() < 0.0 or ring.centre() > layout.length():
+			found.append("%s: it is not on the course" % at)
+	for kicker in of_kind(WEDGE):
+		if absf(kicker.lateral) + kicker.half_span > 1.0:
+			found.append("kicker at %.0f m: it hangs off the road" % kicker.offset)
+	for platform in of_kind(PLATFORM):
+		var at := "platform at %.0f m" % platform.offset
+		# It may hang a little past where the kerb would be - there is no kerb
+		# in a hole - but not so far that a car lined up with the road below
+		# it could never reach it.
+		for lateral in platform.sweep(0.05):
+			if absf(lateral) + platform.half_span > 1.25:
+				found.append("%s: it moves off the road, to %+.2f" % [at, lateral])
+				break
+		if platform.half_span * 2.0 < 0.3:
+			found.append("%s: it is too narrow to land a car on" % at)
+		if platform.moves() and platform.travel <= 0.0:
+			found.append("%s: it jumps from place to place instead of moving" % at)
+	return found
+
+
+## Every row that stands across the road, in the order they are met - traps
+## included. Walls running along it - a fork's divider - are not rows and are
+## left out.
 func rows() -> Array[Placement]:
 	var rows: Array[Placement] = []
 	for placement in placements:
-		if placement.kind == OBSTACLE and not placement.along:
+		if (placement.kind == TRAP
+				or (placement.kind == OBSTACLE and not placement.along)):
 			rows.append(placement)
 	rows.sort_custom(func(a: Placement, b: Placement) -> bool:
 		return a.offset < b.offset)
 	return rows
 
 
-## Nothing may close the road, or the part of it named by `side`.
+## What a trap can get wrong on its own, before the road is asked about.
+##
+## Two traps may not stand beside each other along the road: the checks below
+## follow one trap through its places with everything else where it stands at
+## GO, and two moving together have combinations that would never be looked
+## at. And a trap has to take time to get anywhere, or it is a barrier that
+## appears on top of whoever was in its gap.
+func _check_the_traps() -> PackedStringArray:
+	var found := PackedStringArray()
+	var traps := of_kind(TRAP)
+	for i in traps.size():
+		var trap := traps[i]
+		if trap.phases.size() < 2:
+			found.append("the trap at %.0f m has nowhere to move to" % trap.offset)
+		if trap.travel <= 0.0:
+			found.append("the trap at %.0f m jumps across the road instead of moving"
+				% trap.offset)
+		if trap.dwell < 0.0:
+			found.append("the trap at %.0f m holds for less than no time" % trap.offset)
+		for other in traps.slice(i + 1):
+			if (trap.offset < other.offset + other.length
+					and other.offset < trap.offset + trap.length):
+				found.append("the traps at %.0f m and %.0f m stand beside each other"
+					% [trap.offset, other.offset])
+	return found
+
+
+## Nothing may close the road, or the part of it named by `side` - wherever a
+## trap has got to.
 func _check_the_way_past(
 	layout: TrackLayout, rows: Array[Placement], what: String,
 	side := Vector2(-1.0, 1.0)
 ) -> PackedStringArray:
 	var found := PackedStringArray()
 	for row in rows:
-		if _gaps_within(layout, row.centre(), side).is_empty():
-			found.append("%sthe road at %.0f m has no way past" % [what, row.offset])
+		var half_width := maxf(layout.half_width_at(row.centre()), 0.001)
+		for at in row.sweep(sweep_step / half_width):
+			if not _gaps_within(layout, row.centre(), side, null, {row: at}).is_empty():
+				continue
+			if row.moves():
+				found.append("%sthe trap at %.0f m closes the road on its way through %+.2f"
+					% [what, row.offset, at])
+			else:
+				found.append("%sthe road at %.0f m has no way past" % [what, row.offset])
+			break
 	return found
 
 
-## Every row has to be reachable from the one before it.
+## Every row has to be reachable from the one before it, from wherever either
+## of them has got to.
 func _check_the_dodges(
 	layout: TrackLayout, rows: Array[Placement], what: String,
 	side := Vector2(-1.0, 1.0)
 ) -> PackedStringArray:
 	var found := PackedStringArray()
 	var previous: Placement = null
+	var previous_sets: Array = []
 	for row in rows:
+		var sets := gap_sets(layout, row, side)
 		if previous != null:
-			var from := _gaps_within(layout, previous.centre(), side)
-			var to := _gaps_within(layout, row.centre(), side)
-			if not from.is_empty() and not to.is_empty():
-				var half_width := layout.half_width_at(row.centre())
-				var shift := _shift_between(from, to) * half_width
-				var run := row.offset - (previous.offset + previous.length)
-				var needed := sqrt(4.0 * dodge_radius * shift)
-				if run < needed:
-					found.append(
-						"%sthe row at %.0f m needs %.1f m of road to reach, has %.1f m"
-						% [what, row.offset, needed, run])
+			var half_width := layout.half_width_at(row.centre())
+			var shift := _worst_shift(previous_sets, sets) * half_width
+			var run := row.offset - (previous.offset + previous.length)
+			var needed := sqrt(4.0 * dodge_radius * shift)
+			if run < needed:
+				found.append(
+					"%sthe row at %.0f m needs %.1f m of road to reach, has %.1f m%s"
+					% [what, row.offset, needed, run,
+						" at worst" if row.moves() or previous.moves() else ""])
 		previous = row
+		previous_sets = sets
 	return found
 
 
 ## The ways past at an offset, kept to one side of the road.
 func _gaps_within(
-	layout: TrackLayout, offset: float, side: Vector2, extra: Placement = null
+	layout: TrackLayout, offset: float, side: Vector2, extra: Placement = null,
+	poses := {}
 ) -> Array[Vector2]:
 	var kept: Array[Vector2] = []
 	var clear := clear_lane / maxf(layout.half_width_at(offset), 0.001)
-	for gap in gaps_at(layout, offset, extra):
+	for gap in gaps_at(layout, offset, extra, poses):
 		var cut := Vector2(maxf(gap.x, side.x), minf(gap.y, side.y))
 		if cut.y - cut.x >= clear:
 			kept.append(cut)
@@ -790,3 +1143,18 @@ func _shift_between(from: Array[Vector2], to: Array[Vector2]) -> float:
 		for b in to:
 			least = minf(least, maxf(0.0, maxf(b.x - a.y, a.x - b.y)))
 	return 0.0 if least == INF else least
+
+
+## The furthest apart the ways past two rows can be, over every place each of
+## them can be in. A set with no gaps in it is skipped: that is a road with no
+## way past, which is its own fault and not a distance.
+func _worst_shift(from_sets: Array, to_sets: Array) -> float:
+	var worst := 0.0
+	for from: Array[Vector2] in from_sets:
+		if from.is_empty():
+			continue
+		for to: Array[Vector2] in to_sets:
+			if to.is_empty():
+				continue
+			worst = maxf(worst, _shift_between(from, to))
+	return worst

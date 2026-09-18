@@ -39,6 +39,9 @@ signal regenerated
 ## How far out the foot of an embankment sits per metre of height. Sloping it
 ## reads as built-up ground; a vertical face reads as a cliff.
 @export var embankment_batter := 1.8
+## How deep the slab under floating road is, from the road surface to its
+## underside. Enough to read as a thing with weight from the ground.
+@export var floating_depth := 1.2
 
 @export_group("Rails")
 ## Low barrier down each edge, enough to bounce a car back onto the road
@@ -53,6 +56,53 @@ signal regenerated
 @export var checkpoint_count := 4
 @export var checkpoint_depth := 2.5
 @export var checkpoint_color := Color(0.95, 0.72, 0.12)
+
+@export_group("Rings")
+## The hole in every ring, in metres. The car is 2.06 m wide and 1.45 m tall, so
+## at 3.5 a car can be about a metre and a half off the middle either way and
+## still go through clean.
+@export var ring_radius := 3.5
+## How high the middle of the ring over a jump stands above the road the jump
+## was built from. Measured, not chosen: a car that takes the ramp at anything
+## from 18 m/s to flat out on a boost passes the middle of the hole with its
+## body between 6.2 and 7.4 m up, and this is the middle of that.
+@export var jump_ring_height := 6.8
+## How far past the hole a car that banked the ring over it is put back, so a
+## reset lands it on the landing rather than in the air.
+@export var ring_landing_room := 8.0
+## The longest a car can move in one step and still be said to have gone
+## through a ring. Flat out on a boost is under a metre a step; anything longer
+## is a car being put somewhere, and a teleport past a ring is not a pass.
+@export var ring_longest_step := 5.0
+
+@export_group("Platforms")
+## Where a platform stands in its hole, past the lip; how long it is; the drop
+## off its far end to the landing; and how high its top is above the road.
+## Measured off real flights off the standard ramp: a car's wheels come down
+## through 4 m about 22 m past the lip at 23 m/s, 33 m at 30 m/s and 43 m at
+## 37 m/s, so a platform from 18 to 48 m catches all of them, and at 46 m/s on
+## a boost a car is still 5 m up at 50 m and overflies it. The drop is short
+## enough that a car rolling off the end at 20 m/s reaches the landing.
+@export var platform_start := 18.0
+@export var platform_length := 30.0
+@export var platform_drop := 9.0
+@export var platform_height := 4.0
+## A lift is longer than a platform, so a car that comes down on it early can
+## brake and wait for it to rise; and the step off its top onto the landing is
+## short, so a car pulling away from a standstill still reaches it.
+@export var lift_length := 50.0
+@export var lift_drop := 3.0
+
+@export_group("High roads")
+## How far past a kicker's lip its high road starts. Far enough that the course
+## below has turned away from under it, and short enough that a car off the
+## kicker at 23 m/s is still above the start of the high road when it gets
+## there.
+@export var kicker_gap := 26.0
+## The shortest straight the course may carry past where a high road drops
+## back onto it. A car off the end of a high road nine metres up flies about
+## thirty metres before it lands.
+@export var rejoin_straight := 60.0
 
 @export_group("Boost pads")
 ## Pads are laid on the long straights, clear of the corners at either end and
@@ -123,6 +173,15 @@ signal regenerated
 ## barriers a course carries.
 @export_range(0.0, 1.0) var same_side_chance := 0.55
 
+@export_group("Traps")
+## Rows of barriers that sweep from one kerb to the other and back on the race
+## clock. A laid-out track has whatever traps its file puts on it, whatever
+## this says; this is whether a rolled course gets any, and it is chaos that
+## turns it on. Off otherwise, so the endless course stays the course it was.
+@export var traps_enabled := false
+## The chance a row on a rolled course is a trap instead of one that stands.
+@export_range(0.0, 1.0) var trap_chance := 0.35
+
 @export_group("The fork")
 ## One stretch of every course where the road is split down the middle: a pad
 ## and a run of barriers on one side, nothing at all on the other. Take the
@@ -172,6 +231,18 @@ var _half_widths: PackedFloat32Array
 ## Whether there is road at each cross-section. False across the hole in a
 ## jump, where the asphalt, the kerbs, the rails and the embankment all stop.
 var _road_present: PackedByteArray
+## Whether there is floating road at each cross-section, drawn as a slab in the
+## air rather than on an embankment.
+var _floating: PackedByteArray
+## How far along the curve each cross-section is. See offset_of.
+var _arc: PackedFloat32Array
+## True for a high road: a road off the course rather than a course, with no
+## start, no finish and no checkpoints of its own, and no ends to its rails.
+var is_branch := false
+## The high roads off this course, built as tracks of their own.
+var _branches: Array[Track] = []
+var _underside: MeshInstance3D
+var _slab: StandardMaterial3D
 
 var _asphalt: StandardMaterial3D
 var _kerb: StandardMaterial3D
@@ -222,13 +293,45 @@ func definition() -> TrackDefinition:
 ## The curve's points are in this node's own space, so the position is brought
 ## into it first. That keeps the race and the grid right even if the track is
 ## moved or scaled, rather than silently assuming it sits at the origin.
+##
+## Distances along the course are the layout's: a cross-section every
+## `sample_step` metres, measured across the ground. The curve measures its own
+## length through the air, so every ramp, climb and drop makes it a little
+## longer than the layout - on a track that climbs and falls ten metres at a
+## time, most of a jump longer by the end. Everything placed on a course - a
+## ring, a platform, a checkpoint, the finish - is placed in the layout's
+## distances, so the curve's are turned into those before they are handed out.
 func offset_of(world: Vector3) -> float:
-	return curve().get_closest_offset(global_transform.affine_inverse() * world)
+	var along := curve().get_closest_offset(global_transform.affine_inverse() * world)
+	return _layout_offset(along)
 
 
-## The centreline at a distance along the course, in world space.
+## The centreline at a distance along the course, in world space. Read off the
+## cross-sections rather than the curve, for the reason offset_of gives.
 func centre_at(offset: float) -> Vector3:
-	return global_transform * curve().sample_baked(offset)
+	if _points.size() < 2:
+		return global_transform * curve().sample_baked(offset)
+	var exact := clampf(offset / sample_step, 0.0, float(_points.size() - 1))
+	var i := mini(int(exact), _points.size() - 2)
+	return global_transform * _points[i].lerp(_points[i + 1], exact - float(i))
+
+
+## A distance along the curve, as a distance along the layout.
+func _layout_offset(along: float) -> float:
+	if _arc.size() < 2:
+		return along
+	# The last cross-section at or before that far along the curve.
+	var lo := 0
+	var hi := _arc.size() - 1
+	while hi - lo > 1:
+		var mid := (lo + hi) / 2
+		if _arc[mid] <= along:
+			lo = mid
+		else:
+			hi = mid
+	var span := _arc[hi] - _arc[lo]
+	var t := clampf((along - _arc[lo]) / span, 0.0, 1.0) if span > 0.0 else 0.0
+	return (float(lo) + t) * sample_step
 
 
 ## Half-width of the road at a distance along the course.
@@ -237,6 +340,16 @@ func half_width_at(offset: float) -> float:
 		return wide_half_width
 	var i := clampi(int(offset / sample_step), 0, _half_widths.size() - 1)
 	return _half_widths[i]
+
+
+## Move the traps to where they stand at `seconds` on the race clock. The race
+## calls this every step it is running, and with zero when it goes back to the
+## line, so a trap is never anywhere the clock does not say.
+func set_race_time(seconds: float) -> void:
+	_furniture.run_traps(seconds)
+	for road in _branches:
+		if is_instance_valid(road):
+			road.set_race_time(seconds)
 
 
 ## The pieces this course was built from, for debugging.
@@ -269,7 +382,16 @@ func lay_out(definition: TrackDefinition) -> void:
 
 	definition.step = sample_step
 	definition.ramp_length = ramp_length
+	definition.ramp_rise = ramp_rise
 	definition.jump_gap = jump_gap
+	definition.ring_radius = ring_radius
+	definition.jump_ring_height = jump_ring_height
+	definition.platform_start = platform_start
+	definition.platform_length = platform_length
+	definition.platform_drop = platform_drop
+	definition.platform_height = platform_height
+	definition.lift_length = lift_length
+	definition.lift_drop = lift_drop
 	definition.landing_length = landing_length
 	definition.describe()
 	_definition = definition
@@ -281,10 +403,141 @@ func lay_out(definition: TrackDefinition) -> void:
 		"dodge_radius": dodge_radius,
 	})
 	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
+	_build_branches(definition)
 	regenerated.emit()
 
 
-## Everything about the shape of a course that is not the course itself.
+## The high roads a track file split off the course, each a Track of its own
+## standing where the course's kicker throws a car: straight ahead of the lip,
+## `kicker_gap` on, across the road where the kicker is, and `rise` up.
+##
+## Each is stretched with straight road to reach the point where the course
+## has come back underneath it, so a track file never has to add up how long
+## the long way round is.
+func _build_branches(definition: TrackDefinition) -> void:
+	for old in _branches:
+		if is_instance_valid(old):
+			old.queue_free()
+	_branches.clear()
+	for branch: BranchDefinition in definition.branches:
+		if branch.rejoin_offset < 0.0 or _points.size() < 2:
+			continue
+		var start := centre_at_local(branch.lip_offset)
+		var forward := _forward_at(branch.lip_offset)
+		var right := forward.cross(Vector3.UP)
+		var reach := (centre_at_local(branch.rejoin_offset) - start).dot(forward)
+		var wanted := reach - kicker_gap
+		if branch.length() < wanted - sample_step * 0.5:
+			var saved := branch._floating
+			branch.straight(wanted - branch.length())
+			branch._floating = saved
+		var road: Track = load("res://scenes/track/track.tscn").instantiate()
+		road.name = "HighRoad"
+		road.is_branch = true
+		for property in get_property_list():
+			if property["usage"] & PROPERTY_USAGE_SCRIPT_VARIABLE and property["usage"] & PROPERTY_USAGE_STORAGE:
+				if property["name"] != "track_file":
+					road.set(property["name"], get(property["name"]))
+		add_child(road)
+		road.transform = Transform3D(Basis.looking_at(forward, Vector3.UP),
+			start + forward * kicker_gap + right * (branch.lane * half_width_at(branch.lip_offset))
+			+ Vector3.UP * branch.rise)
+		road.lay_out(branch)
+		_branches.append(road)
+
+
+## The high roads off this course.
+func branches() -> Array[Track]:
+	return _branches
+
+
+## The centreline in this node's own space.
+func centre_at_local(offset: float) -> Vector3:
+	return global_transform.affine_inverse() * centre_at(offset)
+
+
+## Which way the course is heading at a distance along it, level.
+func _forward_at(offset: float) -> Vector3:
+	var here := centre_at_local(offset)
+	var ahead := centre_at_local(minf(offset + sample_step, length()))
+	var forward := (ahead - here) * Vector3(1, 0, 1)
+	return forward.normalized() if forward.length_squared() > 0.000001 else Vector3.FORWARD
+
+
+## What is wrong with the high roads off this course: one that does not meet the
+## course again on the line it left along, overshoots it, drops onto it from too
+## low or onto anything but a straight, or passes too close to the course on the
+## way. Empty for a course with none.
+func branch_problems() -> PackedStringArray:
+	var found := PackedStringArray()
+	if _definition == null:
+		return found
+	var roads := 0
+	for branch: BranchDefinition in _definition.branches:
+		var at := "the high road at %.0f m" % branch.lip_offset
+		if branch.rejoin_offset < 0.0:
+			found.append("%s never ends: high_road_end() was not called" % at)
+			continue
+		if roads >= _branches.size():
+			break
+		var road := _branches[roads]
+		roads += 1
+		var start := centre_at_local(branch.lip_offset)
+		var forward := _forward_at(branch.lip_offset)
+		var back := centre_at_local(branch.rejoin_offset)
+		var across := (back - start).dot(forward.cross(Vector3.UP))
+		if absf(across) > 1.5:
+			found.append("%s: the course comes back %.1f m to the side of the line it left on" % [at, across])
+		var heading := rad_to_deg(forward.angle_to(_forward_at(branch.rejoin_offset)))
+		if heading > 3.0:
+			found.append("%s: the course comes back heading %.0f degrees off the way it left" % [at, heading])
+		var reach := (back - start).dot(forward) - kicker_gap
+		if branch.length() > reach + sample_step:
+			found.append("%s is %.0f m long and the course comes back after %.0f"
+				% [at, branch.length(), reach])
+		var end_height := road.centre_at(road.length()).y - centre_at(branch.rejoin_offset).y
+		if end_height < TrackLayout.new().overpass_clearance:
+			found.append("%s ends %.1f m above the course; a car has to drop at least %.0f"
+				% [at, end_height, TrackLayout.new().overpass_clearance])
+		for piece in _layout.pieces:
+			if (piece.start_offset <= branch.rejoin_offset + 0.01
+					and piece.end_offset > branch.rejoin_offset + 0.01):
+				if piece.kind != TrackLayout.STRAIGHT or piece.end_offset - branch.rejoin_offset < rejoin_straight:
+					found.append("%s drops onto %s; it needs %.0f m of straight"
+						% [at, "a corner" if piece.kind == TrackLayout.CORNER else "%.0f m of straight" % (piece.end_offset - branch.rejoin_offset), rejoin_straight])
+		for placement in branch.placements:
+			if placement.kind == TrackFeatures.RING:
+				found.append("%s has a ring on it; a checkpoint on one road of a split cannot be banked from the other" % at)
+				break
+		found.append_array(_too_close(road, branch))
+	return found
+
+
+## Where a high road passes over or beside the course closer than two roads may.
+func _too_close(road: Track, branch: BranchDefinition) -> PackedStringArray:
+	var found := PackedStringArray()
+	# Two roads side by side at the widest either can be, kerb to kerb.
+	var room := wide_half_width * 2.0 + kerb_width * 2.0
+	var overhead := TrackLayout.new().overpass_clearance
+	var stride := maxi(1, int(5.0 / sample_step))
+	for i in range(0, road._points.size(), stride):
+		var high := road.global_transform * road._points[i]
+		for j in range(0, _points.size(), stride):
+			var along := float(j) * sample_step
+			# The course where the high road leaves it and lands on it is meant
+			# to be close.
+			if along > branch.lip_offset - 30.0 and along < branch.lip_offset + kicker_gap:
+				continue
+			if along > branch.rejoin_offset - 60.0 and along < branch.rejoin_offset + rejoin_straight:
+				continue
+			var low := global_transform * _points[j]
+			if (Vector2(high.x - low.x, high.z - low.z).length() < room
+					and absf(high.y - low.y) < overhead):
+				found.append("the high road at %.0f m passes %.0f m from the course at %.0f m, %.1f m above it"
+					% [branch.lip_offset + kicker_gap + float(i) * sample_step,
+						Vector2(high.x - low.x, high.z - low.z).length(), along, high.y - low.y])
+				return found
+	return found
 func _layout_tuning() -> Dictionary:
 	return {
 		"step": sample_step,
@@ -305,6 +558,7 @@ func _layout_tuning() -> Dictionary:
 		"ramp_curve": ramp_curve,
 		"jump_gap": jump_gap,
 		"landing_length": landing_length,
+		"centred": not is_branch,
 	}
 
 
@@ -352,9 +606,16 @@ func _build_the_road() -> void:
 	_build_curve()
 	_build_road()
 	_build_embankment()
-	_build_finish_line()
-	_build_start_line()
-	_build_checkpoints()
+	if is_branch:
+		# A high road is part of someone else's course: nothing starts, ends or
+		# is banked on it.
+		_finish.mesh = null
+		_start.mesh = null
+		_checkpoints.mesh = null
+	else:
+		_build_finish_line()
+		_build_start_line()
+		_build_checkpoints()
 	_build_rails()
 
 
@@ -381,6 +642,8 @@ func _build_furniture(features_seed: int) -> void:
 		"clear_lane": clear_lane,
 		"dodge_radius": dodge_radius,
 		"same_side_chance": same_side_chance,
+		"traps_enabled": traps_enabled,
+		"trap_chance": trap_chance,
 		"fork_enabled": fork_enabled,
 		"fork_min_straight": fork_min_straight,
 		"fork_divider": Vector2(fork_divider_min, fork_divider_max),
@@ -397,6 +660,7 @@ func _adopt(layout: TrackLayout) -> void:
 		_points.append(p + Vector3.UP * road_height)
 	_half_widths = layout.half_widths
 	_road_present = layout.road_present
+	_floating = layout.floating
 
 	var count := _points.size()
 	_rights = PackedVector3Array()
@@ -422,6 +686,14 @@ func _build_curve() -> void:
 	for p in _points:
 		curve3d.add_point(p)
 	_path.curve = curve3d
+	# How far along the curve each cross-section is, through the air, which is
+	# what turns the curve's distances into the layout's.
+	_arc = PackedFloat32Array()
+	var run := 0.0
+	for i in _points.size():
+		if i > 0:
+			run += _points[i].distance_to(_points[i - 1])
+		_arc.append(run)
 
 
 # --- road --------------------------------------------------------------
@@ -509,9 +781,13 @@ func start_offset() -> float:
 
 
 ## Distances along the course where the checkpoints sit, evenly spread between
-## the start and the finish.
+## the start and the finish - or, on a track with rings, where the rings are.
 func checkpoint_offsets() -> PackedFloat32Array:
 	var out := PackedFloat32Array()
+	if has_rings():
+		for ring in _ring_plan():
+			out.append(ring.centre())
+		return out
 	var start := start_offset()
 	var span := finish_offset() - start
 	# Asked for once rather than once a checkpoint: the race reads these every
@@ -521,6 +797,80 @@ func checkpoint_offsets() -> PackedFloat32Array:
 		var at := start + span * float(i + 1) / float(checkpoint_count + 1)
 		out.append(_off_the_jumps(at, jumps))
 	return out
+
+
+## Whether this course's checkpoints are rings. A track has rings or painted
+## checkpoints, never both: two kinds of checkpoint on one road is two rules for
+## what finishing means.
+##
+## Read off the track file rather than the furniture plan, because the road is
+## built before the plan is taken and the painted checkpoints are asked for then.
+## A rolled course never has rings.
+func has_rings() -> bool:
+	return not _ring_plan().is_empty()
+
+
+## The rings as they were planned, in the order a car meets them - the same
+## order the furniture builds them in, so a checkpoint's index is its ring's.
+func _ring_plan() -> Array[TrackFeatures.Placement]:
+	var rings: Array[TrackFeatures.Placement] = []
+	if _definition == null:
+		return rings
+	for placement in _definition.placements:
+		if placement.kind == TrackFeatures.RING:
+			rings.append(placement)
+	rings.sort_custom(func(a: TrackFeatures.Placement, b: TrackFeatures.Placement) -> bool:
+		return a.centre() < b.centre())
+	return rings
+
+
+## Where a car that banked a checkpoint is put back. A painted checkpoint is on
+## the road, so it is where it is. A ring over a jump is over a hole, so a car
+## that went through it is put down on the landing past it - it made the jump,
+## and sending it back to try the ramp again would be charging it for a jump it
+## already cleared.
+func respawn_offset(mark: int) -> float:
+	var marks := checkpoint_offsets()
+	if mark < 0 or mark >= marks.size():
+		return start_offset()
+	var at := marks[mark]
+	if not has_rings() or _layout == null:
+		return at
+	for piece in _layout.pieces:
+		if (piece.kind == TrackLayout.JUMP
+				and at > piece.start_offset and at < piece.end_offset):
+			return minf(piece.start_offset + ramp_length + _layout.gap_of(piece) + ring_landing_room,
+				piece.end_offset)
+	return at
+
+
+## Whether something moving from `from` to `to` in one step went through a
+## ring, the right way, inside the hole. World positions; pass the middle of
+## the car, not its origin, which sits at its wheels.
+##
+## Crossing the plane of the ring going forwards, and being inside the hole at
+## the moment it crossed. Going through backwards does not count, and neither
+## does being put on the far side of one.
+func through_ring(mark: int, from: Vector3, to: Vector3) -> bool:
+	var rings := _furniture.rings()
+	if mark < 0 or mark >= rings.size() or not is_instance_valid(rings[mark]):
+		return false
+	if from.distance_to(to) > ring_longest_step:
+		return false
+	var ring := rings[mark].global_transform
+	var middle := ring.origin
+	var forward := ring.basis.y.normalized()
+	var before := (from - middle).dot(forward)
+	var after := (to - middle).dot(forward)
+	if before >= 0.0 or after < 0.0:
+		return false
+	var crossed := from.lerp(to, before / (before - after))
+	return crossed.distance_to(middle) < _ring_plan()[mark].radius
+
+
+## Light or put out a ring, for a race to show which ones a car still owes.
+func show_ring(mark: int, spent: bool) -> void:
+	_furniture.show_ring(mark, spent)
 
 
 ## The stretches of course a jump takes up, with room either side, as spans of
@@ -569,6 +919,11 @@ func _build_start_line() -> void:
 ## All the checkpoint markers in one mesh, since they never differ from each
 ## other and there is nothing to gain from a node apiece.
 func _build_checkpoints() -> void:
+	# The rings are the checkpoints, and they are built with the furniture.
+	# Nothing is painted on the road for them.
+	if has_rings():
+		_checkpoints.mesh = null
+		return
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var any := false
@@ -675,7 +1030,9 @@ func _build_rails() -> void:
 	# Cap both ends. The sides alone leave the course open behind the start
 	# line and past the finish, and a car that turns round simply drives out
 	# of the open end and off the raised road.
-	for i in [0, count - 1]:
+	# Not on a high road, which a car lands on at one end and drops off the
+	# other.
+	for i in ([] if is_branch else [0, count - 1]):
 		var edge := _half_widths[i] + kerb_width
 		var left := _points[i] - _rights[i] * edge
 		var right := _points[i] + _rights[i] * edge
@@ -714,8 +1071,11 @@ func _build_embankment() -> void:
 		var j := i + 1
 		if not _has_road(i, j):
 			continue
-		# Only where the road actually stands above the ground.
+		# Only where the road actually stands above the ground, and not where
+		# it floats: that is drawn by _build_underside instead.
 		if _points[i].y < 0.15 and _points[j].y < 0.15:
+			continue
+		if _is_floating(i) or _is_floating(j):
 			continue
 		any = true
 		var edge_i := _half_widths[i] + kerb_width
@@ -735,10 +1095,68 @@ func _build_embankment() -> void:
 
 	if not any:
 		_embankment.mesh = null
+	else:
+		st.generate_normals()
+		_embankment.mesh = st.commit()
+		_embankment.set_surface_override_material(0, _earth)
+	_build_underside()
+
+
+func _is_floating(i: int) -> bool:
+	return i < _floating.size() and _floating[i] != 0
+
+
+## The slab under floating road: a side down each edge and a face underneath,
+## so road in the air reads as a thing standing there rather than a ribbon that
+## vanishes when it is looked at from below. No collision - the road on top is
+## what a car drives on - and none of it where there is no road.
+func _build_underside() -> void:
+	if _underside == null:
+		_underside = MeshInstance3D.new()
+		_underside.name = "Underside"
+		add_child(_underside)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var any := false
+	var down := Vector3.DOWN * floating_depth
+	for i in _points.size() - 1:
+		var j := i + 1
+		if not _has_road(i, j) or not (_is_floating(i) and _is_floating(j)):
+			continue
+		any = true
+		var edge_i := _half_widths[i] + kerb_width
+		var edge_j := _half_widths[j] + kerb_width
+		var li := _points[i] - _rights[i] * edge_i
+		var ri := _points[i] + _rights[i] * edge_i
+		var lj := _points[j] - _rights[j] * edge_j
+		var rj := _points[j] + _rights[j] * edge_j
+		for quad in [
+			[li, lj, lj + down, li + down],
+			[ri, ri + down, rj + down, rj],
+			[li + down, lj + down, rj + down, ri + down],
+		]:
+			for v in [quad[0], quad[1], quad[2], quad[0], quad[2], quad[3]]:
+				st.add_vertex(v)
+	# Capped wherever the slab starts or stops, so its ends are not open boxes.
+	for i in _points.size():
+		if not _is_floating(i) or not _road_present[i]:
+			continue
+		var before := i > 0 and _is_floating(i - 1) and _road_present[i - 1]
+		var after := i < _points.size() - 1 and _is_floating(i + 1) and _road_present[i + 1]
+		if before and after:
+			continue
+		any = true
+		var edge := _half_widths[i] + kerb_width
+		var l := _points[i] - _rights[i] * edge
+		var r := _points[i] + _rights[i] * edge
+		for v in [l, r, r + down, l, r + down, l + down]:
+			st.add_vertex(v)
+	if not any:
+		_underside.mesh = null
 		return
 	st.generate_normals()
-	_embankment.mesh = st.commit()
-	_embankment.set_surface_override_material(0, _earth)
+	_underside.mesh = st.commit()
+	_underside.set_surface_override_material(0, _slab)
 
 
 # --- materials ---------------------------------------------------------
@@ -770,6 +1188,11 @@ func _build_materials() -> void:
 	_marker = StandardMaterial3D.new()
 	_marker.vertex_color_use_as_albedo = true
 	_marker.roughness = 0.7
+
+	_slab = StandardMaterial3D.new()
+	_slab.albedo_color = Color(0.34, 0.35, 0.4)
+	_slab.roughness = 0.8
+	_slab.cull_mode = BaseMaterial3D.CULL_DISABLED
 
 	_rail = StandardMaterial3D.new()
 	_rail.albedo_color = rail_color

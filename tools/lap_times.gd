@@ -3,6 +3,7 @@ extends SceneTree
 # Drive every laid-out track and say how long a lap took.
 #   Godot --path . --headless --fixed-fps 60 --script tools/lap_times.gd
 #   Godot --path . --headless --fixed-fps 60 --script tools/lap_times.gd -- 0.8333
+#   Godot --path . --headless --fixed-fps 60 --script tools/lap_times.gd -- 1.0 res://tracks/acrobatic/a01_lift_off.gd
 #
 # This is what the medal times are set from. A target has to be a fact about
 # the road rather than a number somebody liked the look of, and the only way
@@ -21,6 +22,10 @@ extends SceneTree
 # would have been worth before or after a retune without editing the car.
 
 const LOOK_AHEAD := 14.0
+## How far before a ring the driver starts lining up with it. Far enough to
+## cross the whole road on a straight, which is what a ring off to one side asks
+## a player to do.
+const RING_LINE_UP := 90.0
 ## Give up on a track after this long, so one road that cannot be driven does
 ## not stop the other nineteen being timed.
 const PATIENCE := 60 * 260
@@ -44,8 +49,12 @@ func _init() -> void:
 
 	print("driving at %.0f%% of tuned top speed" % (scale * 100.0))
 	print("%-4s %-16s %7s %8s %8s" % ["", "track", "metres", "lap", "m/s"])
-	for index in TrackRoster.FILES.size():
-		var file: String = TrackRoster.file(index)
+	var files: Array = TrackRoster.all_files()
+	# Named on the command line after the scale, only those: timing all thirty
+	# to set the targets of one is several minutes of watching nothing change.
+	if args.size() > 1:
+		files = args.slice(1)
+	for file: String in files:
 		settings.track_file = file
 		var solo: Node = load("res://scenes/solo.tscn").instantiate()
 		root.add_child(solo)
@@ -62,7 +71,7 @@ func _init() -> void:
 		var finished := await _drive(solo, track, car)
 		var lap: float = solo.get("_time")
 		print("%-4d %-16s %7.0f %8s %8.1f"
-			% [index + 1, track.definition().track_name, track.length(),
+			% [TrackRoster.index_of(file) + 1, track.definition().track_name, track.length(),
 				_clock(lap) if finished else "  -  ", track.length() / maxf(lap, 0.001)])
 		solo.queue_free()
 		await process_frame
@@ -89,6 +98,12 @@ func _drive(solo: Node, track: Track, car: Car) -> bool:
 		var offset: float = curve.get_closest_offset(to_track * car.global_position)
 		var aim: float = minf(offset + LOOK_AHEAD, track.length())
 		var target: Vector3 = _through_the_gap(track, aim, _across(track, offset, car))
+		# A ring coming up is aimed at instead: through it is the only way on,
+		# and the middle of the road is not through a ring off to one side.
+		var ring_lane := _next_ring_lane(track, offset)
+		if not is_nan(ring_lane):
+			target = track.global_transform * (track.curve().sample_baked(aim)
+				+ _right(track, aim) * (ring_lane * track.half_width_at(aim)))
 		var forward := -car.global_transform.basis.z
 		var wanted := target - car.global_position
 		wanted.y = 0.0
@@ -112,6 +127,20 @@ func _drive(solo: Node, track: Track, car: Car) -> bool:
 			stuck = 0.0
 			was = offset
 	return false
+
+
+## The lane of the next ring within `RING_LINE_UP` metres ahead, or NAN if
+## there is none that close.
+func _next_ring_lane(track: Track, offset: float) -> float:
+	if track.definition() == null:
+		return NAN
+	for placement in track.definition().placements:
+		if placement.kind != TrackFeatures.RING:
+			continue
+		var ahead := placement.centre() - offset
+		if ahead > 0.0 and ahead < RING_LINE_UP:
+			return placement.lateral
+	return NAN
 
 
 ## Where on the road to aim, in world space: the middle of whichever way past

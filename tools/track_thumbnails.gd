@@ -3,6 +3,7 @@ extends SceneTree
 # Draw every laid-out track from above and save the shots the select screen
 # puts on its buttons.
 #   Godot --path . --script tools/track_thumbnails.gd
+#   Godot --path . --script tools/track_thumbnails.gd -- res://tracks/acrobatic/a01_lift_off.gd
 #
 # Run this after laying out a track or changing the shape of one. The shots
 # are checked in rather than drawn at load: a menu that built twenty tracks to
@@ -49,7 +50,10 @@ func _init() -> void:
 	main.get_node("Sun").rotation = Vector3(-PI * 0.5, 0.0, 0.0)
 
 	var track: Track = main.get_node("Track")
-	for path in TrackRoster.FILES:
+	# Only the tracks named after `--`, if any are: redrawing all of them to add
+	# one changes pictures nobody asked to change.
+	var wanted: Array = OS.get_cmdline_user_args()
+	for path in (wanted if not wanted.is_empty() else TrackRoster.all_files()):
 		track.track_file = path
 		track.generate(0)
 		await process_frame

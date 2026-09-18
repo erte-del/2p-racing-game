@@ -52,12 +52,82 @@ extends Node3D
 ## with the surface it stands on.
 @export var barrier_lift := 0.02
 
+@export_group("Traps")
+## A trap closing on the kerb with a car in the way has nowhere to push it:
+## the rail is on the other side, and a body squeezed between two walls is
+## sorted out by the physics lifting it over the lower of them, which puts the
+## car on top of the rail. So a car in the lane a trap is closing is shoved
+## along the road instead, out of the row, at this many m/s - forwards or back,
+## whichever end of the row it is already heading for.
+@export var trap_shove := 10.0
+## When that starts: once the trap's leading edge is this many metres from the
+## car, or this many seconds from reaching it at the speed it is crossing,
+## whichever comes first. The distance leaves a car threading the gap alone
+## until it plainly is not going to make it; the time is what gives a fast
+## trap's shove long enough to clear the car before the trap arrives.
+@export var trap_shove_reach := 3.0
+@export var trap_shove_lead := 0.45
+## How wide a car is, for how far the trap still has to come to reach one.
+const CAR_WIDTH := 2.06
+
+@export_group("Rings")
+## How thick the rim is, as the radius of the tube it is made of. Thick enough
+## to read from the run up at speed; the hole is what the car goes through, and
+## that is the placement's radius, not this.
+@export var ring_tube := 0.32
+## Gold, like the painted checkpoints it stands in for, and lit so it is still
+## there at midnight. A ring that has been banked goes dark, so a player looking
+## down the course can see which ones are still owed.
+@export var ring_color := Color(0.95, 0.72, 0.12)
+@export var ring_glow := 1.1
+@export var spent_ring_color := Color(0.32, 0.34, 0.38)
+## Straight pieces of solid rim the collision is made from. The drawn ring is
+## round; what stops a car is a chain of this many capsules, which is close
+## enough at a third of a metre thick that nothing sees the corners.
+@export var ring_segments := 20
+
+@export_group("Platforms")
+## A slab of road hanging in the air, so dark like the road, with a lit trim
+## round its top edge in a colour nothing else on the course uses. Violet: the
+## pads are cyan, the rings gold and the barriers red and white, and a platform
+## is none of those things.
+@export var platform_color := Color(0.2, 0.21, 0.25)
+@export var platform_trim_color := Color(0.72, 0.36, 1.0)
+@export var platform_glow := 1.6
+@export var platform_thickness := 0.6
+@export var platform_trim_width := 0.35
+## A platform sits lower than the lip of the ramp in front of it, so from the
+## run up it is hidden behind the ramp - and a platform nobody can see cannot be
+## timed. So it carries a gate: a lit post up each side of its near end and a bar
+## across the top, standing high enough to show over the lip from the run up,
+## exactly as wide as the platform and moving with it. Paint, not a wall: it has
+## no collision.
+@export var platform_gate_height := 6.0
+@export var platform_gate_thickness := 0.22
+
 var _pad_material: StandardMaterial3D
 var _pad_base_material: StandardMaterial3D
 var _barrier_material: StandardMaterial3D
+var _ring_material: StandardMaterial3D
+var _spent_ring_material: StandardMaterial3D
+var _platform_material: StandardMaterial3D
+var _platform_trim_material: StandardMaterial3D
 
 ## The pads, so a rebuild can clear exactly what it made.
 var _built: Array[Node] = []
+## Every trap, with the body that moves and where across the road it moves:
+## the middle of the road under it, which way is across, and how far the
+## kerb is from that middle.
+var _traps: Array[Dictionary] = []
+## Every ring, as the node standing it up, in the order they are met along the
+## course. Its transform is the ring: its origin is the middle of the hole and
+## its Y axis points down the road, the way a car has to go through it.
+var _rings: Array[Node3D] = []
+## Everything that moves across the road on the race clock that is not a trap:
+## moving rings and platforms. Each with its body, the point it moves about -
+## the middle of the road under it, lifted to its height - which way is across,
+## and how far the kerb is.
+var _movers: Array[Dictionary] = []
 
 
 ## Lay out the furniture for a course.
@@ -80,6 +150,109 @@ func build(
 		_build_pad(pad, points, rights, half_widths, step)
 	for barrier in features.of_kind(TrackFeatures.OBSTACLE):
 		_build_barrier(barrier, points, rights, half_widths, step)
+	for trap in features.of_kind(TrackFeatures.TRAP):
+		_build_trap(trap, points, rights, half_widths, step)
+	var rings := features.of_kind(TrackFeatures.RING)
+	rings.sort_custom(func(a: TrackFeatures.Placement, b: TrackFeatures.Placement) -> bool:
+		return a.centre() < b.centre())
+	for ring in rings:
+		_build_ring(ring, points, rights, half_widths, step)
+	for platform in features.of_kind(TrackFeatures.PLATFORM):
+		_build_platform(platform, points, rights, half_widths, step)
+	for kicker in features.of_kind(TrackFeatures.WEDGE):
+		_build_kicker(kicker, points, rights, half_widths, step)
+
+
+## The rings, in the order a car meets them. What a race reads to know whether
+## a car went through one.
+func rings() -> Array[Node3D]:
+	return _rings
+
+
+## Light a ring, or put it out once it has been banked.
+func show_ring(index: int, spent: bool) -> void:
+	if index < 0 or index >= _rings.size() or not is_instance_valid(_rings[index]):
+		return
+	var mesh := _rings[index].get_node("Rim") as MeshInstance3D
+	mesh.material_override = _spent_ring_material if spent else _ring_material
+
+
+## Put every trap where it stands at `seconds` on the race clock.
+##
+## Told the time rather than keeping its own, so a trap is always where the race
+## says it is: held at GO through the countdown, stopped when the race stops,
+## and back at the start when the race goes back to the line.
+func run_traps(seconds: float) -> void:
+	for mover in _movers:
+		var moving: Node3D = mover["body"]
+		if not is_instance_valid(moving):
+			continue
+		var placed: TrackFeatures.Placement = mover["placement"]
+		moving.position = mover["centre"] + mover["right"] * (
+				placed.lateral_at(seconds) * float(mover["half_width"])) + (
+				Vector3.UP * placed.lift_at(seconds))
+	for trap in _traps:
+		var body: AnimatableBody3D = trap["body"]
+		if not is_instance_valid(body):
+			continue
+		var placement: TrackFeatures.Placement = trap["placement"]
+		var at := placement.lateral_at(seconds)
+		var was: float = trap["at"]
+		var then: float = trap["seconds"]
+		trap["at"] = at
+		trap["seconds"] = seconds
+		body.position = trap["centre"] + trap["right"] * (
+				at * float(trap["half_width"]))
+		# Only when it has moved on from a step ago; a clock set back to GO
+		# is the race starting again, not the trap crossing the road.
+		if not is_equal_approx(at, was) and seconds > then:
+			var closing := absf(at - was) * float(trap["half_width"]) / (seconds - then)
+			_clear_the_way(trap, at, signf(at - was), closing)
+
+
+## Shove any car out of the lane a trap is closing, along the road.
+##
+## Only the lane between the trap's leading edge and the kerb it is heading for
+## is looked in, and only as deep as the row: a car anywhere else is either
+## being pushed back towards the open road, which the physics does well on its
+## own, or is not in the way at all.
+func _clear_the_way(
+	trap: Dictionary, at: float, heading: float, closing: float
+) -> void:
+	var placement: TrackFeatures.Placement = trap["placement"]
+	var half_width: float = trap["half_width"]
+	var right: Vector3 = trap["right"]
+	var forward: Vector3 = trap["forward"]
+	var edge := (at + heading * placement.half_span) * half_width
+	var lane := absf(heading * half_width - edge)
+	if lane < 0.01:
+		return
+
+	var box := BoxShape3D.new()
+	box.size = Vector3(lane, barrier_height, placement.length)
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = box
+	query.transform = global_transform * Transform3D(
+		Basis(right, Vector3.UP, -forward),
+		trap["centre"] + right * (edge + heading * lane * 0.5)
+			+ Vector3.UP * (barrier_height * 0.5 + barrier_lift))
+	for hit in get_world_3d().direct_space_state.intersect_shape(query):
+		var car := hit["collider"] as Car
+		if car == null:
+			continue
+		var local := global_transform.affine_inverse() * car.global_position
+		var from_middle: Vector3 = local - trap["centre"]
+		# How far the trap still has to come before it reaches the car.
+		var near_side := from_middle.dot(right) - heading * CAR_WIDTH * 0.5
+		var gap := (near_side - edge) * heading
+		if gap > maxf(trap_shove_reach, closing * trap_shove_lead):
+			continue
+		# Whichever end of the row the car will be nearer in a moment, so a
+		# car driving through is helped on through rather than sent back.
+		var velocity := global_transform.basis.inverse() * car.velocity
+		var ahead := from_middle.dot(forward) + velocity.dot(forward) * 0.25
+		var way := 1.0 if ahead >= 0.0 else -1.0
+		car.knock(0.0, global_transform.basis * forward * (way * trap_shove))
 
 
 func _clear() -> void:
@@ -87,6 +260,9 @@ func _clear() -> void:
 		if is_instance_valid(node):
 			node.queue_free()
 	_built.clear()
+	_traps.clear()
+	_rings.clear()
+	_movers.clear()
 
 
 ## One pad: a dark slab with glowing chevrons pointing the way, and a box over
@@ -201,6 +377,72 @@ func _build_barrier(
 	_build_wall(barrier, a, b, across)
 
 
+## One trap: the same striped row a barrier is, built on a body that moves.
+##
+## A barrier is drawn straight onto the road in the course's own space, which is
+## no use for something that has to slide across it. A trap is built once
+## around its own middle - the stripes, and the box that stops a car - and the
+## whole body is moved from there. That body is an AnimatableBody3D rather than
+## a static one moved by hand, so the physics knows it is moving and a car it
+## sweeps into is pushed along rather than found inside it. It is in the
+## obstacle group, so hitting one costs what hitting a barrier costs.
+func _build_trap(
+	trap: TrackFeatures.Placement, points: PackedVector3Array,
+	rights: PackedVector3Array, half_widths: PackedFloat32Array, step: float
+) -> void:
+	var a := _frame(points, rights, half_widths, step, trap.offset)
+	var b := _frame(points, rights, half_widths, step, trap.offset + trap.length)
+	var middle := _frame(points, rights, half_widths, step, trap.centre())
+	var half_width: float = middle[2]
+	var across := trap.half_span * 2.0 * half_width
+	var forward: Vector3 = b[0] - a[0]
+	forward.y = 0.0
+	if forward.length_squared() < 0.000001:
+		forward = Vector3.FORWARD
+	var right: Vector3 = middle[1]
+
+	# The body's own space: across is x, up is y, and the side a car arrives at
+	# is +z, so the frames below are the road frames a barrier is drawn between
+	# with the road taken out of them. A half-width of one makes the laterals
+	# handed to _stripe read as metres.
+	var near := [Vector3(0.0, 0.0, trap.length * 0.5), Vector3.RIGHT, 1.0]
+	var far := [Vector3(0.0, 0.0, -trap.length * 0.5), Vector3.RIGHT, 1.0]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var stripes: int = maxi(2, int(round(across / barrier_stripe_width)))
+	for i in stripes:
+		st.set_color(barrier_stripe_color if i % 2 else barrier_color)
+		_stripe(st, near, far,
+			lerpf(-across * 0.5, across * 0.5, float(i) / float(stripes)),
+			lerpf(-across * 0.5, across * 0.5, float(i + 1) / float(stripes)))
+	var mesh := ArrayMesh.new()
+	st.generate_normals()
+	st.commit(mesh)
+	var instance := MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.set_surface_override_material(0, _barrier_material)
+
+	var body := AnimatableBody3D.new()
+	body.add_to_group(Car.OBSTACLE_GROUP)
+	body.add_child(instance)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(maxf(across, 0.4), barrier_height, maxf(trap.length, 0.4))
+	shape.shape = box
+	shape.position = Vector3.UP * (barrier_height * 0.5 + barrier_lift)
+	body.add_child(shape)
+	body.transform = Transform3D(
+		Basis(right, Vector3.UP, -forward.normalized()),
+		middle[0] + right * (trap.lateral * half_width))
+	add_child(body)
+	_built.append(body)
+	_traps.append({
+		"placement": trap, "body": body, "at": trap.lateral, "seconds": 0.0,
+		"centre": middle[0], "right": right, "half_width": half_width,
+		"forward": forward.normalized(),
+	})
+
+
 ## One stripe of a barrier: a box between two road frames, open at the bottom
 ## where it meets the road.
 func _stripe(
@@ -257,6 +499,219 @@ func _build_wall(
 		centre + Vector3.UP * (barrier_height * 0.5 + barrier_lift))
 	add_child(body)
 	_built.append(body)
+
+
+## One ring: a lit torus standing square to the road, with a solid rim.
+##
+## Solid, because a ring a car can clip straight through is a hoop painted on
+## the sky, and a player learns nothing from missing one except that they did.
+## The rim is not in the obstacle group, though: clipping it costs what the
+## physics costs - the car is knocked off its line, often into the hole - and
+## no speed penalty or damage on top of that. Missing the ring is already the
+## price.
+func _build_ring(
+	ring: TrackFeatures.Placement, points: PackedVector3Array,
+	rights: PackedVector3Array, half_widths: PackedFloat32Array, step: float
+) -> void:
+	var frame := _frame(points, rights, half_widths, step, ring.centre())
+	var right: Vector3 = frame[1]
+	right.y = 0.0
+	right = right.normalized()
+	var forward := Vector3.UP.cross(right)
+	var middle: Vector3 = (frame[0] + right * (ring.lateral * float(frame[2]))
+			+ Vector3.UP * ring.height)
+
+	# A body that can be moved, whether or not this one ever is: a moving ring
+	# carries its rim with it, and the physics has to know the rim is moving
+	# or a car it slides into is found inside it rather than pushed.
+	var stand := AnimatableBody3D.new()
+	stand.name = "Ring"
+	# Right across, forward along the axis of the torus, up up. A TorusMesh lies
+	# flat around its own Y, so this is what stands it up facing the car.
+	stand.transform = Transform3D(Basis(right, forward, Vector3.UP), middle)
+
+	var rim := MeshInstance3D.new()
+	rim.name = "Rim"
+	var torus := TorusMesh.new()
+	torus.inner_radius = ring.radius
+	torus.outer_radius = ring.radius + ring_tube * 2.0
+	torus.rings = 48
+	torus.ring_segments = 12
+	rim.mesh = torus
+	rim.material_override = _ring_material
+	stand.add_child(rim)
+
+	var around := ring.radius + ring_tube
+	var chord := 2.0 * around * sin(PI / float(ring_segments))
+	for i in ring_segments:
+		var angle := TAU * (float(i) + 0.5) / float(ring_segments)
+		var out := Vector3(cos(angle), 0.0, sin(angle))
+		var along := Vector3(-sin(angle), 0.0, cos(angle))
+		var capsule := CapsuleShape3D.new()
+		capsule.radius = ring_tube
+		capsule.height = chord + ring_tube * 2.0
+		var shape := CollisionShape3D.new()
+		shape.shape = capsule
+		shape.transform = Transform3D(
+			Basis(out, along, out.cross(along)), out * around)
+		stand.add_child(shape)
+
+	add_child(stand)
+	_built.append(stand)
+	_rings.append(stand)
+	if ring.moves():
+		_movers.append({
+			"placement": ring, "body": stand,
+			"centre": frame[0] + Vector3.UP * ring.height, "right": right,
+			"half_width": float(frame[2]),
+		})
+		stand.position = frame[0] + Vector3.UP * ring.height + right * (
+			ring.lateral_at(0.0) * float(frame[2]))
+
+
+## One kicker: a ramp in one lane, rising `height` over its length on the same
+## curve the course's ramps rise on, with lit sides so it reads as the way up
+## rather than as a barrier. Its top is road, so it is in the road group, and its
+## collision is its own surfaces - top and sides - so a car beside it is beside a
+## wall and a car on it is on a ramp.
+func _build_kicker(
+	kicker: TrackFeatures.Placement, points: PackedVector3Array,
+	rights: PackedVector3Array, half_widths: PackedFloat32Array, step: float
+) -> void:
+	var top := SurfaceTool.new()
+	top.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var sides := SurfaceTool.new()
+	sides.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var slices := 16
+	var left := kicker.lateral - kicker.half_span
+	var right := kicker.lateral + kicker.half_span
+	var last: Array = []
+	for k in slices + 1:
+		var t := float(k) / float(slices)
+		var frame := _frame(points, rights, half_widths, step, kicker.offset + kicker.length * t)
+		# Rising out of the road rather than sitting on it. The car is one long
+		# flat box, and a foot even two centimetres proud of the asphalt is a
+		# step its front edge catches on and stops dead against - the thing the
+		# course's own ramps ease their feet into the road to avoid.
+		var lift := Vector3.UP * (kicker.height * pow(t, 1.5) - 0.08 * (1.0 - t))
+		var l: Vector3 = frame[0] + frame[1] * (left * float(frame[2])) + lift
+		var r: Vector3 = frame[0] + frame[1] * (right * float(frame[2])) + lift
+		var l_foot := Vector3(l.x, frame[0].y + 0.02, l.z)
+		var r_foot := Vector3(r.x, frame[0].y + 0.02, r.z)
+		if not last.is_empty():
+			var pl: Vector3 = last[0]
+			var pr: Vector3 = last[1]
+			var plf: Vector3 = last[2]
+			var prf: Vector3 = last[3]
+			# Wound the way the road is, so the top faces up.
+			for v in [pl, r, pr, pl, l, r]:
+				top.add_vertex(v)
+			for quad in [[plf, l_foot, l, pl], [prf, pr, r, r_foot]]:
+				for v in [quad[0], quad[1], quad[2], quad[0], quad[2], quad[3]]:
+					sides.add_vertex(v)
+		last = [l, r, l_foot, r_foot]
+	# The face at the lip, down to the road.
+	for v in [last[2], last[0], last[1], last[2], last[1], last[3]]:
+		sides.add_vertex(v)
+	top.generate_normals()
+	sides.generate_normals()
+	var mesh := ArrayMesh.new()
+	top.commit(mesh)
+	sides.commit(mesh)
+	var instance := MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.set_surface_override_material(0, _platform_material)
+	instance.set_surface_override_material(1, _platform_trim_material)
+	var body := StaticBody3D.new()
+	body.name = "Kicker"
+	body.add_to_group(Car.ROAD_GROUP)
+	var shape := CollisionShape3D.new()
+	var trimesh := mesh.create_trimesh_shape()
+	trimesh.backface_collision = true
+	shape.shape = trimesh
+	body.add_child(shape)
+	body.add_child(instance)
+	add_child(body)
+	_built.append(body)
+
+
+## One platform: a level slab of road standing in the hole of a jump, with a lit
+## trim round its top, on a body that slides across the road.
+##
+## Its origin is the middle of its top face, so where it is put is where a car
+## lands. It is in the road group, because a car on it is on the road: it can
+## bank a ring from it and it is not slowed as though it were on the grass.
+func _build_platform(
+	platform: TrackFeatures.Placement, points: PackedVector3Array,
+	rights: PackedVector3Array, half_widths: PackedFloat32Array, step: float
+) -> void:
+	var frame := _frame(points, rights, half_widths, step, platform.centre())
+	var right: Vector3 = frame[1]
+	right.y = 0.0
+	right = right.normalized()
+	var forward := Vector3.UP.cross(right)
+	var half_width: float = frame[2]
+	var across := platform.half_span * 2.0 * half_width
+	var centre: Vector3 = frame[0] + Vector3.UP * platform.height
+
+	var body := AnimatableBody3D.new()
+	body.name = "Platform"
+	body.add_to_group(Car.ROAD_GROUP)
+	var slab := BoxMesh.new()
+	slab.size = Vector3(across, platform_thickness, platform.length)
+	var mesh := MeshInstance3D.new()
+	mesh.mesh = slab
+	mesh.material_override = _platform_material
+	mesh.position = Vector3.DOWN * (platform_thickness * 0.5)
+	body.add_child(mesh)
+	# The trim: a lit strip down each long edge and across each end, standing a
+	# hair proud of the top so it reads from a car coming off the ramp below it.
+	for trim in [
+		[Vector3(platform_trim_width, 0.08, platform.length), Vector3((across - platform_trim_width) * 0.5, 0.02, 0.0)],
+		[Vector3(platform_trim_width, 0.08, platform.length), Vector3(-(across - platform_trim_width) * 0.5, 0.02, 0.0)],
+		[Vector3(across, 0.08, platform_trim_width), Vector3(0.0, 0.02, (platform.length - platform_trim_width) * 0.5)],
+		[Vector3(across, 0.08, platform_trim_width), Vector3(0.0, 0.02, -(platform.length - platform_trim_width) * 0.5)],
+	]:
+		var strip := BoxMesh.new()
+		strip.size = trim[0]
+		var lit := MeshInstance3D.new()
+		lit.mesh = strip
+		lit.material_override = _platform_trim_material
+		lit.position = trim[1]
+		body.add_child(lit)
+	var near_end := platform.length * 0.5 - platform_trim_width
+	var post_height := platform_gate_height
+	for gate in [
+		[Vector3(platform_gate_thickness, post_height, platform_gate_thickness),
+			Vector3((across - platform_gate_thickness) * 0.5, post_height * 0.5, near_end)],
+		[Vector3(platform_gate_thickness, post_height, platform_gate_thickness),
+			Vector3(-(across - platform_gate_thickness) * 0.5, post_height * 0.5, near_end)],
+		[Vector3(across, platform_gate_thickness, platform_gate_thickness),
+			Vector3(0.0, post_height, near_end)],
+	]:
+		var bar := BoxMesh.new()
+		bar.size = gate[0]
+		var lit := MeshInstance3D.new()
+		lit.mesh = bar
+		lit.material_override = _platform_trim_material
+		lit.position = gate[1]
+		body.add_child(lit)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = slab.size
+	shape.shape = box
+	shape.position = mesh.position
+	body.add_child(shape)
+	# Across is x, up is up, and the end a car arrives at is +z, the way a trap
+	# is built.
+	body.transform = Transform3D(Basis(right, Vector3.UP, -forward),
+		centre + right * (platform.lateral_at(0.0) * half_width))
+	add_child(body)
+	_built.append(body)
+	_movers.append({
+		"placement": platform, "body": body, "centre": centre, "right": right,
+		"half_width": half_width,
+	})
 
 
 ## Where the road surface is at an arbitrary distance along the course, as its
@@ -355,6 +810,29 @@ func _build_materials() -> void:
 	_pad_material.emission_enabled = true
 	_pad_material.emission = pad_color
 	_pad_material.emission_energy_multiplier = pad_glow
+
+	_ring_material = StandardMaterial3D.new()
+	_ring_material.albedo_color = ring_color
+	_ring_material.roughness = 0.35
+	_ring_material.metallic = 0.4
+	_ring_material.emission_enabled = true
+	_ring_material.emission = ring_color
+	_ring_material.emission_energy_multiplier = ring_glow
+
+	_platform_material = StandardMaterial3D.new()
+	_platform_material.albedo_color = platform_color
+	_platform_material.roughness = 0.9
+
+	_platform_trim_material = StandardMaterial3D.new()
+	_platform_trim_material.albedo_color = platform_trim_color
+	_platform_trim_material.emission_enabled = true
+	_platform_trim_material.emission = platform_trim_color
+	_platform_trim_material.emission_energy_multiplier = platform_glow
+
+	_spent_ring_material = StandardMaterial3D.new()
+	_spent_ring_material.albedo_color = spent_ring_color
+	_spent_ring_material.roughness = 0.6
+	_spent_ring_material.metallic = 0.3
 
 	_barrier_material = StandardMaterial3D.new()
 	_barrier_material.vertex_color_use_as_albedo = true

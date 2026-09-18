@@ -43,9 +43,12 @@ func describe() -> void:
 	# The third straight, on the high ground, with two rows on it swapping
 	# sides - met at the one moment on the track when the car is straight.
 	straight(40.0)
-	barrier(-1.0, -0.3)
+	# A pair of traps in step and opposite: when the first holds the left the
+	# second holds the right, so the way past both is always a crossing of
+	# the road, and which way it goes depends on when the car arrives.
+	trap(-0.7, 0.7, 0.6, 1.5, 1.0)
 	straight(42.0)
-	barrier(0.3, 1.0)
+	trap(0.7, -0.7, 0.6, 1.5, 1.0)
 	straight(46.0)
 
 	# Falling, and turning while it falls.

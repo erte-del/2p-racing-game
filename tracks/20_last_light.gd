@@ -2,8 +2,8 @@ extends TrackDefinition
 
 # The last one.
 #
-# Nearly three kilometres of road, seven hairpins, three ramps, twenty-two
-# rows, two forks and four pads - and the thing that makes it the last track
+# Nearly three kilometres of road, seven hairpins, three ramps, twenty rows,
+# two traps, two forks and four pads - and the thing that makes it the last track
 # is none of those. It is that the set pieces are laid end to end with the
 # recovery taken out from between them, so a mistake made at the first hairpin
 # is still being paid for at the second, and there is nowhere on it a driver
@@ -102,9 +102,9 @@ func describe() -> void:
 	straight(50.0)
 	jump()
 
-	# A row in the landing, then the fourth hairpin.
+	# A trap in the landing, then the fourth hairpin.
 	straight(22.0)
-	barrier(0.3, 1.0)
+	trap(0.7, -0.7, 0.6, 1.3, 1.0)
 	straight(38.0)
 	width(5.8)
 	corner(-148.0, 18.0)
@@ -163,10 +163,12 @@ func describe() -> void:
 	width(8.0)
 	straight(46.0)
 
-	# The last slalom, three rows, on the run to the last ramp.
+	# The last slalom, three rows, on the run to the last ramp - and the middle
+	# one moves. It never shuts the line the other two leave, but it narrows
+	# it from a different side every couple of seconds.
 	barrier(-1.0, 0.28)
 	straight(24.0)
-	barrier(-0.28, 1.0)
+	trap(-0.7, 0.7, 0.6, 1.1, 0.9)
 	straight(24.0)
 	barrier(-1.0, 0.28)
 	straight(50.0)

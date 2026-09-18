@@ -868,6 +868,13 @@ func drift() -> float:
 	return _drift
 
 
+## The middle of the car's body, in the world. The origin sits down at the
+## wheels, which is the wrong point to ask whether a car went through a ring:
+## a car whose wheels scraped under the rim went under it.
+func middle() -> Vector3:
+	return ($Collision as CollisionShape3D).global_position
+
+
 ## Whether the last thing the car stood on was the road, for the race to ask
 ## before it banks a checkpoint or lets the car finish. A car in the air has not
 ## left the road it took off from.

@@ -144,6 +144,11 @@ extends Control
 @onready var _normal_button: Button = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/FlavourSlot/Inner/Row/Normal
 @onready var _chaos_button: Button = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/FlavourSlot/Inner/Row/Chaos
 @onready var _tracks_button: Button = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/Tracks
+@onready var _kind_slot: Control = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/KindSlot
+@onready var _kind_inner: Control = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/KindSlot/Inner
+@onready var _normal_tracks_button: Button = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/KindSlot/Inner/Row/Normal
+@onready var _acrobatic_button: Button = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/KindSlot/Inner/Row/Acrobatic
+@onready var _track_heading: Label = $TrackChoice/Page/Panel/Margin/Box/Heading
 @onready var _track_choice: Control = $TrackChoice
 @onready var _track_grid: GridContainer = $TrackChoice/Page/Panel/Margin/Box/Scroll/Grid
 @onready var _track_back: Button = $TrackChoice/Page/Panel/Margin/Box/Back
@@ -152,6 +157,9 @@ extends Control
 
 var _elapsed := 0.0
 var _flavour_tween: Tween
+var _kind_tween: Tween
+## Which grid of tracks the page is showing, normal or acrobatic.
+var _track_kind := TrackRoster.NORMAL
 var _mode_tween: Tween
 ## True once one of the two has been picked and the modes have rolled out.
 ## While that is so, the slot is held to the height of its own contents, which
@@ -178,6 +186,8 @@ func _ready() -> void:
 	_normal_button.pressed.connect(_start_infinite.bind(false))
 	_chaos_button.pressed.connect(_start_infinite.bind(true))
 	_tracks_button.pressed.connect(_on_tracks_pressed)
+	_normal_tracks_button.pressed.connect(_open_track_grid.bind(TrackRoster.NORMAL))
+	_acrobatic_button.pressed.connect(_open_track_grid.bind(TrackRoster.ACROBATIC))
 	_track_back.pressed.connect(_close_track_choice)
 	_account_button.pressed.connect(_on_account_pressed)
 	_account_screen.closed.connect(_on_account_closed)
@@ -193,6 +203,7 @@ func _ready() -> void:
 	_fill_the_track_grid()
 	# The slots are plain Controls, so nothing lays their contents out but this.
 	_flavour_slot.resized.connect(_fit_flavour)
+	_kind_slot.resized.connect(_fit_kinds)
 	_mode_slot.resized.connect(_fit_modes)
 	# So the keyboard alone can start the game - both players are on one
 	# keyboard, and neither has been asked to find the mouse yet.
@@ -210,8 +221,11 @@ func _open_where_they_left_off() -> void:
 	# backing out of the grid walks the same way out that a player walked in.
 	_open_mode_choice()
 	_choose_players(GameSettings.solo)
-	_on_tracks_pressed()
-	_focus_track(TrackRoster.index_of(GameSettings.track_file))
+	_slide_kinds(true)
+	var index := TrackRoster.index_of(GameSettings.track_file)
+	var kind := TrackRoster.kind_of(index)
+	_open_track_grid(kind)
+	_focus_track(index - TrackRoster.first(kind))
 
 
 func _process(delta: float) -> void:
@@ -262,6 +276,7 @@ func _on_play_pressed() -> void:
 ## last time, because the question at the top is being asked again.
 func _open_mode_choice() -> void:
 	_shut_flavour()
+	_shut_kinds()
 	_shut_modes()
 	_alone_button.button_pressed = false
 	_together_button.button_pressed = false
@@ -301,6 +316,19 @@ func _on_infinite_pressed() -> void:
 		_normal_button.grab_focus()
 
 
+## Tracks is a door the same way: it opens out into the choice between the
+## normal tracks and the acrobatic ones, which are a different thing to drive
+## and so are not mixed in with the rest. Both open the same page, showing
+## one grid or the other.
+func _on_tracks_pressed() -> void:
+	if _kind_slot.visible:
+		_slide_kinds(false)
+		_tracks_button.grab_focus()
+	else:
+		_slide_kinds(true)
+		_normal_tracks_button.grab_focus()
+
+
 func _start_infinite(chaos: bool) -> void:
 	# Cleared, or an infinite race started after a track had been played would
 	# run that track over and over.
@@ -324,7 +352,8 @@ func _start_infinite(chaos: bool) -> void:
 ## to write down, and every one of them would have to be edited again the day
 ## a track was added.
 func _fill_the_track_grid() -> void:
-	for index in TrackRoster.COUNT:
+	var first := TrackRoster.first(_track_kind)
+	for index in range(first, first + TrackRoster.count(_track_kind)):
 		var exists := TrackRoster.exists(index)
 		# Each of these is asked once a cell. The name and the targets are
 		# each a track file built and described, and the best time is checked
@@ -461,7 +490,9 @@ func _refresh_the_track_grid() -> void:
 	_fill_the_track_grid()
 
 
-func _on_tracks_pressed() -> void:
+func _open_track_grid(kind := TrackRoster.NORMAL) -> void:
+	_track_kind = kind
+	_track_heading.text = "ACROBATIC TRACKS" if kind == TrackRoster.ACROBATIC else "CHOOSE A TRACK"
 	# The mode page steps aside rather than lying underneath. Both are full
 	# panels, and one showing through the other reads as a bug however faint
 	# it is - unlike the settings, which lie over a title screen with nothing
@@ -510,7 +541,12 @@ func _start_track(path: String) -> void:
 func _close_track_choice() -> void:
 	_track_choice.hide()
 	_mode_choice.show()
-	_tracks_button.grab_focus()
+	if not _kind_slot.visible:
+		_tracks_button.grab_focus()
+	elif _track_kind == TrackRoster.ACROBATIC:
+		_acrobatic_button.grab_focus()
+	else:
+		_normal_tracks_button.grab_focus()
 
 
 ## Which scene a race runs in. Everything else about a race - the endless
@@ -529,6 +565,10 @@ func _scene_for_the_players() -> String:
 ## and hangs them out over both edges of the panel.
 func _fit_flavour() -> void:
 	_flavour_inner.size.x = _flavour_slot.size.x
+
+
+func _fit_kinds() -> void:
+	_kind_inner.size.x = _kind_slot.size.x
 
 
 func _fit_modes() -> void:
@@ -574,6 +614,10 @@ func _slide_flavour(open: bool) -> void:
 	_flavour_tween = _slide(_flavour_slot, _flavour_inner, open, _flavour_tween)
 
 
+func _slide_kinds(open: bool) -> void:
+	_kind_tween = _slide(_kind_slot, _kind_inner, open, _kind_tween)
+
+
 ## The modes, rolling out from under the two buttons at the top of the page.
 ## They come from the middle rather than from under whichever button was
 ## pressed, because what is opening is the rest of the page and not a drawer
@@ -584,6 +628,7 @@ func _slide_modes(open: bool) -> void:
 	_modes_open = open
 	if not open:
 		_shut_flavour()
+		_shut_kinds()
 	_mode_tween = _slide(_mode_slot, _mode_inner, open, _mode_tween)
 
 
@@ -601,6 +646,10 @@ func _shut_flavour() -> void:
 	_shut(_flavour_slot, _flavour_tween)
 
 
+func _shut_kinds() -> void:
+	_shut(_kind_slot, _kind_tween)
+
+
 func _shut_modes() -> void:
 	_modes_open = false
 	_shut(_mode_slot, _mode_tween)
@@ -609,6 +658,7 @@ func _shut_modes() -> void:
 func _close_mode_choice() -> void:
 	_mode_choice.hide()
 	_shut_flavour()
+	_shut_kinds()
 	_shut_modes()
 	_play.grab_focus()
 
@@ -623,7 +673,8 @@ func _input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	# One thing at a time, innermost first: off the track grid, then off the
-	# flavour choice, then off the modes, then off the page.
+	# flavour choice or the kinds of track, then off the modes, then off the
+	# page.
 	if _track_choice.visible:
 		get_viewport().set_input_as_handled()
 		_close_track_choice()
@@ -631,6 +682,10 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		_slide_flavour(false)
 		_infinite_button.grab_focus()
+	elif _kind_slot.visible:
+		get_viewport().set_input_as_handled()
+		_slide_kinds(false)
+		_tracks_button.grab_focus()
 	elif _modes_open:
 		get_viewport().set_input_as_handled()
 		_slide_modes(false)
@@ -702,5 +757,5 @@ func _track_under_the_cursor() -> String:
 	var cells := _track_grid.get_children()
 	for index in cells.size():
 		if _button_in(cells[index]) == focused:
-			return TrackRoster.file(index)
+			return TrackRoster.file(TrackRoster.first(_track_kind) + index)
 	return GameSettings.track_file

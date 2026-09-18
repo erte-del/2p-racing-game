@@ -35,10 +35,11 @@ func describe() -> void:
 	straight(60.0)
 
 	# A pair of rows to break the pattern up, so the third hook is not simply
-	# expected.
+	# expected - and the second of them moves, so the line through the first
+	# is only sometimes the line through both.
 	barrier(0.3, 1.0)
 	straight(42.0)
-	barrier(-1.0, -0.3)
+	trap(-0.7, 0.7, 0.6, 1.6, 1.1)
 	straight(54.0)
 
 	# The third, downhill, which is the worst place to find out a corner is

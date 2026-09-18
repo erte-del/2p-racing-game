@@ -109,7 +109,7 @@ func _build() -> void:
 	_picker = OptionButton.new()
 	# Only tracks that exist. An empty slot has no road, so it cannot have a
 	# board, and offering one is offering a page that is always blank.
-	for index in TrackRoster.COUNT:
+	for index in TrackRoster.TOTAL:
 		if TrackRoster.exists(index):
 			_picker.add_item(TrackRoster.track_name(index).to_upper(), index)
 	_picker.item_selected.connect(_on_picked)

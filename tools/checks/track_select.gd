@@ -66,6 +66,10 @@ func _init() -> void:
 	for i in 20:
 		await process_frame
 	menu.get_node("ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/Tracks").pressed.emit()
+	for i in 20:
+		await process_frame
+	menu.get_node(
+		"ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/KindSlot/Inner/Row/Normal").pressed.emit()
 	await process_frame
 	var first: Button = _first_live(grid)
 	if first == null:

@@ -136,12 +136,45 @@ func _init() -> void:
 	for i in 20:
 		await process_frame
 	menu2.call("_on_tracks_pressed")
+	for i in 20:
+		await process_frame
+	# Tracks opens onto normal and acrobatic rather than onto the grid, and
+	# each of those opens its own grid.
+	var kinds := "ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/KindSlot"
+	if not menu2.get_node(kinds).visible or menu2.get_node("TrackChoice").visible:
+		print("  tracks did not open onto the kinds of track")
+		faults += 1
+	var grid: GridContainer = menu2.get_node("TrackChoice/Page/Panel/Margin/Box/Scroll/Grid")
+	menu2.get_node(kinds + "/Inner/Row/Acrobatic").pressed.emit()
+	await process_frame
+	var acrobatic_slots := grid.get_child_count()
+	var first_button: Button = _button_in(grid.get_child(0))
+	var first_live := first_button != null and not first_button.disabled
+	menu2.call("_close_track_choice")
+	var back_on: Control = menu2.get_viewport().gui_get_focus_owner()
+	menu2.get_node(kinds + "/Inner/Row/Normal").pressed.emit()
+	await process_frame
+	print("acrobatic opens %d slots, normal opens %d" % [acrobatic_slots, grid.get_child_count()])
+	if acrobatic_slots != TrackRoster.ACROBATIC_COUNT or grid.get_child_count() != TrackRoster.COUNT:
+		print("  the two kinds of track did not open their own grids")
+		faults += 1
+	if not first_live:
+		print("  the first acrobatic track cannot be pressed")
+		faults += 1
+	if back_on != menu2.get_node(kinds + "/Inner/Row/Acrobatic"):
+		print("  backing out of the acrobatic grid did not put the cursor back on acrobatic")
+		faults += 1
 	await process_frame
 	var ladder := PackedStringArray()
-	for step in 3:
+	for step in 4:
 		if menu2.get_node("TrackChoice").visible:
 			ladder.append("tracks")
 			menu2.call("_close_track_choice")
+		elif menu2.get_node(kinds).visible:
+			ladder.append("kinds")
+			menu2.call("_slide_kinds", false)
+			# Hidden when the slide ends, which is time rather than frames.
+			await create_timer(menu2.get("slide_seconds") + 0.1).timeout
 		elif menu2.get("_modes_open"):
 			ladder.append("modes")
 			menu2.call("_slide_modes", false)
@@ -151,7 +184,7 @@ func _init() -> void:
 		for i in 20:
 			await process_frame
 	print("backing out goes %s, then the title" % " -> ".join(ladder))
-	if ladder != PackedStringArray(["tracks", "modes", "the page"]):
+	if ladder != PackedStringArray(["tracks", "kinds", "modes", "the page"]):
 		print("  backing out did not walk the way in, in reverse")
 		faults += 1
 
@@ -180,3 +213,10 @@ func _init() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(times.save_path))
 	print("%d faults" % faults)
 	quit(1 if faults > 0 else 0)
+
+
+func _button_in(cell: Node) -> Button:
+	for child in cell.get_children():
+		if child is Button:
+			return child
+	return null

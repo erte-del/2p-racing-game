@@ -234,6 +234,34 @@ layout_mode = 2
 text = "TRACKS"
 theme_override_font_sizes/font_size = 32
 
+[node name="KindSlot" type="Control" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner"]
+visible = false
+custom_minimum_size = Vector2(0, 0)
+layout_mode = 2
+clip_contents = true
+mouse_filter = 2
+
+[node name="Inner" type="VBoxContainer" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/KindSlot"]
+layout_mode = 1
+offset_right = 420.0
+theme_override_constants/separation = 12
+
+[node name="Row" type="HBoxContainer" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/KindSlot/Inner"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Normal" type="Button" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/KindSlot/Inner/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "NORMAL"
+theme_override_font_sizes/font_size = 22
+
+[node name="Acrobatic" type="Button" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/KindSlot/Inner/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "ACROBATIC"
+theme_override_font_sizes/font_size = 22
+
 [node name="TracksNote" type="MarginContainer" parent="ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner"]
 layout_mode = 2
 theme_override_constants/margin_top = -11

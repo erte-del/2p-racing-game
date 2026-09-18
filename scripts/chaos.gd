@@ -54,6 +54,10 @@ const COURSE_LENGTH_SPREAD := Vector2(180.0, 550.0)
 const NARROW_HALF_WIDTH := Vector2(3.6, 5.6)
 const WIDTH_SPREAD := Vector2(1.5, 4.5)
 const CHECKPOINTS := Vector2i(3, 6)
+## Chaos courses have traps on them, and how many of the rows are traps is
+## rolled with the rest of the course: some races a sweeper or two among the
+## barriers, some races most of them moving.
+const TRAP_CHANCE := Vector2(0.2, 0.6)
 
 ## The paint. Rolled bright, because a car has to be picked out of a hedge at
 ## a glance, and rolled apart: two cars are given hues on opposite sides of
@@ -181,6 +185,9 @@ func _roll_the_course(rng: RandomNumberGenerator) -> void:
 	# heavy cars cannot throw them as far, and a hole they cannot clear flat
 	# out is not a risk, it is a wall across the road.
 	_track.jump_gap = _base_gap * jump_gap_scale(_speed_roll, _gravity_roll)
+	# Last, so turning traps on did not move any of the rolls above.
+	_track.traps_enabled = true
+	_track.trap_chance = _spread(rng, TRAP_CHANCE)
 
 
 func _roll_the_sky(rng: RandomNumberGenerator) -> void:

@@ -82,12 +82,14 @@ func describe() -> void:
 	width(8.0)
 	straight(44.0)
 
-	# A climb into the second ramp, and a row on the road out of the landing.
+	# A climb into the second ramp, and a trap on the road out of the landing,
+	# whose side can be seen from the lip and has changed by the time the car
+	# is down.
 	climb(42.0, 4.4)
 	straight(46.0)
 	jump()
 	straight(22.0)
-	barrier(-1.0, -0.3)
+	trap(-0.7, 0.7, 0.6, 1.4, 1.0)
 	straight(40.0)
 
 	# Joined corners again, tighter than the first pair, falling.

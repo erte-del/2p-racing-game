@@ -24,7 +24,11 @@ func describe() -> void:
 	corner(56.0, 40.0)
 	corner(-52.0, 38.0)
 	straight(46.0)
-	barrier(-1.0, -0.32)
+	# The first barrier in the game that moves. Slow, and holding each kerb for
+	# two whole seconds, on a straight with nothing else on it: the only thing
+	# to learn here is that the way past is wherever the trap is not, and that
+	# where it is not changes.
+	trap(-0.66, 0.66, 0.68, 2.0, 1.4)
 	straight(56.0)
 
 	# First. The widest of the four, and the only one with a straight both
