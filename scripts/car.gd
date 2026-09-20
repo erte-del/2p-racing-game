@@ -288,6 +288,16 @@ var model_turns := 0
 
 ## The other car, for slipstream. Wired up by the level.
 var rival: Car
+## Who is driving, when it is not a keyboard: anything with a
+## `controls(car, delta) -> Vector2` giving throttle and steering the way the
+## keys would, from -1 to 1 each. Null is the player on `input_prefix`.
+##
+## Asked rather than handed the car. A driver only ever says what it wants of
+## the pedals and the wheel, and everything the car does with that - the
+## easing, the grip, the ceiling on its speed - is the same sums a player's
+## keys go through, which is the whole of what stops a bot being quicker than
+## the car it is in.
+var driver: Object
 ## While frozen the car ignores input and holds still, used for the pause
 ## between generated tracks.
 var frozen := false
@@ -475,8 +485,15 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector3.ZERO
 		return
 
-	var throttle := Input.get_axis(_brake, _accelerate)
-	var steer := Input.get_axis(_steer_right, _steer_left)
+	var throttle := 0.0
+	var steer := 0.0
+	if driver != null:
+		var wanted: Vector2 = driver.controls(self, delta)
+		throttle = clampf(wanted.x, -1.0, 1.0)
+		steer = clampf(wanted.y, -1.0, 1.0)
+	else:
+		throttle = Input.get_axis(_brake, _accelerate)
+		steer = Input.get_axis(_steer_right, _steer_left)
 
 	_hit_recovery = maxf(_hit_recovery - delta, 0.0)
 	_update_slipstream(delta)
@@ -501,6 +518,43 @@ func _physics_process(delta: float) -> void:
 	_lean(delta)
 	_roll_wheels(delta)
 	_shell.animate_wheels(_steer, _wheel_speed, wheel_radius, delta)
+
+
+## Put a copy of the car somewhere to rehearse from, going `speed` along its
+## nose and with nothing else carried over: no lock on, no slide, no boost.
+func rehearse_from(at: Transform3D, speed := 0.0) -> void:
+	transform = at
+	_speed = speed
+	_steer = 0.0
+	_drift = 0.0
+	_turned = 0.0
+	_slipstream = 0.0
+	_boost = 0.0
+	_boost_hold = 0.0
+	_off_road = false
+
+
+## One step of the car's own sums with nothing of the world in them: no road
+## to stand on, nothing to hit, no gravity. Returns where the car is going, in
+## m/s across the ground, and leaves moving it there to the caller.
+##
+## For a driver rehearsing a lap on a copy of the car rather than on the car:
+## BotDriver practises a track this way before it races it, and a practice lap
+## taken through anything but the car's own easing, grip and ceiling would be
+## practice at driving some other car. A copy is never added to the tree, so it
+## is the transform rather than the global one that is turned.
+func rehearse(throttle: float, steer: float, grounded: bool, delta: float) -> Vector3:
+	_update_boost(delta)
+	_ease_steering(clampf(steer, -1.0, 1.0), delta)
+	if grounded:
+		_apply_throttle(clampf(throttle, -1.0, 1.0), delta)
+		_apply_steering(_steer, delta)
+		_slide(grip, delta)
+	else:
+		_apply_steering(_steer * air_steer, delta)
+		_slide(0.0, delta)
+	var travel := (-transform.basis.z).rotated(Vector3.UP, _drift)
+	return Vector3(travel.x, 0.0, travel.z) * _speed
 
 
 ## Stop dead and forget any slipstream. Used when the track is replaced.
@@ -859,6 +913,12 @@ func _bounce_off_a_roof(falling: float) -> void:
 ## Signed speed along the car's own heading, in m/s. Positive is forwards.
 func speed() -> float:
 	return _speed
+
+
+## Where the steering is, from -1 at full right lock to +1 at full left: not
+## what was asked of it, but how far the easing has got towards that.
+func steering() -> float:
+	return _steer
 
 
 ## The slip angle: how far the way the car is travelling lags the way it is

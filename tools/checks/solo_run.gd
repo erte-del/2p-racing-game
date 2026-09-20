@@ -7,14 +7,12 @@ extends SceneTree
 # of wall clock, and driving a kilometre of road takes as long as driving a
 # kilometre of road; with it the same run takes about a second.
 #
-# The car is driven by the check rather than by a player: held flat out and
-# steered back towards the centreline, which is enough to get round a track
-# and nothing like a good lap. What is being asked is not whether it drives
-# well but whether the mode works at all - whether the clock starts on GO and
-# stops on the line, whether checkpoints bank, whether a reset costs time
-# rather than ending the run, and whether a second run is timed afresh.
-
-const LOOK_AHEAD := 14.0
+# The car is driven by BotDriver, the same driver the bot race puts in the
+# other car, through the pedals and the wheel the way a player drives it. What
+# is being asked is not whether it drives well - bot_race.gd asks that - but
+# whether the mode works at all: whether the clock starts on GO and stops on
+# the line, whether checkpoints bank, whether a reset costs time rather than
+# ending the run, and whether a second run is timed afresh.
 
 
 func _init() -> void:
@@ -202,96 +200,31 @@ func _check_the_endless_course(previous: Node) -> int:
 	return faults
 
 
-## Drive the car round by aiming it a little way further along the centreline,
-## flat out where that aim point is straight ahead and slower where it is not.
+## Drive the car to the flag with the bot, putting it back at its last
+## checkpoint whenever the bot says it would press the key.
 ##
-## Speed is not optional. A car ambling at half throttle cannot clear the hole
-## in a jump, falls in, is put back at the checkpoint before it, and ambles at
-## the same hole again for as long as anything lets it - so a check that drove
-## gently would sit in that loop reporting a broken mode.
+## A driver of its own here would be a second copy of the bot, and two copies
+## of a driver drift: this one used to turn the car by rotating its body and
+## set its speed outright, which drives nothing like the car a player has.
 func _drive(solo: Node, track: Track, car: Car) -> bool:
-	var curve := track.curve()
-	var world := track.global_transform
-	var to_track := world.affine_inverse()
-	var stuck := 0.0
+	var bot := BotDriver.new(track, car)
+	car.driver = bot
 	var resets := 0
-	var was := -1.0
 	for i in 60 * 150:
 		if not solo.get("_running"):
+			car.driver = null
 			return true
-		var offset: float = curve.get_closest_offset(to_track * car.global_position)
-		var aim: float = minf(offset + LOOK_AHEAD, track.length())
-		# Aimed through whatever the road leaves open there rather than down
-		# the middle of it. Driving the centreline into a fork puts the car
-		# nose first into the divider, which is not the track being broken -
-		# it is a car refusing to pick a side.
-		var target: Vector3 = _through_the_gap(track, aim, _across(track, offset, car))
-		var forward := -car.global_transform.basis.z
-		var wanted := target - car.global_position
-		wanted.y = 0.0
-		var turn := 0.0
-		if wanted.length_squared() > 0.01:
-			turn = forward.signed_angle_to(wanted.normalized(), Vector3.UP)
-			# Steer by turning the body towards the aim point, which is what
-			# the player's steering does to it without the reaction time.
-			car.rotate_y(clampf(turn, -0.05, 0.05))
-		# Flat out when the road ahead is straight, backing off as it bends.
-		var pace: float = lerpf(1.0, 0.45, clampf(absf(turn) / 0.55, 0.0, 1.0))
-		car._speed = maxf(car._speed, car.max_speed * pace)
+		bot.race_time = solo.get("_time")
 		await physics_frame
-
-		if offset - was < 0.5:
-			stuck += 1.0 / 60.0
-			if stuck > 3.0:
-				solo.call("_back_to_checkpoint")
-				stuck = 0.0
-				resets += 1
-				if resets > 12:
-					print("  the car could not get past %.0f m in twelve tries"
-						% offset)
-					return false
-		else:
-			stuck = 0.0
-			was = offset
+		if bot.wants_reset() and solo.get("_running"):
+			solo.call("_back_to_checkpoint")
+			resets += 1
+			if resets > 12:
+				print("  the car could not get past %.0f m in twelve tries"
+					% bot.progress())
+				break
+	car.driver = null
 	return false
-
-
-## Where on the road to aim, in world space: the middle of whichever way past
-## is nearest to where the car already is.
-func _through_the_gap(track: Track, at: float, lateral: float) -> Vector3:
-	var centre: Vector3 = track.curve().sample_baked(at)
-	var gaps := track.features().gaps_at(track.layout(), at)
-	var lane := 0.0
-	var nearest := INF
-	for gap in gaps:
-		var middle := (gap.x + gap.y) * 0.5
-		if absf(middle - lateral) < nearest:
-			nearest = absf(middle - lateral)
-			lane = middle
-	return track.global_transform * (
-		centre + _right(track, at) * (lane * track.half_width_at(at)))
-
-
-## How far across the road the car is, from -1 at the left edge to +1 at the
-## right, which is the same way everything on the road is described.
-func _across(track: Track, at: float, car: Car) -> float:
-	var centre: Vector3 = track.global_transform * track.curve().sample_baked(at)
-	var right: Vector3 = track.global_transform.basis * _right(track, at)
-	var half: float = maxf(track.half_width_at(at), 0.001)
-	return clampf((car.global_position - centre).dot(right.normalized()) / half,
-		-1.0, 1.0)
-
-
-## Which way is right, at a distance along the course, in the track's own space.
-func _right(track: Track, at: float) -> Vector3:
-	var curve := track.curve()
-	var here: Vector3 = curve.sample_baked(at)
-	var ahead: Vector3 = curve.sample_baked(minf(at + 2.0, track.length()))
-	var forward := ahead - here
-	forward.y = 0.0
-	if forward.length_squared() < 0.000001:
-		return Vector3.RIGHT
-	return forward.normalized().cross(Vector3.UP)
 
 
 ## The whole of what the finish screen is saying, on one line.

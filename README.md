@@ -2636,14 +2636,11 @@ Which of the two a race runs in is decided entirely by how many are playing.
 Godot --path . --headless --fixed-fps 60 --script tools/checks/solo_run.gd
 ```
 
-The car is driven by the check rather than by a player: flat out where the
-road ahead is straight, backing off as it bends, and aimed through whatever
-`TrackFeatures.gaps_at()` says is open rather than down the middle. Both of
-those had to be there. A car ambling at half throttle cannot clear the hole in
-a jump, falls in, is put back at the checkpoint before it and ambles at the
-same hole again for as long as anything lets it; and a car aimed down the
-centreline drives nose first into the divider of a fork, which is not the
-track being broken but a car refusing to pick a side.
+The car is driven by the bot ([The bot](#the-bot)), the same driver the bot
+race puts in the other car, through the pedals and the wheel. It used to have
+a driver of its own that turned the car by rotating its body and set its speed
+outright; that drove nothing like the car a player has, and two copies of a
+driver drift apart, so it went when the bot arrived.
 
 `--fixed-fps` matters more than it looks. Without it the loop sleeps to hold
 sixty ticks a second of wall clock, and driving a kilometre of road takes as
@@ -2851,6 +2848,94 @@ that it is the same bad lap everywhere: on First Light it comes home in 34.78,
 against the 33 the track asks for gold. Gold is a little under the best the
 road allows, silver and bronze are spaced further apart the harder the track
 gets, and the whole ladder is set from that one ratio.
+
+## The bot
+
+`BotDriver` ([scripts/bot_driver.gd](scripts/bot_driver.gd)) drives a car the
+way a player does: it asks for throttle, brake and so much lock, and nothing
+else. A car is handed one as its `driver`, and asks it every step for what the
+keys would otherwise have said. Everything the car does with that - the easing
+on the wheel, the grip, the ceiling on its speed - is the same sums a keyboard
+goes through, which is the whole of what stops the bot being quicker than the
+car it is in. It cannot set its speed or turn its body. A bot that is too slow
+has to find a better line, not a bigger engine, and one that is too quick for
+a player cannot have been given one either.
+
+It drives in three stages, all worked out from the road and the car when it is
+made, so nothing is written down anywhere to go stale when a track or the car
+is retuned.
+
+**The line.** The road is sampled every 2.5 m. Every barrier that stands still
+narrows it to the gap the bot means to take - held for as long as a car
+alongside it would be alongside it, half a car length either side - and every
+pad worth taking narrows it to the pad. A fork's lane is chosen where the
+blocking starts and held to the end, since a car that changed its mind halfway
+down a seventy-metre divider would choose the divider. The line is then relaxed
+inside those limits until it bends as little as it can, which is what a racing
+line is: wide in, clip the inside, wide out. Traps move, so they are left out of
+the line and dodged on the day, from where the race clock says they will be when
+the car gets there.
+
+**The speeds.** What each bend allows is the car's own answer turned round:
+`Car.turn_radius_at()` says what circle a speed can hold, so a bend of radius r
+allows the speed that comes out at r. Past `fast_turn_radius` a bend is no limit
+at all - the car's circle stops growing at top speed, boosted or not - so a pad
+carried into a gentle bend is kept. The limits are then walked back from every
+bend at the car's braking, so it slows before the corner rather than in it.
+
+**Practice.** A line that bends no tighter than the car can hold is not yet a
+line the car can follow. The lock takes a moment to come on and the grip a
+moment more to take the travel round with it, so a line that swings across the
+road past a row of barriers asks for a car that has already turned. That cost
+cannot be read off the shape of the line, so the bot finds it out the way a
+player does: it drives a lap on a copy of the car, through `Car.rehearse()`,
+which is the car's own steering and throttle and nothing of the world. Where
+the copy's box - its real length and width, at its real angle - would overlap a
+barrier, or its middle would leave the road, the line is given more room on
+that side there; where that has already been tried, the stretch before it is
+taken a little slower too. It stops at a clean lap, or after eight. A lap of
+practice costs a tenth of a second, because the copy is never in the physics
+world, and most tracks are clean in two to four.
+
+Moving the line comes first on purpose. A line that crosses a gap at an angle
+clips the barrier with the corner of the car at any speed, and when slowing was
+the only answer practice took First Light's fork down to half speed and still
+hit the barrier.
+
+**Driving it.** The line is followed rather than chased. The first driver
+aimed at a point further down the line, which is the obvious thing to do, and
+cuts every bend by about as far ahead as it looks - through a gap a hand's
+width wider than the car that is a barrier. So the bot steers for the line's
+own bend where the car is, and on top of that turns back towards the line at an
+angle that closes how far off it is in under half a second. It steers from where
+the car will be a sixth of a second from now, turning as hard as the wheel has
+actually got to, because a driver steering for where the car is now is steering
+a car that has already moved on. The throttle holds the car under what the line
+allows over the next fifth of a second; over it, it brakes.
+
+If the car goes nowhere for three seconds, or sits off the road for two, the
+bot says it would press the reset key, and whatever is running the race does
+what it does for the key. It is not the bot's to put itself anywhere.
+
+**Difficulty** is one number from 0 to 1. It sets how near the kerb the line
+runs, how much of what a bend allows it asks for, how late it brakes, and from
+0.25 up whether it goes out of its way for a pad, from 0.5 whether it tucks in
+behind the other car on a straight. One number rather than a table, so it can
+be turned by feel.
+
+`tools/checks/bot_race.gd` lets the bot drive every normal track and sets its
+time against the gold, which is the number that says whether "hard to beat" is
+true:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/bot_race.gd
+Godot --path . --headless --fixed-fps 60 --script tools/checks/bot_race.gd -- 0.5
+Godot --path . --headless --fixed-fps 60 --script tools/checks/bot_race.gd -- 1.0 res://tracks/07_pinch.gd
+```
+
+It fails a track the bot does not finish, or needs putting back on more than
+twice. It wants running again every time the car is retuned: the bot drives the
+car as it is, and the golds do not move with it.
 
 ## Adding a track
 

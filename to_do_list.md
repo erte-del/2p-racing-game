@@ -633,25 +633,49 @@ than down the middle ([README.md, Solo](README.md)). That is the skeleton. It
 lives in `tools/` because nothing shipped needed it; the bot needs it promoted
 to `scripts/bot_driver.gd` and made better:
 
-- [ ] Move the driving logic out of the check and into a real script, so the
+- [x] Move the driving logic out of the check and into a real script, so the
 	  check drives the same code the game does. Two copies of a driver drift.
-- [ ] Give it a **difficulty**, as one number: how far ahead it looks, how much
+	  *`scripts/bot_driver.gd`; `solo_run.gd` now drives with it.
+	  `tools/lap_times.gd` and `acrobatic_drive.gd` still have their own.*
+- [x] Give it a **difficulty**, as one number: how far ahead it looks, how much
 	  it backs off for a bend, how hard it aims at a gap. One number rather
 	  than a table, so it can be tuned by feel.
 - [ ] Make it use what a player uses - pads, the fork, slipstream - rather than
 	  driving a clean line past all of it. A bot that ignores boost pads is a
 	  bot you beat by taking them, once, forever.
-- [ ] Decide what "hard to beat" is, in numbers: the bot should come in around
+	  *Pads: done, from difficulty 0.25. Fork: it picks the lane with the pad,
+	  but does not yet time both lanes and take the quicker one. Slipstream
+	  and going round the other car: written, not yet driven, because there
+	  is no race with two cars in it yet.*
+- [x] Decide what "hard to beat" is, in numbers: the bot should come in around
 	  the track's **gold** time. That is a target already tuned to be a little
 	  under the best the road allows, it already exists per track, and it means
 	  the gate and the race ask the same thing of the player. A player with five
 	  golds can beat it; a player with five bronzes cannot, which is the gate
 	  working.
-- [ ] The bot must not cheat. No extra speed, no rubber band, no ignoring
+	  *At difficulty 1 it averages +3% against gold over the twenty tracks,
+	  from -2% (The Weave) to +8% (First Light, The Gauntlet), plus The Wringer
+	  at +30% because of the ramp wedge below. 0.5 is about +7%, 0 about +20%.*
+- [x] The bot must not cheat. No extra speed, no rubber band, no ignoring
 	  barriers. It drives the same car with the same tuning, and if it is too
 	  easy it gets a better line rather than a bigger engine. A bot that
 	  teleports when you get ahead is the fastest way there is to make a player
 	  stop trusting a game.
+	  *It only ever sets throttle and steering through `Car.driver`.*
+
+> **Bot driver built, 2026-09-18.** Written up in the README under The bot.
+> Still open before the race can use it:
+>
+> - **Planning takes 0.4-1.7 s** (Last Light is the slow one), all on the
+>   frame it is made. The bot race should make it during the countdown, or
+>   spread it over frames, or it will hitch.
+> - **The golds were set by a driver that cheats.** `lap_times.gd` turns the
+>   car's body at 3 rad/s whatever its speed. So on the slalom tracks
+>   (The Gauntlet, First Light's fork) gold may be quicker than the real car
+>   can go, and the bot sits at +8% there. Worth deciding whether the bot at
+>   difficulty 1 should become the reference the golds are set from.
+> - **The Wringer's first jump ramp wedges the car** at one arrival state,
+>   with keyboard input as well as with the bot. It has its own task.
 
 ### The race itself
 
