@@ -556,6 +556,56 @@ only its own `ChaseCamera`, which the level wires to a car in `main.gd`. The
 cameras are deliberately *not* children of the cars: two cameras in one viewport
 would fight over which is current.
 
+## Screen sizes
+
+The whole interface is laid out once, in a 1280x720 space, and Godot scales
+that to whatever window the game is in - `display/window/stretch/mode` is
+`canvas_items` and `stretch/aspect` is `expand`. A button therefore covers the
+same share of the screen on a laptop as it does on a big desktop monitor, and
+the layout can never be measured against a window it was not written for. It
+is the one setting that decides this: with the stretch left off, every size in
+the game is a raw pixel count, so the menu is nearly full-bleed on a 1366-wide
+laptop and a postage stamp on a 4K monitor, and a page opened while the window
+was a different size can end up centred on a rectangle that is no longer
+there.
+
+`expand` rather than `keep` means no black bars: a screen that is not 16:9
+gets the extra room as extra space rather than as borders, so a 4:3 monitor
+lays out as 1280x960 and an ultra-wide as 1706x720. The laid-out space is
+therefore never *smaller* than 1280x720 but may be larger in one direction,
+which is why nothing may be positioned from the bottom or right edge by a
+fixed number: the pages are centred and the title stack is placed by fraction.
+
+`tools/checks/screen_fit.gd` opens every page - modes, tracks, settings,
+account, garage, boards - at five window shapes and fails if any of them runs
+off the edge of the laid-out space:
+
+```
+Godot --path . --headless --script tools/checks/screen_fit.gd
+```
+
+That is what caught the boards being 771 high in a 720-high space, with the
+heading and the way out both over the edge. The list of times there is the one
+thing on a page that can be any height, so it takes whatever is left once the
+rest of the page has had its share and scrolls the remainder
+([scripts/leaderboard_menu.gd](scripts/leaderboard_menu.gd), `_fit_the_list`).
+
+Scaling the interface would ordinarily take the race down with it: a
+`SubViewport` is sized by whatever holds it, and that is measured in the
+laid-out space, so each half of the split would be rendered 1280x358 and blown
+up soft on any screen bigger than that. So the halves are not
+`SubViewportContainer`s but plain `TextureRect`s running
+[scripts/sharp_view.gd](scripts/sharp_view.gd), which gives each viewport the
+size its half of the screen really covers in the display's own pixels and sets
+`size_2d_override` to the laid-out size. The road is drawn at the full
+resolution of the monitor; the speed lines over it still measure the frame the
+way the layout does, so they come out the same weight everywhere.
+
+The one thing left at a fixed size is the garage's car portraits, which are
+rendered once at 208x136 and kept beside the model (see Custom cars). They are
+drawn into a box that size in the laid-out space, so on a screen bigger than
+1280 wide they are scaled up with everything else.
+
 ## Smooth motion
 
 The cars, the cameras and the arrows all move on the physics step, sixty times a

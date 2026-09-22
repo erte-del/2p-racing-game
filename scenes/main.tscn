@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" path="res://scenes/car/car.tscn" id="2_car"]
 [ext_resource type="Script" uid="uid://bgixbbwu47xnr" path="res://scripts/chase_camera.gd" id="3_cam"]
 [ext_resource type="Script" path="res://scripts/speed_lines.gd" id="9_lines"]
+[ext_resource type="Script" path="res://scripts/sharp_view.gd" id="13_sharp"]
 [ext_resource type="Script" uid="uid://bb8h05not4sca" path="res://scripts/rival_arrow.gd" id="4_arrow"]
 [ext_resource type="PackedScene" path="res://scenes/track/track.tscn" id="5_track"]
 [ext_resource type="Script" path="res://scripts/surroundings.gd" id="6_surround"]
@@ -88,11 +89,12 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 4
 
-[node name="TopView" type="SubViewportContainer" parent="Split" unique_id=1201121425]
+[node name="TopView" type="TextureRect" parent="Split" unique_id=1201121425]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-stretch = true
+expand_mode = 1
+script = ExtResource("13_sharp")
 
 [node name="SubViewport" type="SubViewport" parent="Split/TopView" unique_id=1047607665]
 handle_input_locally = false
@@ -111,11 +113,12 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("9_lines")
 
-[node name="BottomView" type="SubViewportContainer" parent="Split" unique_id=1477111754]
+[node name="BottomView" type="TextureRect" parent="Split" unique_id=1477111754]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-stretch = true
+expand_mode = 1
+script = ExtResource("13_sharp")
 
 [node name="SubViewport" type="SubViewport" parent="Split/BottomView" unique_id=517676283]
 handle_input_locally = false

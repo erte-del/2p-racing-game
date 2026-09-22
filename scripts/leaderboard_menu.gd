@@ -28,7 +28,17 @@ const MINE := Color(1.0, 0.85, 0.4)
 ## board at all.
 const PLACE := "%d."
 
+## How tall the list of times would like to be, and the least it will settle
+## for on a screen with no room for that. Everything else on the page is a
+## fixed height, so the list is what gives way.
+const LIST_HEIGHT := 400.0
+const LIST_LEAST := 150.0
+## Kept clear above and below the page, so it never sits flush to the edge.
+const CLEARANCE := 24.0
+
+var _panel: PanelContainer
 var _picker: OptionButton
+var _scroll: ScrollContainer
 var _rows: VBoxContainer
 var _note: Label
 var _close: Button
@@ -44,6 +54,12 @@ func _ready() -> void:
 	_build()
 	Backend.signed_in.connect(_on_account_changed)
 	Backend.signed_out.connect(_on_account_changed)
+	resized.connect(_fit_the_list)
+	# The page's own height answers back: what is left for the list depends on
+	# how tall the rest of it turned out, and the note under it grows and
+	# shrinks with whatever it has to say.
+	_panel.resized.connect(_fit_the_list)
+	_fit_the_list()
 	hide()
 
 
@@ -55,6 +71,7 @@ func open(track_file: String = "") -> void:
 		_showing = index
 		_picker.selected = _picker.get_item_index(index)
 	show()
+	_fit_the_list()
 	_close.grab_focus()
 	# The sync is set going here rather than waited on. It is what puts a run
 	# driven offline onto the board, and the board below is drawn from the
@@ -87,13 +104,13 @@ func _build() -> void:
 	page.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(page)
 
-	var panel := PanelContainer.new()
-	page.add_child(panel)
+	_panel = PanelContainer.new()
+	page.add_child(_panel)
 
 	var margin := MarginContainer.new()
 	for side in ["left", "top", "right", "bottom"]:
 		margin.add_theme_constant_override("margin_" + side, 30)
-	panel.add_child(margin)
+	_panel.add_child(margin)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 14)
@@ -115,15 +132,15 @@ func _build() -> void:
 	_picker.item_selected.connect(_on_picked)
 	box.add_child(_picker)
 
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0.0, 400.0)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	box.add_child(scroll)
+	_scroll = ScrollContainer.new()
+	_scroll.custom_minimum_size = Vector2(0.0, LIST_HEIGHT)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(_scroll)
 
 	_rows = VBoxContainer.new()
 	_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_rows.add_theme_constant_override("separation", 6)
-	scroll.add_child(_rows)
+	_scroll.add_child(_rows)
 
 	_note = Label.new()
 	_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -136,6 +153,28 @@ func _build() -> void:
 	_close.text = "BACK"
 	_close.pressed.connect(close)
 	box.add_child(_close)
+
+
+## Twenty names is a tall page, and a laid-out screen is only ever 720 high
+## on a widescreen monitor. Rather than let the top and the bottom of the page
+## hang off the edges - taking the heading and the way out with them - the
+## list of times takes whatever height is left over and scrolls the rest.
+func _fit_the_list() -> void:
+	if _panel == null or size.y < 1.0:
+		return
+	# What the page needs for everything that is not the list: measured off
+	# the page where it has been laid out once, and off its minimums before
+	# there is anything to measure.
+	var rest := _panel.size.y - _scroll.size.y
+	if rest <= 0.0:
+		rest = _panel.get_combined_minimum_size().y - _scroll.custom_minimum_size.y
+	var wanted := clampf(
+		size.y - rest - CLEARANCE * 2.0, LIST_LEAST, LIST_HEIGHT)
+	# Settling for what it already has is what stops this going round again:
+	# the list's height is what moves the page that called it.
+	if absf(wanted - _scroll.custom_minimum_size.y) < 0.5:
+		return
+	_scroll.custom_minimum_size.y = wanted
 
 
 func _on_picked(item: int) -> void:
