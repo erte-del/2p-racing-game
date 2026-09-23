@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://scenes/account.tscn" id="5_account"]
 [ext_resource type="PackedScene" path="res://scenes/leaderboard.tscn" id="6_board"]
 [ext_resource type="PackedScene" path="res://scenes/garage.tscn" id="7_garage"]
+[ext_resource type="PackedScene" path="res://scenes/shop.tscn" id="9_shop"]
 [ext_resource type="Script" path="res://scripts/purse_tally.gd" id="8_purse"]
 
 [node name="Menu" type="Control"]
@@ -59,9 +60,9 @@ theme_override_font_sizes/font_size = 104
 
 [node name="Play" type="Button" parent="."]
 anchor_left = 0.5
-anchor_top = 0.6
+anchor_top = 0.54
 anchor_right = 0.5
-anchor_bottom = 0.6
+anchor_bottom = 0.54
 offset_left = -140.0
 offset_right = 140.0
 offset_bottom = 76.0
@@ -71,9 +72,9 @@ theme_override_font_sizes/font_size = 40
 
 [node name="Garage" type="Button" parent="."]
 anchor_left = 0.5
-anchor_top = 0.6
+anchor_top = 0.54
 anchor_right = 0.5
-anchor_bottom = 0.6
+anchor_bottom = 0.54
 offset_left = -140.0
 offset_top = 86.0
 offset_right = 140.0
@@ -82,37 +83,50 @@ grow_horizontal = 2
 text = "GARAGE"
 theme_override_font_sizes/font_size = 28
 
-[node name="Settings" type="Button" parent="."]
+[node name="Shop" type="Button" parent="."]
 anchor_left = 0.5
-anchor_top = 0.6
+anchor_top = 0.54
 anchor_right = 0.5
-anchor_bottom = 0.6
+anchor_bottom = 0.54
 offset_left = -140.0
 offset_top = 148.0
 offset_right = 140.0
 offset_bottom = 200.0
+grow_horizontal = 2
+text = "SHOP"
+theme_override_font_sizes/font_size = 28
+
+[node name="Settings" type="Button" parent="."]
+anchor_left = 0.5
+anchor_top = 0.54
+anchor_right = 0.5
+anchor_bottom = 0.54
+offset_left = -140.0
+offset_top = 210.0
+offset_right = 140.0
+offset_bottom = 262.0
 grow_horizontal = 2
 text = "SETTINGS"
 theme_override_font_sizes/font_size = 28
 
 [node name="Account" type="Button" parent="."]
 anchor_left = 0.5
-anchor_top = 0.6
+anchor_top = 0.54
 anchor_right = 0.5
-anchor_bottom = 0.6
+anchor_bottom = 0.54
 offset_left = -140.0
-offset_top = 210.0
+offset_top = 272.0
 offset_right = 140.0
-offset_bottom = 262.0
+offset_bottom = 324.0
 grow_horizontal = 2
 text = "ACCOUNT"
 theme_override_font_sizes/font_size = 28
 
 [node name="Purse" type="Control" parent="."]
 anchor_left = 0.5
-anchor_top = 0.6
+anchor_top = 0.54
 anchor_right = 0.5
-anchor_bottom = 0.6
+anchor_bottom = 0.54
 offset_left = -140.0
 offset_top = -48.0
 offset_right = 140.0
@@ -362,4 +376,7 @@ visible = false
 visible = false
 
 [node name="GarageScreen" parent="." instance=ExtResource("7_garage")]
+visible = false
+
+[node name="ShopScreen" parent="." instance=ExtResource("9_shop")]
 visible = false

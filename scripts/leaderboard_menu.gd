@@ -157,10 +157,13 @@ func _build() -> void:
 	box.add_child(_close)
 
 
-## Twenty names is a tall page, and a laid-out screen is only ever 720 high
-## on a widescreen monitor. Rather than let the top and the bottom of the page
-## hang off the edges - taking the heading and the way out with them - the
-## list of times takes whatever height is left over and scrolls the rest.
+## Twenty names is a tall page, and on a widescreen monitor a laid-out screen
+## is only ever as high as the reference - 900, or 750 at the largest
+## interface size a player can pick. Rather than let the top and the bottom of
+## the page hang off the edges - taking the heading and the way out with them
+## - the list of times takes whatever height is left over and scrolls the
+## rest. It is measured off the space actually given rather than off any of
+## those numbers, so the setting needs no say in it.
 func _fit_the_list() -> void:
 	if _panel == null or size.y < 1.0:
 		return

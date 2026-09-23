@@ -98,6 +98,25 @@ func is_signed_in() -> bool:
 	return not user_id.is_empty()
 
 
+## Whether a string is shaped like an account id.
+##
+## Asked of every owner that comes back from the server, by anything that is
+## about to build a request or a path out of one. It lives here rather than
+## beside one of the callers because it is this server's own idea of what an
+## id looks like, and there is now more than one thing asking.
+static func is_uuid(text: String) -> bool:
+	if text.length() != 36:
+		return false
+	for i in text.length():
+		var character := text[i]
+		if i in [8, 13, 18, 23]:
+			if character != "-":
+				return false
+		elif not character in "0123456789abcdefABCDEF":
+			return false
+	return true
+
+
 ## Make an account and sign into it.
 ##
 ## The name is taken at the same time as the account, in one call as far as

@@ -30,6 +30,8 @@ const CONTROL_ROWS := [
 @onready var _controls_page: Control = $ControlsPage
 @onready var _volume: HSlider = $SettingsPage/Panel/Margin/Box/Volume/Row/Slider
 @onready var _volume_value: Label = $SettingsPage/Panel/Margin/Box/Volume/Row/Value
+@onready var _ui_scale: HSlider = $SettingsPage/Panel/Margin/Box/Interface/Slider
+@onready var _ui_scale_value: Label = $SettingsPage/Panel/Margin/Box/Interface/Value
 @onready var _sky_buttons: Array[Button] = [
 	$SettingsPage/Panel/Margin/Box/Sky/Row/Normal,
 	$SettingsPage/Panel/Margin/Box/Sky/Row/Day,
@@ -58,6 +60,9 @@ func _ready() -> void:
 		GameSettings.NORMAL, GameSettings.ALWAYS_DAY, GameSettings.ALWAYS_NIGHT,
 	]
 	_volume.value_changed.connect(_on_volume_changed)
+	_ui_scale.min_value = GameSettings.UI_SCALE_MIN * 100.0
+	_ui_scale.max_value = GameSettings.UI_SCALE_MAX * 100.0
+	_ui_scale.value_changed.connect(_on_ui_scale_changed)
 	for i in _sky_buttons.size():
 		_sky_buttons[i].pressed.connect(_on_sky_pressed.bind(i))
 	for i in _damage_buttons.size():
@@ -75,6 +80,8 @@ func _ready() -> void:
 func open() -> void:
 	_volume.set_value_no_signal(GameSettings.volume * 100.0)
 	_show_volume_value()
+	_ui_scale.set_value_no_signal(GameSettings.ui_scale * 100.0)
+	_show_ui_scale_value()
 	_show_sky_choice()
 	_show_damage_choice()
 	show()
@@ -126,6 +133,16 @@ func _on_volume_changed(value: float) -> void:
 	_show_volume_value()
 
 
+## Dragging this rescales the screen the slider is on, which is the point:
+## the player sees the size they are choosing while they choose it, rather
+## than having to close the page to find out. The slider keeps its grab
+## through it because it is measured in the laid-out space like everything
+## else, and that space is what moved.
+func _on_ui_scale_changed(value: float) -> void:
+	GameSettings.ui_scale = value / 100.0
+	_show_ui_scale_value()
+
+
 func _on_sky_pressed(index: int) -> void:
 	GameSettings.time_of_day = _sky_values[index]
 	_show_sky_choice()
@@ -138,6 +155,13 @@ func _on_damage_pressed(on: bool) -> void:
 
 func _show_volume_value() -> void:
 	_volume_value.text = "%d%%" % roundi(_volume.value)
+
+
+## Read back from the setting rather than from the slider, because the setting
+## clamps and the slider does not: a value out of a hand-edited settings file
+## should show as the size actually being used.
+func _show_ui_scale_value() -> void:
+	_ui_scale_value.text = "%d%%" % roundi(GameSettings.ui_scale * 100.0)
 
 
 ## The chosen sky button is the one left held down. Setting this from the

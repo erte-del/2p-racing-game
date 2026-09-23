@@ -361,6 +361,11 @@ var _off_road := false
 ## its lights and the driver's eye. It tips to follow the road while the body
 ## it hangs off stays upright.
 var _shell: CarShell
+## The decoration the car is wearing, and whether it turns through the colours.
+## Kept here as well as on the shell so that a car told either before its shell
+## has come up is still wearing it afterwards.
+var _marks: Array = []
+var _decals_wild := false
 ## How far the road tips the shell, in radians, nose up positive.
 var _pitch := 0.0
 ## How far the shell is sunk to meet the road the box has lifted it off, in
@@ -408,9 +413,12 @@ func _ready() -> void:
 	_steer_right = StringName(input_prefix + "_steer_right")
 
 	# The shell has already taken up the model it was authored with - children
-	# are readied first - so all that is left is to hand it the paint, which is
-	# the one thing about the way this car looks that it cannot know on its own.
+	# are readied first - so all that is left is to hand it the paint and the
+	# decoration, which are the two things about the way this car looks that it
+	# cannot know on its own.
 	_shell.repaint(body_color)
+	_shell.wild = _decals_wild
+	_shell.decorate(_marks)
 
 	# Snapped down onto the road, by up to 0.6 m a step. A car on the ground
 	# has no vertical speed of its own, so on a falling road it runs flat off
@@ -468,6 +476,34 @@ func set_model(model: Node3D, stock := false) -> void:
 func repaint(colour: Color) -> void:
 	body_color = colour
 	_shell.repaint(colour)
+
+
+## Put a decoration on the car: the stripes, stickers and hand-written words
+## kept against whichever model it is wearing. See `Decals`.
+##
+## Handed the marks rather than a car id, for the reason `repaint` is handed a
+## colour and not a slot: what the car looks like is settled here, and where
+## the choice was kept is whoever called this one's business.
+func decorate(marks: Array) -> void:
+	_marks = marks.duplicate(true)
+	if _shell != null:
+		_shell.decorate(_marks)
+
+
+## Whether this car's decoration turns through the colours.
+##
+## Told rather than read off `GameSettings.chaos`, the same way the wood and
+## the speed streaks are told: the title screen backdrop is a race scene too,
+## and a strobing sticker behind the menu is not what the menu is for.
+func set_decals_wild(on: bool) -> void:
+	_decals_wild = on
+	if _shell != null:
+		_shell.wild = on
+
+
+## What the decoration is wearing this frame. Only a check asks.
+func decal_colours() -> PackedColorArray:
+	return _shell.decal_colours() if _shell != null else PackedColorArray()
 
 
 func _physics_process(delta: float) -> void:

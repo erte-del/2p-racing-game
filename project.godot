@@ -24,11 +24,16 @@ Leaderboard="*res://scripts/leaderboard.gd"
 Garage="*res://scripts/garage.gd"
 CarLibrary="*res://scripts/car_library.gd"
 Purse="*res://scripts/purse.gd"
+Decals="*res://scripts/decals.gd"
+Liveries="*res://scripts/liveries.gd"
+LiveryLibrary="*res://scripts/livery_library.gd"
 
 [display]
 
-window/size/viewport_width=1280
-window/size/viewport_height=720
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/size/window_width_override=1280
+window/size/window_height_override=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 

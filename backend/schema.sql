@@ -190,6 +190,57 @@ grant insert, delete on public.cars to authenticated;
 revoke update on public.cars from anon, authenticated;
 grant update (name) on public.cars to authenticated;
 
+-- A livery somebody has shared: a design, and nothing else.
+--
+-- No bucket and no second table. A car has to be a file, so `cars` keeps the
+-- model in storage and points at it, and every awkward thing about that table
+-- follows from the row and the file being able to disagree. A livery is one
+-- line of text a few hundred characters long, so it is a column - the row *is*
+-- the livery, a share is one insert, an unshare is one delete, and there is no
+-- state in between for anything to go wrong in.
+--
+-- The id is the first sixteen hex characters of the sha256 of that very text,
+-- which is what the game checks a downloaded design against. Nothing here can
+-- enforce that - the hash is the game's - so the game refuses a row whose
+-- marks do not come out as its own id, and what the database guarantees is
+-- only that a design is not empty and not enormous.
+create table if not exists public.liveries (
+  id text primary key check (id ~ '^[0-9a-f]{16}$'),
+  owner uuid not null references public.racers on delete cascade,
+  name text not null check (char_length(name) between 1 and 24),
+  marks text not null check (char_length(marks) between 1 and 8192),
+  shared_at timestamptz not null default now()
+);
+
+-- The one query the browse page runs: the newest first.
+create index if not exists liveries_newest on public.liveries (shared_at desc);
+
+alter table public.liveries enable row level security;
+
+-- Anyone may look, signed in or not, for the reason the cars are readable.
+drop policy if exists liveries_readable on public.liveries;
+create policy liveries_readable on public.liveries
+  for select using (true);
+
+drop policy if exists liveries_share_own on public.liveries;
+create policy liveries_share_own on public.liveries
+  for insert with check (auth.uid() = owner);
+
+drop policy if exists liveries_rename_own on public.liveries;
+create policy liveries_rename_own on public.liveries
+  for update using (auth.uid() = owner) with check (auth.uid() = owner);
+
+drop policy if exists liveries_unshare_own on public.liveries;
+create policy liveries_unshare_own on public.liveries
+  for delete using (auth.uid() = owner);
+
+grant select on public.liveries to anon, authenticated;
+grant insert, delete on public.liveries to authenticated;
+-- The name, and only the name. The id is the hash of the marks, so a design
+-- may never drift from the one that was shared under it.
+revoke update on public.liveries from anon, authenticated;
+grant update (name) on public.liveries to authenticated;
+
 -- Where the models are.
 --
 -- Private. In a public bucket an object can be read by anyone who knows its

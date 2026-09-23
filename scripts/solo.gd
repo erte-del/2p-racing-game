@@ -216,6 +216,11 @@ func _ready() -> void:
 			_best = TrackTimes.best(_track_file)
 			_targets = _track_targets()
 
+	# Told rather than left to read the setting, the same way the wood is. The
+	# bot is never told: its car is BOT_COLOUR and undecorated for the life of
+	# the scene, for the reason `_build_the_bot` gives.
+	_car.set_decals_wild(_chaos != null)
+
 	# After the track is built, since what a lap of it is worth is read off
 	# the track rather than described a second time.
 	_result.hide()
@@ -236,9 +241,12 @@ func _ready() -> void:
 	# without changing which car was picked.
 	_apply_cars()
 	_apply_paint()
+	_apply_decoration()
 	GameSettings.changed.connect(_apply_cars)
 	GameSettings.changed.connect(_apply_paint)
+	GameSettings.changed.connect(_apply_decoration)
 	Garage.changed.connect(_apply_cars)
+	Decals.changed.connect(_on_decals_changed)
 	_lines.watch(_car)
 	# One player, one keyboard: solo is always driven on player one's keys,
 	# whichever they have been moved to.
@@ -462,6 +470,21 @@ func _apply_paint() -> void:
 	if _chaos != null:
 		return
 	_car.repaint(GameSettings.car_colour(0))
+
+
+## Put whatever the player's car has been decorated with back on it. Chaos does
+## not overrule this: it turns the decoration through the colours and leaves
+## the shapes alone, which is what `Car.set_decals_wild` is for.
+##
+## The bot's car is bare, for the reason its paint is fixed: the rival is the
+## same car on every bot road, and a rival wearing the player's own stickers
+## would be a split second of wondering which of them was which at the line.
+func _apply_decoration() -> void:
+	_car.decorate(Decals.marks_on(GameSettings.car_id(0)))
+
+
+func _on_decals_changed(_id: String) -> void:
+	_apply_decoration()
 
 
 # --- pausing ------------------------------------------------------------

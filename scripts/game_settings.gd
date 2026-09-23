@@ -18,6 +18,15 @@ const NORMAL := 0
 const ALWAYS_DAY := 1
 const ALWAYS_NIGHT := 2
 
+## How far the interface may be scaled either side of the size it is laid out
+## at. The ceiling is what decides how much room a page is guaranteed: the
+## interface is laid out in a 1600x900 space, so at 1.2 a page has 1333x750 to
+## fit inside, which is still more than the 1280x720 every page was originally
+## built for. There is deliberately no setting that takes it back to the size
+## it used to be - that size was the complaint.
+const UI_SCALE_MIN := 0.75
+const UI_SCALE_MAX := 1.2
+
 const SAVE_PATH := "user://settings.cfg"
 
 ## Where they actually go. A test run is sent somewhere else entirely; see
@@ -37,6 +46,24 @@ var volume := 0.8:
 			return
 		volume = value
 		_apply_volume()
+		changed.emit()
+
+## How big the interface is drawn, as a multiple of the size it is laid out
+## at. One is that size; below one is smaller.
+##
+## This is not a second set of sizes. Everything on a menu is a number in a
+## 1600x900 space that Godot scales to fill the window, and this rides on top
+## of that scale, so one setting moves every font, panel and margin in the
+## game at once and none of them has to know about it. A player on a screen
+## the laid-out size does not suit can therefore fix it without the game
+## having to guess anything about their display.
+var ui_scale := 1.0:
+	set(value):
+		value = clampf(value, UI_SCALE_MIN, UI_SCALE_MAX)
+		if is_equal_approx(value, ui_scale):
+			return
+		ui_scale = value
+		_apply_ui_scale()
 		changed.emit()
 
 ## Whether the next race is driven alone or by two players sharing the
@@ -114,6 +141,7 @@ var time_of_day := NORMAL:
 func _ready() -> void:
 	load_settings()
 	_apply_volume()
+	_apply_ui_scale()
 
 
 ## What a player's car is painted. Out of range answers with the default for
@@ -170,6 +198,7 @@ func set_car_id(player: int, id: String) -> void:
 func save_settings() -> void:
 	var file := ConfigFile.new()
 	file.set_value("audio", "volume", volume)
+	file.set_value("interface", "ui_scale", ui_scale)
 	file.set_value("world", "time_of_day", time_of_day)
 	file.set_value("race", "chaos", chaos)
 	file.set_value("race", "damage", damage)
@@ -186,6 +215,7 @@ func load_settings() -> void:
 	if file.load(save_path) != OK:
 		return
 	volume = float(file.get_value("audio", "volume", volume))
+	ui_scale = float(file.get_value("interface", "ui_scale", ui_scale))
 	time_of_day = int(file.get_value("world", "time_of_day", time_of_day))
 	chaos = bool(file.get_value("race", "chaos", chaos))
 	damage = bool(file.get_value("race", "damage", damage))
@@ -216,3 +246,18 @@ func _apply_volume() -> void:
 		return
 	AudioServer.set_bus_mute(master, volume <= 0.0)
 	AudioServer.set_bus_volume_db(master, linear_to_db(maxf(volume, 0.0001)))
+
+
+## Godot's own scale on top of the stretch, which is the one place a size can
+## be changed without any screen being rebuilt: the laid-out space shrinks or
+## grows to suit and every control in it is measured against that. Nothing
+## here reaches into a menu, and no menu has to listen for this.
+##
+## The split screen is the exception that takes care of itself - `SharpView`
+## sizes each viewport from the laid-out space it is actually given, so the
+## road goes on being drawn at the resolution of the monitor whatever this is.
+func _apply_ui_scale() -> void:
+	var window := get_window()
+	if window == null:
+		return
+	window.content_scale_factor = ui_scale
