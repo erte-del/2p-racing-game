@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://dn2i244mpwwm6"
 path.s3tc="res://.godot/imported/car_CarPlate.png-6432c0d5c54e82ed221ba51759bebc15.s3tc.ctex"
+path.etc2="res://.godot/imported/car_CarPlate.png-6432c0d5c54e82ed221ba51759bebc15.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/models/car_CarPlate.png"
-dest_files=["res://.godot/imported/car_CarPlate.png-6432c0d5c54e82ed221ba51759bebc15.s3tc.ctex"]
+dest_files=["res://.godot/imported/car_CarPlate.png-6432c0d5c54e82ed221ba51759bebc15.s3tc.ctex", "res://.godot/imported/car_CarPlate.png-6432c0d5c54e82ed221ba51759bebc15.etc2.ctex"]
 
 [params]
 

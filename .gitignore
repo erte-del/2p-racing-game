@@ -17,3 +17,6 @@ backend.cfg
 
 # System/tool-specific ignores
 .DS_Store
+
+# Exported builds.
+build/
