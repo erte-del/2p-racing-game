@@ -136,9 +136,27 @@ signal regenerated
 ## Metres of ramp and how high it lifts the road, and how the rise is spread
 ## along it - above one curves the foot into the road and leaves the steepest
 ## part at the lip, which is where the angle does the work.
+##
+## The curve is held at 1.2, and the ceiling on it is a fact about the car
+## rather than about taste. The road is sampled every `TrackLayout.step` (2.5 m)
+## and the car's collision box is level - it never pitches to follow the road -
+## so climbing a ramp is a flat-bottomed box being pushed up a staircase of
+## facets. Above about 22 degrees on a facet the box's front face is buried
+## deep enough in the one ahead that the depenetration cancels the whole of the
+## step's forward motion, and the car stops dead reading full speed: on the
+## floor, one contact, nothing moving.
+##
+## At 1.5 the top facet was 25.6 degrees and the one below it 23.4, and both
+## The Wringer and Long Haul jammed there - The Wringer never finished at all.
+## At 1.2 no facet is over 21.3 degrees and both are clean. The foot still
+## curves out of the road, which is what 1.0 would give up.
+##
+## This is the same staircase on every jump on every track, so the margin does
+## not vary by track - but it is thin, and it is `ramp_rise / ramp_length` that
+## sets it. Changing either wants the slopes worked out again.
 @export var ramp_length := 15.0
 @export var ramp_rise := 5.0
-@export var ramp_curve := 1.5
+@export var ramp_curve := 1.2
 ## The hole, and the road to come down on after it. The hole has to be short
 ## enough that a car flat out clears it and longer than the car, which is
 ## 4.87 m: a hole a car can lie across is one it drives over without ever

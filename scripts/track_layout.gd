@@ -95,7 +95,7 @@ var ramp_rise := 5.0
 ## How the rise is spread along the ramp. One is a straight wedge; above one
 ## curves the foot into the road and leaves the steepest part at the lip,
 ## which is where the angle actually does any work.
-var ramp_curve := 1.5
+var ramp_curve := 1.2          ## see Track.ramp_curve for why not 1.5
 ## The hole. Two things pin this from either side. It has to be short enough
 ## that a car at the slowest speed the game can roll still sails over it,
 ## since falling in costs a respawn and a jump nobody can clear is not a risk
