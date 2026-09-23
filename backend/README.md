@@ -136,6 +136,16 @@ schema, running the file adds the constraint on the model path to it. That
 fails if any existing row points somewhere other than `<owner>/<id>.glb`;
 delete those rows first.
 
+Every policy on these tables says `(select auth.uid())` rather than
+`auth.uid()`. Written bare, the planner treats it as volatile and re-runs it
+for every row it tests; wrapped in a select it becomes an initplan, worked out
+once. The policies mean the same thing either way and the difference is
+invisible at this size, but it is what Supabase's own linter asks for by name
+and it costs nothing to write correctly the first time. Both tables are also
+indexed on `owner`, which is neither the primary key nor the browse order: the
+game asks `?owner=eq.<id>` to find out what this player has already shared, and
+the cascade from `racers` has to find every row belonging to a deleted account.
+
 **A project set up before liveries existed needs `schema.sql` running again.**
 Everything in it is `create ... if not exists` and `drop policy ... / create
 policy`, so running the whole file over a live project adds the `liveries`
