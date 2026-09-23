@@ -2019,8 +2019,38 @@ kept as a peak that fades at `climb_memory` instead.
 and a car driving at one catches its front edge on it: at some speeds it
 climbed a little way and then jammed there and stopped dead, which is how the
 same jump was cleared at 19.5 m/s and 38.8 m/s and impassable at 25. The ramp
-comes up out of the road as a curve (`ramp_curve`, 1.5), leaving the steepest
-part at the lip where the angle actually does any work.
+comes up out of the road as a curve (`ramp_curve`), so it has no edge at the
+foot to catch on.
+
+**And it cannot be too steep at the lip either,** which is the same fault at
+the other end of the ramp and took much longer to find. The road is sampled
+every 2.5 m and the car's collision box is level - it never pitches to follow
+what it is standing on - so climbing a ramp is a flat-bottomed box being pushed
+up a staircase of facets. Its bottom rests on one facet while its front face is
+buried in the next, and above about 22 degrees on a facet that burial is deep
+enough that pushing the box out of it cancels the whole of the step's forward
+motion. The car stops dead: on the floor, one contact, velocity zero, still
+reading full speed and still at full throttle.
+
+At `ramp_curve` 1.5 the top facet was 25.6 degrees and the one below it 23.4,
+and both were over the line. It did not show up everywhere because most cars
+skip into the air at the foot of a ramp and are gone before the steep part -
+but a car that arrives glued to the road stays on the surface the whole way up
+and meets it. The Wringer's first jump is at the lowest point of that course,
+reached flat and fast off a descent, and the bot jammed 8.4 m up it every
+single lap: 1:33.82 against a 1:12 gold, one reset to get round at all, and
++30.3% where the rest of the field was +3%. Long Haul had begun to meet the
+same thing at its jump at 1450 m, after a change seven hundred metres earlier
+altered how the car arrived.
+
+`ramp_curve` is **1.2**, where no facet is over 21.3 degrees. Both tracks are
+clean, The Wringer comes home in 1:15.05 (+4.2%) with no reset, and the bot
+needs putting back nowhere on any of the twenty. The foot still curves out of
+the road, which is what dropping to a straight 1.0 would have given up. The
+margin is thin and it is worth knowing why it is thin: the staircase is the
+same on every jump on every track, so it does not vary by track, but it is
+`ramp_rise / ramp_length` that sets it and changing either wants the facet
+slopes worked out again.
 
 A fourth was found later, by reading the car rather than by driving it.
 Nothing wore the climb away while a car was in the air, so it came down still
@@ -2918,13 +2948,49 @@ is retuned.
 **The line.** The road is sampled every 2.5 m. Every barrier that stands still
 narrows it to the gap the bot means to take - held for as long as a car
 alongside it would be alongside it, half a car length either side - and every
-pad worth taking narrows it to the pad. A fork's lane is chosen where the
-blocking starts and held to the end, since a car that changed its mind halfway
+pad worth taking narrows it to the pad. A fork's lane is held from where the
+blocking starts to the end of it, since a car that changed its mind halfway
 down a seventy-metre divider would choose the divider. The line is then relaxed
 inside those limits until it bends as little as it can, which is what a racing
 line is: wide in, clip the inside, wide out. Traps move, so they are left out of
 the line and dodged on the day, from where the race clock says they will be when
 the car gets there.
+
+**Which lane of a fork** is not chosen, it is driven. A fork is the one place on
+a road where the line has a choice rather than a best - a fast lane with a pad
+in it and a row or two of barriers to thread, against a clear lane with neither
+- and which of them is quicker is not something to read off the shape of them.
+The pad is worth more than the barriers cost on a wide road and less on a narrow
+one; it is worth more into a long straight than into a corner the car was going
+to brake for anyway; and what the barriers cost depends on whether this car can
+thread them at the speed it arrives, which is a question about the car rather
+than about the road.
+
+So each lane is planned and timed in turn: the road narrowed to that lane, the
+line relaxed into it over the fork and its run in, and a copy of the car driven
+from forty metres before the split to two hundred after it - far enough after
+that a pad taken in the fast lane has faded before the clock stops, because a
+boost carried out of a fork is most of what a fast lane is for. The quicker of
+the two is the one the plan keeps, with the room and the line it was driven on
+rather than planned again from the start.
+
+A lane is mended between goes the way a practice lap is: where the copy could
+not hold the line it is given room there, and where room has already been tried
+the stretch before it is taken slower, up to six times. Without that the two
+lanes are not being compared at all - the clear one needs no mending and the one
+with the barriers in it does, so the fast lane was being charged for a line the
+practice laps were going to mend anyway, and it lost every fork on every course
+in the game. A lane that still cannot be held after all six is charged the car's
+own `obstacle_scrub` for each time it could not, because what the copy has just
+done is drive into a barrier; and between a lane that comes out clean and one
+that does not, the clean one wins whatever the clock said.
+
+Across the twenty tracks and the two bot roads that comes out fifteen forks
+taken down the pad's lane and eleven down the clear one, which is the choice
+actually being made rather than the pad always winning it. It is worth about
+half a percent of the bot's time against gold, and much more than that in
+places: The Wringer and Last Light are three and a half seconds quicker for it,
+First Light a second and a quarter.
 
 **The speeds.** What each bend allows is the car's own answer turned round:
 `Car.turn_radius_at()` says what circle a speed can hold, so a bend of radius r
@@ -2967,10 +3033,89 @@ If the car goes nowhere for three seconds, or sits off the road for two, the
 bot says it would press the reset key, and whatever is running the race does
 what it does for the key. It is not the bot's to put itself anywhere.
 
+**The other car,** where there is one, is three things at once: something to be
+towed by, something to go round, and something not to drive into. All three are
+decided from where the bot's car actually is rather than from where its line
+says it should be - a bot sitting in somebody's tow is by definition off its own
+line, and one that asked the line would work out that the car ahead was three
+metres away and steer straight through it.
+
+*The tow.* From difficulty 0.5, on a straight, between four and twenty-two
+metres back, the bot sits on the other car's line to be towed down it. It asks
+for more than a straight before it does: no barrier may hem the line in
+anywhere over the next thirty metres, and the other car's line has to be inside
+the room the plan left itself all the way down. Those two were what was missing.
+A bot that only asked whether the road was straight tucked in behind a car
+heading for a gap it had not chosen, and arrived at the barrier row off its own
+line with no time left to cross back - which on The Gate lost it the race rather
+than won it one.
+
+*Going round.* Within about eleven metres the bot moves off its line to come
+alongside. The line is moved, not replaced: it keeps its own line wherever that
+is already clear of the other car, and is pushed off it only by as far as two
+cars side by side need. How far that is grows with how much each car is turned,
+because a car is twice as long as it is wide and one at an angle reaches further
+across the road than its width - the same thing the practice laps know about
+barriers. A side once taken is held until the bot is a car and a half past the
+other one's tail, because the room either side changes as it moves into one of
+them; and only a side the bot can reach without going through the other car
+counts, which from alongside is the side it is already on.
+
+*Not driving into it.* When there is nowhere to go round - a fork, a row of
+barriers, a corner the road pinches - the bot holds back instead. The speed that
+leaves is the same sum the line's own limits are walked back with, what the car
+can brake off in the road it has, against the other car's speed instead of a
+corner's. It settles about three metres of clear air behind, which is near
+enough for nearly the whole tow. The decision to give way is sticky: two cars
+level with each other where only one fits will otherwise each wait for the other
+to yield, and the one that changes its mind every step is the one that does not.
+Which of them yields is settled by which of them is behind, so this asks nothing
+of the car in front and the driver in front asks nothing of this one.
+
+None of this is on the plan. The practice laps are driven with the other car
+unseen, because where it happens to be standing during the countdown is not a
+thing the line round the track should have been bent for.
+
+**When it is worked out.** All of the above is about half a second of work on a
+short road and a second and a half on Last Light - and nearly all of that is the
+two relaxings, which are over a thousand sweeps of the whole line between them.
+The practice laps are the rest: about 40 ms a lap on the longest road, up to
+eight of them.
+
+That is far too much for one frame, so it is not done on one. `start_planning()`
+says where to begin and `plan_a_little(budget)` carries it on for about that many
+milliseconds, returning whether there is more to do; `is_planned()` says when the
+driver will drive, and a driver still working its line out asks for nothing and
+leaves its car coasting. The budget is honoured between units of work rather than
+inside them, so a call overshoots by at most the one unit it was in the middle
+of - and the units are small on purpose: one relaxing sweep is under a
+millisecond on the longest road in the game, and one practice step is a few
+microseconds. Measured across all twenty tracks at a 4 ms budget, the worst
+single call is about 5 ms, and 7.3 ms on a noisy run - a frame at 60 Hz is
+16.7 ms.
+
+A check or a tool has a frame to spare and wants none of this, so
+`finish_planning()` does whatever is left on the spot, and `plan(car)` is
+`start_planning()` and then that. There is one implementation underneath both, so
+the spread-out plan and the all-at-once plan cannot drift apart: the same line
+comes out either way, sweep for sweep and lap for lap, which `tools/checks/`
+numbers confirm by being unchanged.
+
+Everything the plan takes off the world rather than off the road - where the car
+is standing, what its top speed is - is read in `start_planning()`, on that one
+frame, and not as each stage reaches for it. The stages run across however many
+frames the budget spreads them over, and a plan whose practice laps set off from
+wherever the car had drifted to by the time the practice stage came round would
+be a different plan on a different machine. A car retuned or moved part way
+through a plan wants `start_planning()` called again; it is not picked up half
+way.
+
 **Difficulty** is one number from 0 to 1. It sets how near the kerb the line
 runs, how much of what a bend allows it asks for, how late it brakes, and from
 0.25 up whether it goes out of its way for a pad, from 0.5 whether it tucks in
-behind the other car on a straight. One number rather than a table, so it can
+behind the other car on a straight. Going round the other car and not driving
+into it are not on the dial: a bot that shoves at low difficulty is not an
+easier bot, it is a worse-behaved one. One number rather than a table, so it can
 be turned by feel.
 
 `tools/checks/bot_race.gd` lets the bot drive every normal track and sets its
@@ -2986,6 +3131,379 @@ Godot --path . --headless --fixed-fps 60 --script tools/checks/bot_race.gd -- 1.
 It fails a track the bot does not finish, or needs putting back on more than
 twice. It wants running again every time the car is retuned: the bot drives the
 car as it is, and the golds do not move with it.
+
+It plans the way a race plans, 4 ms at a time, and prints both halves of what
+that costs: `plan` is the whole of it with the number of frames it took, which is
+how much of a countdown a road needs, and `worst` is the longest any single one
+of those calls ran. Worst is the one that decides whether a player sees a hitch,
+so it is a fault over 12 ms: not the budget plus a little, because wall-clock
+time on a machine doing other things wanders by two or three milliseconds, but
+the point at which planning alone is in danger of costing a 16.7 ms frame. The
+printed number is the signal - a regression shows up there long before it trips
+the fault.
+
+`tools/checks/bot_duel.gd` is the rest of the driver: the three decisions a lap
+time on an empty road cannot see.
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/bot_duel.gd
+Godot --path . --headless --fixed-fps 60 --script tools/checks/bot_duel.gd -- res://tracks/bot/b2_the_toll.gd
+```
+
+Two bots rather than a bot and a scripted player, because a check has no hands.
+The player's car is driven by a second `BotDriver` through the same `Car.driver`
+hook the keyboard goes through, so a pass made there is a pass a player could
+have been on the wrong end of.
+
+- **The tow** is measured by driving the same car over the same stretch from the
+  same place twice: once with another car ahead of it, once with the road empty
+  and the other car held frozen out of the way. Two cars at once, or one car
+  against a lap driven on another line, would be comparing two different drives.
+  What it reports is the best the tow was ever worth against what the car says a
+  slipstream is worth, and it faults under half of it. The best rather than the
+  average, because a car queued behind a slower one is slower than it was alone
+  whatever the tow is doing for it - that is the queue, not the tow. On The Gate
+  it collects 4.8 m/s of the 6.6 the car offers.
+- **The pass** is the same run read the other way: where it got by, how many
+  times the two cars touched, and what it did to the car it passed. Going
+  through somebody is not overtaking them, so it faults on putting the other car
+  into a barrier or off the road at all, and on more than eight contacts.
+- **The level race** is what a bot road actually starts: both cars at difficulty
+  1, side by side on the grid. With clear road the two grid slots are worth the
+  same, so the margin at the flag is what having to share the road costs the car
+  that gives way. With the two drivers blind to each other the cars grind
+  against one another for the whole race - eighty contacts - and finish level,
+  which is not racing, it is two cars stuck together.
+- **The fork** plans every road in the game and prints the time the driver
+  measured for each lane and the one it kept. The thing it is really watching
+  for is a timing that always comes out the same way: every fork in the game
+  going down the same side is not a choice being made, it is a choice being got
+  wrong the same way twenty times, which is exactly what happened the first time
+  the timing was written.
+
+## The bot race
+
+A bot road is a race against one computer-driven car, and the door out of a
+block of ten tracks. It is not a track: no time is written down on it and no
+medal is earned, because the only thing it measures is which car crossed the
+line first.
+
+It is `Solo` ([scripts/solo.gd](scripts/solo.gd)) with a second car rather than
+`Main` with the split collapsed. A bot race is a one-player thing, and almost
+everything in `Main` is about there being two of everything - two viewports, two
+cameras, two clocks, two keyboards - so collapsing it would mean a branch on
+every one of those lines. What it takes in `Solo` is one more car, one arrow and
+one place readout; the road, the chase camera and the HUD are the ones already
+there.
+
+**Which roads.** `TrackRoster.BOT_FILES` names them, and
+`TrackRoster.is_bot_road()` is what `Solo` asks on the way in. There are two, one
+at the end of each block of ten: [tracks/bot/b1_the_gate.gd](tracks/bot/b1_the_gate.gd),
+The Gate, and [tracks/bot/b2_the_toll.gd](tracks/bot/b2_the_toll.gd), The Toll.
+A bot race is on its own road rather than on the tenth track again, because the
+tenth track is a thing the player has already learned and a door should ask for
+all ten rather than one of them.
+
+`BOT` is a third kind beside `NORMAL` and `ACROBATIC`, and the two roads hold
+slots 30 and 31 - the normal tracks are 0 to 19 and the acrobatic ones 20 to 29
+- so no road in the game shares a number with another. They are in no grid:
+neither `NORMAL` nor `ACROBATIC` reaches them, and the leaderboard picker steps
+over them for the same reason it steps over an empty slot, since no time is ever
+written down on one for a board to show. They have a slot at all because
+everything that looks a road up by its file goes through one, `index_of()` into
+`targets()` most of all.
+
+**Their medal targets are never shown to anyone.** A bot road keeps no time and
+hands out no disc, and `Solo` leaves its targets at zero rather than reading
+them. They are set the way the other twenty were, with `tools/lap_times.gd`, and
+they exist for `tools/checks/bot_race.gd`: the check measures the bot against the
+gold of the road it is on, and a road with no targets gives it nothing to say. A
+bot road also has no thumbnail, because the select screen gives the bot cell its
+own face rather than an overhead shot - `tools/track_thumbnails.gd` sweeps the
+two grids rather than every road there is.
+
+**The second car** is built in code in `_ready()` and only on a bot road. It is
+not in `solo.tscn`, because the nineteen time trials and the endless course
+would then all carry a car they never use - and the arrow has its physics step
+turned off on those roads for the same reason. It comes off
+`res://scenes/car/car.tscn`, the same scene the player's car does, and is handed
+a `BotDriver` at difficulty 1. Nothing else in the scene touches it.
+
+**It is the player's car, driven through the player's sums.** The bot sets a
+throttle and a steering angle through `Car.driver` and that is the whole of what
+it can do - the same two numbers a keyboard produces, going into the same
+`_accelerate`, `_brake` and `_steer` the keyboard's go into. It has no speed of
+its own, no grip of its own and no rubber band: `max_speed`, `gravity` and the
+turn radius are read off the car it was given, and there is nowhere in
+`BotDriver` that could write to them. If the bot is too easy it gets a better
+line, never a bigger engine.
+
+That is a rule about trust rather than about fairness. A bot that quietly gains
+speed when the player gets ahead is the fastest way there is to make somebody
+stop believing what the game shows them, and it cannot be argued with
+afterwards, because the player cannot see the number that moved. The difficulty
+is one number - how far ahead it looks, how much it backs off for a bend, how
+hard it aims at a gap - and every one of those is a decision about where to put
+the car, not about what the car is. It is undone the way it was made, in
+`_exit_tree()`, driver first: the car holds the driver and the driver holds the
+car, and the two cars hold each other.
+
+**What difficulty 1 is worth,** measured rather than asserted.
+`tools/checks/bot_race.gd` drives the bot over all twenty time trials and
+reports each lap against that track's gold:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/bot_race.gd
+Godot --path . --headless --fixed-fps 60 --script tools/checks/bot_race.gd -- 0.5
+```
+
+It comes in **+1.3% against gold on average**, from **-2.1% on The Weave** to
+**+7.6% on The Gauntlet**, and it is at or under gold on nine of the twenty. It
+finishes all twenty without being put back on the road once. That is the shape
+a door wants: a player who can drive these roads properly is holding a time the
+bot is somewhere near, so the race asks the same thing of them that the gate
+just did, and neither the gate nor the race is the hard half.
+
+Difficulty is the one dial. 0.5 is about +7%, 0 about +20%, and the race is at
+1 because a door that a player scrapes past on their first try was not a door.
+
+The two tracks the bot is furthest over on - The Gauntlet at +7.6% and First
+Light at +4.0% - are the two with the most slalom in them, and that is a fact
+about the targets rather than about the driver: see **Where the numbers come
+from**, because the driver those golds were set with turns the car's body at a
+flat rate no real car can manage, which buys it most exactly where the road
+changes direction most.
+
+**The Wringer used to be the outlier at +30.3%,** and it was not the bot. The
+car was jamming partway up the track's first ramp - on the floor, reading full
+speed, going nowhere - and needed putting back on the road to get round at all.
+The cause was the ramp's own profile and it is written up under **Jumps**; with
+it fixed The Wringer comes in at +4.2% and Long Haul, which had begun to meet
+the same thing, at -1.1%. The average was +3.0% with that one track in it.
+
+**The driver comes after the grid,** not with the car. A plan's practice laps set
+off from wherever the car is standing when the plan begins, so the car has to be
+on the line first or the bot spends its practice driving from wherever a freshly
+built car happened to land. It used to be built with the car, and the bot was
+half a second a lap slower on The Gate for it.
+
+**The line is worked out across the countdown.** Working it out is about half a
+second on The Gate, which on one frame is a visible hitch at the exact moment the
+player is watching a countdown - so `_process` carries it on `plan_budget_ms`
+(4 ms) at a time, and the countdown is what it is spent in. The countdown is
+three seconds of nothing else happening, and The Gate's line is finished in two
+of them.
+
+Over a thread, which would have been quicker: the practice laps drive a duplicate
+of the car, and duplicating and freeing a node belongs to the main thread; the
+plan is also read off a `Curve3D` whose baked cache is built the first time it is
+asked for. A thread would mean either proving all of that safe or taking the copy
+out of practice, and it would buy nothing a player could see, because the
+countdown is dead time either way. The frame budget uses time that was already
+being thrown away.
+
+A road whose line takes longer than its countdown **holds the count** rather than
+dropping a frame: `_start_after_countdown()` will not say GO until
+`is_planned()`, and `_process` goes on planning a few milliseconds a frame while
+it waits. That is the safety net, not the plan - at 4 ms a frame the countdown
+covers a line up to about 700 ms of work, and a bot road wanting much more than
+that is a bot road to shorten. `tools/checks/bot_race.gd` prints what each road
+costs, so an author can see it before a player feels it.
+
+**The bot is told the time** every physics step, before the cars move, the same
+way the track is. The traps run on the race clock, and a bot that does not know
+the clock drives into them.
+
+**Being put back** is the bot's to ask for and the race's to do, exactly as it is
+for the player: `BotDriver.wants_reset()` goes down the same
+`_back_to_checkpoint()` the reset key does, and `reset_progress()` tells the
+driver afterwards, or it goes on driving as though it were still where it was.
+The bot has its own respawn point and its own banked checkpoints, because two
+cars on one road are two runs and a checkpoint one of them drove over is not one
+the other did. The rings, where a road has them, are put out only for the
+player: both cars are looking at the same rings, and one going dark because the
+bot flew through it would be reading out the wrong run.
+
+**The paint is fixed** at one amber, not `GameSettings.car_colour(1)`. The bot is
+not player two - it is the same rival on every bot road, and one wearing whatever
+colour the second keyboard last chose would be a different car each time. Amber
+because it holds up against every sky the game has: nowhere near the grass or the
+tarmac, it does not sink into a sunset the way navy does, and it does not wash
+out at noon the way white does. It is in the stock car for the same reason, so
+the rival is not whatever model the player last imported.
+
+**The rest is the race's own machinery, reused.** `CarContact` settles the two
+cars shoving each other rather than passing through. `car.rival` is wired both
+ways, or the slipstream works for neither of them. One `RivalArrow` points from
+the player's car at the bot, on the world's own visual layer: there is one camera
+here, so none of `Main`'s per-player culling is wanted. The 1st/2nd readout runs
+on `Places` ([scripts/places.gd](scripts/places.gd)), which is the rule the
+two-player race uses as well - a lead has to be earned by `lead_margin` and only
+a clear return to inside `level_margin` gives it up, so it cannot strobe wheel to
+wheel, and one rule in one place cannot show the same two cars different places
+in different modes.
+
+**Winning and losing.** The race ends when either car crosses the line, and the
+panel a time trial hangs a medal on carries the verdict instead: the time, who
+won, and by how much. By how much is a distance and not a time, because the clock
+stopped when the first car crossed - the other one has not finished, and how long
+it would have taken is not something the race knows. The road it still had is the
+one true measure of the gap at that moment. No medal is hung: there is no time
+kept on a bot road for one to be worth. With damage on, a broken car ends the
+race and the other one wins without driving the rest of the road, and both
+breaking on one step is a draw. The two ways out are RACE AGAIN and BACK TO
+TRACKS; there is no next track from a door.
+
+`tools/checks/bot_road.gd` drives the race:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/bot_road.gd
+```
+
+It checks that a time trial builds no second car, that the two start side by
+side knowing about each other, that either crossing the line ends it and says
+so, that a broken car ends it the other way round, that putting the bot back
+moves nothing but the bot, and that nothing about any of it reaches
+`TrackTimes`. It also checks that the bot's line is genuinely spread - still
+unfinished on the frame the scene opens, and finished before the cars are let go.
+
+On The Gate at difficulty 1 the two grid slots are level with clear road, 42.43 s
+and 42.42 s, and in a race the player wins by about 50 m: the bot gets squeezed
+onto the barrier row at the exit of the first corner, which is what a row on the
+outside of a corner exit is for, and is the first time `BotDriver`'s
+going-round-the-other-car has been driven rather than only written.
+
+## The medal gate
+
+The twenty tracks are two blocks of ten, and a block is shut until the race at
+the end of the block before it has been won. Standing in front of that race is
+the gate: **five golds among the ten in front of it**, or it will not start.
+
+**Five of ten, not ten of ten.** Finishing ten tracks is not the same as being
+able to drive them. A player who scraped a bronze on all ten and walks into a
+race against a fast bot loses, repeatedly, with no idea what to change - so the
+gate asks for something that means "you have driven half of these properly"
+rather than something that means "you have been here". Ten of ten would be a
+different thing: it would ask a player to like every one of the ten, and a
+player may simply hate track seven. Five is where a run of golds stops being
+luck and has not yet become a completion list. It is one named constant,
+`Progress.GOLDS_NEEDED`, because it is a tuning number and it will be argued
+about; an argument about it should be an argument about that line.
+
+**The golds buy the race, not the ten behind it.** They are two separate
+things in the way, and they come in order: the medals earn the right to start
+the race, and winning the race opens the next ten. A player who has five golds
+and has not driven the race sees the door open and the block behind it still
+shut, and the tooltip on a shut cell says which of the two is missing rather
+than saying "locked" at them.
+
+**Nothing about a medal is stored, and that is the point.** `Progress` writes
+down which races have been won and nothing else - `user://progress.cfg` is a
+section per block with `won=true` in it. `golds_in()` counts the block's ten
+afresh every time it is asked, out of `TrackTimes.best()` and
+`TrackRoster.targets()` through `Medal.earned()`, the same three calls the
+select screen uses to colour a cell. So moving a gold target moves every gate
+that leaned on it at once, in the same run, with nothing to invalidate and
+nothing to migrate: pull a target in under a standing lap and the gate is shut
+again the next time anything asks. A remembered count would be a second copy of
+a number that already exists, and the two would disagree the first time
+anybody tuned a track. It costs a few file reads on a screen that is being
+drawn anyway.
+
+**Acrobatic tracks are not gated.** They are a different thing to drive, in
+their own grid, and a player who cannot find five golds among the first ten
+should still be free to go and fly through some rings. `golds_in()` skips
+anything that is not a `NORMAL` slot, which matters because the acrobatic slots
+carry on from the same numbering - a block that ran into them would be asking a
+player for golds on roads no gate has ever mentioned.
+
+### Three states on a cell
+
+Locked is a third state, and it has to look different from both of the others.
+A built track a player may not drive yet and a track that does not exist are
+not the same thing, and showing them alike tells a player the game is
+unfinished when in fact they are.
+
+- **Open** - the name, the overhead shot, the medal bar and the time.
+- **Shut** - the same cell with its picture dimmed to a quarter and a padlock
+  drawn over it, framed in the gate's amber rather than the pale outline of an
+  empty slot. The name stays white: the name is the one part of the track that
+  is not being withheld, and a grey name is how this page says "not built". The
+  tooltip says exactly what to go and do - `5 GOLD IN 1-10, you have 3` - and
+  never the word "locked" on its own, because a door that says only that it is
+  shut tells a player to give up, where the same door saying how far off they
+  are tells them where to go.
+- **Not built yet** - the existing dark outlined frame, with the slot's number
+  over it and no time under it. Unchanged.
+
+The padlock is drawn with `draw_arc` and `draw_rect` rather than set in a font
+or shipped as a picture. A glyph is a lock only if the font on the machine has
+one, and a font that does not draws a hollow box - which over a greyed picture
+reads as something broken rather than as something shut, which is the exact
+wrong thing for that cell to say.
+
+### The door
+
+The bot race gets a cell of its own at the end of each block: a strip the full
+width of the page, not a sixth cell in a row of five. It is not a track - no
+overhead shot, no medal bar, no time - and standing it in the grid would make
+it read as one. The grid of twenty is therefore two grids of ten with a door
+between and after them, which is also what keeps every track cell in the
+five-column alignment it always had; ten to a block at five across is exactly
+two rows.
+
+It says which of the three it is in words, because a strip that wide has room
+for the sentence: `THE GATE   5 GOLD IN 1-10, you have 3` in grey when it is
+shut, `THE GATE   RACE THE BOT` in the bot's own amber when it can be driven,
+and `THE GATE   WON` in green once it has been. It wears the amber the bot's
+car is painted, because the thing that opens all of this is beating that car.
+
+Focus across the seams is wired by hand. Godot works out where the keyboard
+goes next from where things are on the screen, which is right inside a grid and
+no use at a seam: a door sits in a container of its own, and the search walked
+straight past it and off the page - down off the last row of the first ten
+landed on the title screen behind it.
+
+Pressing a door sets `GameSettings.track_file` to that block's bot road and
+changes scene the way pressing a track does. `_scene_for_the_players()` sends a
+bot road to `Solo` whatever the question at the top of the page was answered
+with: a bot race is one player against one computer, and the second car on that
+road is the thing being raced, so there is no seat in it for a second player.
+
+Nothing listens to `Progress.changed` on the select screen, and the difference
+from `Leaderboard.times_changed` next to it is worth writing down. A time can
+move while the screen is up, because the sync runs underneath it. A race cannot
+be won while it is up: a race is a scene of its own, and coming back from one
+builds this screen again from nothing. A player who wins and comes back finds
+the next ten open because the grid was built afresh, not because anything told
+it.
+
+### The checks
+
+`tools/checks/progress.gd` pushes on the gate itself:
+
+```
+Godot --path . --headless --script tools/checks/progress.gd
+```
+
+It walks the golds from none to one past what the gate asks for and reports
+which count it opened on, so an off-by-one names itself; it wins a race and
+checks that exactly one block opened and the acrobatic tracks did not; it
+closes the game and opens it again; and it checks that a time on another road,
+or one set on a road that has been redrawn since, never counted. The case that
+matters most is the one that moves a gold target in memory, asks the same
+question on either side of the move, and puts it back: that is what would fail
+the day anything started remembering a count instead of working it out. Every
+boundary is written against `GOLDS_NEEDED` and `BLOCK` rather than the five and
+the ten they happen to be, so retuning the gate moves the check with it instead
+of leaving it testing the wrong edge and passing anyway.
+
+`tools/checks/track_select.gd` is where the three states are checked on the
+screen, counting the cells across the blocks rather than off one grid.
+
+```
+Godot --path . --headless --script tools/checks/track_select.gd
+```
 
 ## Adding a track
 

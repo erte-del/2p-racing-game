@@ -27,7 +27,7 @@ drives it and says so, and none of the five below is an exception.
 1. [Damage mode](#1-damage-mode) - **done**
 2. [Traps](#2-traps) - **done**
 3. [Acrobatic tracks](#3-acrobatic-tracks) - **done**
-4. [The bot, and the medal gate](#4-the-bot-and-the-medal-gate)
+4. [The bot, and the medal gate](#4-the-bot-and-the-medal-gate) - **done**
 5. [Coins](#5-coins)
 6. [The shop](#6-the-shop)
 7. [Car customisation](#7-car-customisation)
@@ -603,6 +603,38 @@ jumps in a row.
 
 ## 4. The bot, and the medal gate
 
+> **Done, 2026-09-22.** Built to the spec below, with the two open questions
+> settled as follows:
+>
+> - **A bot race runs on its own road**, not on the tenth track again. There
+>   are two, `tracks/bot/b1_the_gate.gd` and `b2_the_toll.gd`, and `BOT` is a
+>   third kind of slot beside `NORMAL` and `ACROBATIC`. The tenth track is a
+>   road the player has already learned, and a door should ask for all ten
+>   rather than for one of them again.
+> - **Winning opens the next ten and marks the cell; losing costs nothing.**
+>   The win is the only result in the game that is written down rather than
+>   merely shown - `Progress.win()`, out of `Solo._won_the_race()`. A lost race
+>   writes nothing, takes nothing away and may be driven again immediately; the
+>   two ways off the panel are RACE AGAIN and BACK TO TRACKS. A gate that can
+>   be failed permanently is a gate that ends somebody's game.
+>
+> Differences from the spec:
+>
+> - The gate counts golds but the *door* is what the golds open, and the ten
+>   behind it wait on the race being won as well. The spec ran the two
+>   together; they are two things in the way, in order.
+> - The door is a strip of its own between the blocks rather than a cell in the
+>   grid, so the five-column alignment is untouched.
+>
+> Still open, and not blocking: **the bot's condition bar is not on screen.**
+> With damage on the player can see how worn they are and not how worn the bot
+> is, where `Main` shows both.
+>
+> What it does and why is in the README under **The bot**, **The bot race** and
+> **The medal gate**. The checks are `tools/checks/bot_race.gd`,
+> `bot_duel.gd`, `bot_road.gd`, `progress.gd` and `track_select.gd`. Everything
+> below is the original spec, kept for the reasoning.
+
 ### What it is
 
 Two features that only make sense together:
@@ -640,13 +672,18 @@ to `scripts/bot_driver.gd` and made better:
 - [x] Give it a **difficulty**, as one number: how far ahead it looks, how much
 	  it backs off for a bend, how hard it aims at a gap. One number rather
 	  than a table, so it can be tuned by feel.
-- [ ] Make it use what a player uses - pads, the fork, slipstream - rather than
+- [x] Make it use what a player uses - pads, the fork, slipstream - rather than
 	  driving a clean line past all of it. A bot that ignores boost pads is a
 	  bot you beat by taking them, once, forever.
-	  *Pads: done, from difficulty 0.25. Fork: it picks the lane with the pad,
-	  but does not yet time both lanes and take the quicker one. Slipstream
-	  and going round the other car: written, not yet driven, because there
-	  is no race with two cars in it yet.*
+	  *Pads: done, from difficulty 0.25. Fork: done, 2026-09-22 - both lanes are
+	  planned and driven on a copy of the car and the quicker is kept, which
+	  comes out fifteen forks down the pad's lane and eleven down the clear one,
+	  and is worth about half a percent against gold. Slipstream and going round
+	  the other car: done the same day, and measured for the first time by
+	  `tools/checks/bot_duel.gd` - the tow collects 4.8 m/s of the 6.6 the car
+	  offers, and the 50 m the bot used to lose in a level race on The Gate is
+	  now about 5 m with five light contacts and no barrier hits. All three are
+	  written up in the README under The bot.*
 - [x] Decide what "hard to beat" is, in numbers: the bot should come in around
 	  the track's **gold** time. That is a target already tuned to be a little
 	  under the best the road allows, it already exists per track, and it means
@@ -666,16 +703,45 @@ to `scripts/bot_driver.gd` and made better:
 > **Bot driver built, 2026-09-18.** Written up in the README under The bot.
 > Still open before the race can use it:
 >
-> - **Planning takes 0.4-1.7 s** (Last Light is the slow one), all on the
->   frame it is made. The bot race should make it during the countdown, or
->   spread it over frames, or it will hitch.
+> - ~~**Planning takes 0.4-1.7 s**, all on the frame it is made.~~ *Done,
+>   2026-09-21: `plan_a_little()` carries it on a few milliseconds a frame and
+>   the bot race spends the countdown doing it. The worst single call anywhere is
+>   4.9 ms at a 4 ms budget, and `bot_race.gd` prints it and faults over 8 ms.
+>   Nearly all of the cost turned out to be the two relaxings rather than the
+>   practice laps: 345 ms of First Light's 395, and 888 ms of Last Light's 1440.*
 > - **The golds were set by a driver that cheats.** `lap_times.gd` turns the
 >   car's body at 3 rad/s whatever its speed. So on the slalom tracks
 >   (The Gauntlet, First Light's fork) gold may be quicker than the real car
 >   can go, and the bot sits at +8% there. Worth deciding whether the bot at
 >   difficulty 1 should become the reference the golds are set from.
-> - **The Wringer's first jump ramp wedges the car** at one arrival state,
->   with keyboard input as well as with the bot. It has its own task.
+> - ~~**The Wringer's first jump ramp wedges the car** at one arrival state,
+>   with keyboard input as well as with the bot.~~ *Fixed, 2026-09-22, and it
+>   was the ramp rather than either track. The road is sampled every 2.5 m and
+>   the car's collision box is level, so climbing a ramp is a flat-bottomed box
+>   pushed up a staircase of facets; above about 22 degrees on a facet the
+>   box's front face is buried deep enough in the next that depenetration eats
+>   the whole of the step's forward motion, and the car stops dead - on the
+>   floor, one contact, velocity zero, still reading full speed at full
+>   throttle. At `ramp_curve` 1.5 the top two facets were 25.6 and 23.4
+>   degrees. It stayed hidden because most cars skip into the air at the foot
+>   of a ramp and are gone before the steep part; a car that arrives glued to
+>   the road stays on the surface the whole way up and meets it, which is the
+>   "arrival state" below. `ramp_curve` is now 1.2, where no facet is over 21.3
+>   degrees. The Wringer went from DNF-with-a-reset to 1:15.05 (+4.2%), Long
+>   Haul to -1.1%, and the bot now needs putting back nowhere on any of the
+>   twenty. `jump_flight.gd` still passes, so no hole got harder to clear.
+>   **This is a change to the road rather than to a track file - see the
+>   `GEOMETRY` note below before releasing it.*** The old note, kept because it
+>   is what led to the cause:
+>   *Long Haul now meets it too, at the jump at 1450 m: the car stops two metres
+>   into the ramp, reading full speed and going nowhere, until the bot asks to
+>   be put back. Nothing about the plan there changed - the line, the limits and
+>   the room at that sample are the same numbers they always were - but taking
+>   the quicker lane of the fork seven hundred metres earlier arrives at the
+>   ramp in a different state, and that state is the one that wedges. It costs
+>   the track six seconds and one reset, which is all of the difference between
+>   the bot averaging +2.4% against gold and +3.0%. Worth doing before the
+>   golds are looked at again.*
 
 ### The race itself
 
@@ -699,6 +765,29 @@ for two. Options, in order of preference:
 
 Go with 1.
 
+> **Built, 2026-09-20.** `Solo` carries a second car on a bot road: built in
+> code in `_ready()` so nothing else pays for it, driven by `BotDriver` at
+> difficulty 1, told the race clock every step, put back at its own checkpoints
+> down the player's own `_back_to_checkpoint()`, painted one fixed amber in the
+> stock car, arrowed, contacted and drafted. The place readout runs on
+> `Places`, shared with `Main`. Written up in the README under The bot race, and
+> driven by `tools/checks/bot_road.gd`. Two new things came with it: one bot
+> road, [tracks/bot/b1_the_gate.gd](tracks/bot/b1_the_gate.gd), and
+> `TrackRoster.BOT_FILES`/`is_bot_road()` to say which roads are doors, because
+> there was no way to ask that before. Still open:
+>
+> - ~~**The bot loses a level race by about 50 m on The Gate,**~~ *Done,
+>   2026-09-22. It was three things: the bot decided whether the other car was
+>   in its way by comparing that car against its own line rather than against
+>   where its car actually was, so it never noticed it was about to run into
+>   one it was drafting; it had no way to lift when there was nowhere to go
+>   round, so it shoved instead - forty-five contacts in one race; and it would
+>   tuck into a tow that led straight at a barrier row it had not chosen a lane
+>   for. It is now about 5 m with five contacts and no barrier hits, and
+>   `tools/checks/bot_duel.gd` holds it there.*
+> - **The player's condition bar is the only one on screen.** With damage on
+>   there is nothing saying how worn the bot is, where `Main` shows both.
+
 ### Unlocking
 
 Nothing in the game is locked today: `TrackRoster` knows tracks that exist and
@@ -708,24 +797,30 @@ state and has to look different from both - a built track you may not drive yet
 is not the same as a track that does not exist, and showing them the same way
 tells a player the game is unfinished when actually they are.
 
-- [ ] `scripts/progress.gd`, an autoload beside `TrackTimes`: which bot races
+- [x] `scripts/progress.gd`, an autoload beside `TrackTimes`: which bot races
 	  have been won, and therefore which blocks of ten are open. Saved to
 	  `user://progress.cfg`.
-- [ ] Medals are not stored and should stay that way. The gate counts them at
+- [x] Medals are not stored and should stay that way. The gate counts them at
 	  the moment it is asked, from `TrackTimes.best()` and
 	  `TrackRoster.targets()` through `Medal.earned()` - so moving a target
 	  moves the gate with it, which is what you want while tracks are being
 	  tuned ([scripts/medal.gd:1](scripts/medal.gd:1)).
-- [ ] Three states on a cell: **open**, **locked** (built, greyed, with a small
+- [x] Three states on a cell: **open**, **locked** (built, greyed, with a small
 	  lock and a tooltip saying exactly what is needed - "5 GOLD IN 1-10, you
 	  have 3"), **not built yet** (the existing empty frame).
-- [ ] The bot race as its own cell at the end of each block of ten, marked out
+- [x] The bot race as its own cell at the end of each block of ten, marked out
 	  as different - it is not a track with a time, it is a door.
-- [ ] A player who has the golds but has not won the bot race sees the bot cell
+- [x] A player who has the golds but has not won the bot race sees the bot cell
 	  open and the next ten locked. A player who wins it sees the next ten open
 	  immediately, without a restart.
 
 ### The check
+
+`tools/checks/bot_duel.gd` is the driver's own check for the parts of it that a
+lap time cannot see: what the slipstream is worth, whether the bot gets past the
+car in front without going through it, what a level race costs the car that
+gives way, and which lane of each fork the timing kept. Two bots on one road,
+because a check has no hands.
 
 `tools/checks/progress.gd`: the gate opens on exactly five golds and not four;
 a gold lost to a retuned target closes it again; winning a bot race opens the
@@ -1008,6 +1103,19 @@ Of the features here:
 - **Acrobatic tracks** need nothing - a new track has no old times.
 - **The bot** needs nothing - it is another car on the road, not a change to
   the road.
+- **The ramp fix does.** `ramp_curve` went from 1.5 to 1.2 on 2026-09-22 to
+  stop the car jamming partway up a ramp, and that is exactly the kind of
+  change this number exists for: every jump on every track now has a different
+  surface under it, and a lap set over one was set on a different road. **This
+  has not been bumped, and it is a decision rather than an oversight** - the
+  bump throws away every local time every player has set and splits the
+  leaderboard, so it is the release's call and not the fix's. Two things to
+  weigh: the tracks worst affected are the ones with jumps, and The Wringer and
+  Long Haul were unfinishable-or-reset before, so their standing times were set
+  on a road nobody could drive properly anyway; but First Light moved from
+  +7.8% to +4.0% against the bot, which is a real shift on a track with a jump
+  on it. If it is bumped, bump it in the same release as anything else that
+  needs one.
 - **Coins** need nothing *provided* picking one up does not affect the car. A
   coin that gave speed would be a change to what a lap is worth. Do not make
   coins give speed.
@@ -1086,10 +1194,17 @@ rather than discovering halfway through.
    own section on the select screen? This changes `TrackRoster` and the grid
    layout.
 5. **What does the bot race actually award** besides opening the next ten? A
-   medal? Coins? Nothing?
+   medal? Coins? Nothing? **Settled: nothing but the opening, and the cell
+   marked WON.** No time is kept on a bot road and no medal is handed out -
+   `Solo` leaves its targets at zero rather than reading them - because the
+   only thing the race measures is which car crossed the line first, and a
+   medal is a statement about a lap. The door itself is the reward: it says
+   WON in green from then on, and the ten behind it are open.
 6. **Is there a penalty for losing to the bot,** or is it retry until you win?
-   Suggested: retry, always. A gate you can fail permanently is a gate that
-   ends someone's game.
+   **Settled: retry, always, and losing costs nothing.** A lost race writes
+   nothing at all - no attempt counted, no time kept, nothing taken away - and
+   the panel offers RACE AGAIN as its first button. A gate you can fail
+   permanently is a gate that ends someone's game.
 7. **How many cars does the shop need at launch** to be worth opening? One is
    not a shop. Three or four is, and each is a model that has to be made.
 8. **Do the two players share a purse?** Suggested yes - one machine, one
