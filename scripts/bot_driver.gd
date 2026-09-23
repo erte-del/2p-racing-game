@@ -13,7 +13,10 @@ extends RefCounted
 ##
 ## The line is worked out once, from the road, when the driver is made. Nothing
 ## about it is written down anywhere, so a track moved or a car retuned is a new
-## line the next time a race starts rather than a stale one from a file:
+## line the next time a race starts rather than a stale one from a file. It costs
+## half a second to a second and a half depending on the road, which is far too
+## much to spend on one frame, so it is worked out a few milliseconds at a time:
+## see plan_a_little.
 ##
 ## - The road is sampled every `Track.sample_step` metres: its middle, which way
 ##   is right, and how wide it is.
@@ -22,6 +25,8 @@ extends RefCounted
 ##   the pad. Traps move, so they are left to the driving rather than the plan.
 ## - The line is relaxed inside those limits until it bends as little as it
 ##   can, which is what a racing line is: wide in, clip the inside, wide out.
+## - Where the road forks, both lanes are planned and driven on a copy of the
+##   car and the quicker of the two is kept: see _begin_the_lanes.
 ## - What each bend in that line allows is read off the car itself -
 ##   `Car.turn_radius_at()` says what corner a speed can hold - and walked
 ##   backwards from every bend at the car's own braking, so it is slowing for a
@@ -30,6 +35,11 @@ extends RefCounted
 ## Driving it is chasing a point a little way down the line, with the steering
 ## that would put the car's path through it, and the throttle or brake that
 ## keeps it under what the line allows there.
+##
+## Where there is another car on the road, it is three things at once: something
+## to be towed by, something to go round, and something not to drive into. None
+## of them is on the plan - the line is the line whoever else is out there - and
+## all of them are _around_the_rival's.
 ##
 ## How good it is, is one number, `difficulty`, from 0 to 1. It sets how close
 ## to the kerb the line runs, how near the car's limit it takes a corner, how
@@ -57,6 +67,37 @@ const LAG := 0.15
 ## car's slipstream.
 const PADS_FROM := 0.25
 const SLIPSTREAM_FROM := 0.5
+## How much road either side of a fork a timed lane covers, in metres: the run
+## in, where the line has to have crossed to the lane it is taking, and the run
+## out, which is long enough that a pad taken in the lane has faded before the
+## clock stops. A pad is held at full for a second and a half and bleeds away
+## over three more, and carrying that out of the fork is most of what a fast
+## lane is worth.
+const LANE_BEFORE := 40.0
+const LANE_AFTER := 200.0
+## How far ahead of the fork the line is relaxed again for a lane, in metres:
+## far enough back that the crossing to the lane is a line rather than a swerve
+## at the divider.
+const LANE_RELAX_IN := 60.0
+const LANE_RELAX_OUT := 50.0
+## The longest a timed lane may take, in steps, and how many times a lane may
+## be given room and driven again before its time is taken as it stands.
+##
+## A lane is driven the way a lap is: where the copy could not hold the line the
+## line is given room there, the stretch before it is taken slower where room
+## has already been tried, and the lane is driven again. Without that the
+## two lanes are not being compared - the clear one needs no mending and the
+## one with the barriers in it does, so the fast lane would be charged for a
+## line that the practice laps were going to mend anyway, and would lose every
+## fork on every course. It did, before this was here.
+##
+## What a copy that still cannot hold the line loses is the car's own
+## obstacle_scrub, the square hit it charges for a barrier, because what the
+## copy has just done is drive into one. A lane that is still being charged
+## that after every go is a lane this car cannot thread, which is exactly what
+## the timing is for.
+const LANE_STEPS := 60 * 20
+const LANE_MENDS := 6
 ## How far ahead it starts reading a moving trap, in metres.
 const TRAP_LOOK := 45.0
 ## How much room the car is given either side inside a gap, beyond its own
@@ -64,6 +105,40 @@ const TRAP_LOOK := 45.0
 const GAP_ROOM := 0.35
 const CAR_HALF_WIDTH := 1.03
 const CAR_HALF_LENGTH := 2.44
+## How far ahead the road has to be straight and clear before the bot will sit
+## on the other car's line to be towed down it, in metres.
+const TOW_LOOK := 30.0
+## How close behind the other car it settles when it cannot get past, measured
+## between the two middles. A car length of that is the two cars themselves, so
+## what is left is three metres of air - near enough for nearly the whole tow,
+## far enough that a metre of overshoot is not a shunt.
+const TUCK_IN := CAR_HALF_LENGTH * 2.0 + 3.0
+## From how far back it starts going round the other car rather than sitting
+## behind it, in metres, and how long it allows for the move: how far ahead the
+## road has to keep its room for one to be worth starting at all.
+const PASS_FROM := 11.0
+const PASS_SECONDS := 2.5
+## How far past it the bot has to be before it cuts back in, in metres. A car
+## whose nose is level is not past anything, and one that took its own line
+## again there would be taking it through the other car's front wing.
+const CLEAR_BY := CAR_HALF_LENGTH * 2.0 + 1.5
+## How much clear air it wants between the two cars side by side, on top of
+## what their shapes need, in metres, and how little of it still counts as
+## being in the other car's way.
+##
+## Two numbers rather than one, and they are not the same number on purpose. A
+## hand's width is not enough room to go round in - both cars are steering, and
+## two drivers each leaving the other the least they can are two drivers
+## touching - but a bot that counted a car most of a lane away as being in its
+## way would spend a whole race giving room to somebody who was never there.
+const PASS_ROOM := 1.3
+const OVERLAP_ROOM := 0.2
+## How much further off a barrier than the line itself runs the bot is willing
+## to be pushed by the other car, in metres. The line's own room is what the
+## practice laps found it could take at speed and on its own; a line shoved
+## against that limit by a car alongside is a line nobody rehearsed, and the
+## corner of a car turning into a gap reaches further across it than its width.
+const BARRIER_ROOM := 0.8
 ## How long with no progress before it asks to be put back, in seconds, the way
 ## a player would press the key.
 ## How many laps it may practise before it races, how much slower each one
@@ -123,6 +198,18 @@ var _corner := PackedFloat32Array()
 var _caution := PackedFloat32Array()
 ## Whether there is road under each sample, and how many laps practice took.
 var _ground := PackedByteArray()
+## The line as it stood when the road was first narrowed to the furniture, and
+## which gap it chose is read off. Kept, because the narrowing is done again for
+## every lane of a fork that is timed, and a narrowing that read a line which
+## had moved since would choose different gaps somewhere else on the course -
+## which is a different plan for a reason that has nothing to do with the fork.
+var _narrow_line := PackedFloat32Array()
+## The road's own room either side of the middle, before anything standing on
+## it narrows that. Kept because the narrowing is done again for every lane of
+## a fork that is timed, and a narrowing that started from an already narrowed
+## road would narrow it twice.
+var _road_lo := PackedFloat32Array()
+var _road_hi := PackedFloat32Array()
 ## Which sides of the road a barrier hems the line in on at each sample: 1 on
 ## the left, 2 on the right. Only a barrier is hit by the corner of a car
 ## swinging out; the kerb has the rails beyond it and room to spare.
@@ -146,29 +233,279 @@ var _wants_reset := false
 ## The lock asked for on the last step, for working out where the car is
 ## about to be.
 var _last_steer := 0.0
+## The fastest the other car lets the bot go this step, in m/s: INF whenever
+## there is nothing in the way. Worked out with the steering, in _lateral_for,
+## and read by the throttle a few lines later, because they are two halves of
+## one decision - a car that has nowhere to go round has to lift, and a car
+## that has somewhere does not.
+var _hold_back := INF
+## Whether it has given up on the stretch ahead having room for both cars and
+## is dropping in behind the other one. Sticky, because two cars level with
+## each other where only one fits will otherwise each wait for the other to
+## yield, and the one that changes its mind every step is the one that does not.
+var _giving_way := false
+## Which side of the other car it is going round: -1 left, 1 right, 0 not.
+## Held for as long as the pass lasts, because the side with more road changes
+## as the bot moves into it, and a driver that reads it fresh every step would
+## swap sides in front of a car it is overtaking.
+var _passing := 0
+## How hard the plan is willing to brake, in m/s per second: read off the car
+## when the limits are worked out, and used again when the thing to slow for is
+## the other car rather than a corner.
+var _decel := 20.0
+## Every fork on the road, and which side of each one the line takes: 1 for the
+## right of the divider, -1 for the left. Empty until the lanes have been timed,
+## and read by the narrowing, which otherwise picks the lane with the pad in it.
+var _forks: Array[TrackFeatures.Placement] = []
+var _lane_for := {}
+## The lane trial in progress: which fork, which of its two lanes, what the
+## stretch is in samples, and the clock on the copy driving it.
+var _fork_at := 0
+var _lane_try := 0
+var _lane_seconds := Vector2.ZERO
+## Whether each of the two lanes came out of its last drive without the copy
+## leaving the room the line had, and what each of them left behind.
+var _lane_clean := Vector2.ZERO
+var _lane_room := [{}, {}]
+var _lane_times := {}
+var _lane_from := 0
+var _lane_to := 0
+var _lane_step := 0
+var _lane_clock := 0.0
+var _lane_here := Vector3.ZERO
+var _lane_grace := 0.0
+var _lane_trouble := 0
+var _lane_marks := PackedInt32Array()
+var _lane_mends := 0
+var _lane_seen := {}
+## How many times the copy left the room the line had on each lane's last
+## drive, for lane_choices() to report: a lane that is still being charged for
+## a barrier is a lane this car cannot thread.
+var _lane_scrapes := {}
+## The line as it stood before the lanes were timed, and, for each fork, the
+## stretch of line and room the lane that won left behind. Kept rather than
+## worked out again afterwards, because a lane is relaxed, mended and relaxed
+## again, and one pass of that at the end would not come out where the lane
+## that was timed came out.
+var _before_the_lanes := PackedFloat32Array()
+var _best_lane := {}
+var _best_room := {}
+## True while a practice lap is being driven. The other car is not on the plan:
+## where it happens to be standing during the countdown is not a thing the line
+## round the track should have been bent for.
+var _rehearsing := false
+
+## Which part of the plan is being worked on. In the order they happen, which is
+## also the order plan_a_little walks them in.
+enum Stage {
+	ROAD,           ## sample the road, and mark the jumps
+	RELAX_WIDE,     ## the first, coarse relaxing of the line
+	FURNITURE,      ## narrow the road to the gaps and the pads
+	RELAX_FINE,     ## relax again inside those limits
+	LIMITS,         ## build the line and read what it allows
+	LANE_NEXT,      ## set up the next lane of the next fork to be timed
+	LANE_RELAX,     ## relax the line into that lane
+	LANE_DRIVE,     ## drive a copy of the car through the fork in it
+	PRACTICE_LAP,   ## drive a lap of it on a copy of the car
+	PRACTICE_MEND,  ## give the line room where the lap could not hold it
+	PRACTICE_OVER,  ## a clean lap, or eight of them: put the copy away
+	DONE,
+}
+var _stage := Stage.DONE
+## The car the plan is being worked out for, held only while it is being worked
+## out. What is read off it here is its tuning, which does not move under a plan;
+## where it is standing and how fast it goes are taken once, in start_planning.
+var _planning_car: Car
+
+## The relaxing in progress: which spans, how many sweeps of each, over what
+## stretch of the line, and how far through. Held here rather than in a loop
+## because a relaxing is a thousand sweeps and a frame is worth about five.
+var _relax_spans := PackedInt32Array()
+var _relax_passes := 0
+var _relax_from := 0
+var _relax_to := 0
+var _relax_span := 0
+var _relax_sweep := 0
+
+## The practice lap in progress: the copy of the car driving it, where it started
+## and where it has got to, how long it is being left alone for after a mistake,
+## which step it is on, where it has left the room the line had, and where it has
+## been in trouble on an earlier lap. Same reason: a lap is thousands of steps.
+var _copy: Car
+var _practice_start := Transform3D.IDENTITY
+var _practice_here := Vector3.ZERO
+var _practice_grace := 0.0
+var _practice_step := 0
+var _practice_reach := 0
+var _practice_trouble := PackedInt32Array()
+var _practice_seen := {}
 
 
+## A driver with its line begun but not finished. Whoever made it has to carry
+## the plan through - a few milliseconds a frame with plan_a_little, which is
+## what a race does, or all at once with finish_planning, which is what a check
+## or a tool does - before the driver will drive.
 func _init(track: Track, car: Car, how_good := 1.0) -> void:
 	_track = track
 	difficulty = clampf(how_good, 0.0, 1.0)
-	plan(car)
+	start_planning(car)
 
 
-## Work the line out again, for the car as it is tuned now.
-func plan(car: Car) -> void:
+## A copy of the car left over from a plan that was abandoned half way, which is
+## what happens when a race is left during its countdown. Nothing else holds it,
+## so nothing else would free it.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and _copy != null:
+		_copy.free()
+		_copy = null
+
+
+## Work the line out again from the start, for the car as it is tuned now, and
+## standing where it stands now. The work itself is plan_a_little's; this only
+## says where to begin.
+##
+## Everything the plan takes off the world rather than off the road is taken
+## here, on this one frame, and not as each stage reaches for it. The stages run
+## over however many frames the budget spreads them across, and a plan whose
+## practice laps started from wherever the car had got to by the time the
+## practice stage came round would be a different plan depending on how fast the
+## machine was. So a car retuned or moved part way through a plan wants
+## start_planning called again; it is not picked up half way.
+func start_planning(car: Car) -> void:
+	if _copy != null:
+		_copy.free()
+		_copy = null
+	_planning_car = car
 	_step = _track.sample_step
 	_count = int(floor(_track.length() / _step)) + 1
-	_sample_the_road()
-	_mark_the_jumps()
-	_lateral = PackedFloat32Array()
-	_lateral.resize(_count)
-	_relax(PackedInt32Array([16, 8, 4, 2, 1]), 120)
-	_narrow_for_the_furniture()
-	_relax(PackedInt32Array([8, 4, 2, 1]), 160)
-	_build_line()
-	_set_the_limits(car)
-	_practise(car)
+	# Where the practice laps set off from, and how far back from trouble the
+	# caution reaches at this car's top speed.
+	_practice_start = car.global_transform
+	_practice_reach = int(ceil(car.max_speed * CAUTION_BACK / _step))
+	_laps_practised = 0
+	_stage = Stage.ROAD
 	reset_progress()
+
+
+## Whether the line is finished and the driver will drive.
+func is_planned() -> bool:
+	return _stage == Stage.DONE
+
+
+## Carry the plan on for about `budget` milliseconds, and say whether there is
+## more to do. Called once a frame by whatever is waiting for the driver.
+##
+## Why a budget rather than a thread. The whole of the plan is half a second on
+## a short road and a second and a half on the longest, nearly all of it in the
+## two relaxings, and on one frame that is a hitch the player sees at the exact
+## moment they are watching a countdown. The countdown is three seconds of
+## nothing happening, which is more time than the worst road needs, so the work
+## goes there - a few milliseconds a frame, finished before GO is said. A thread
+## would be quicker, but the practice laps drive a duplicate of the car, and
+## duplicating and freeing a node is the main thread's to do; the plan is also
+## read off a Curve3D whose baked cache is built the first time it is asked. So
+## a thread would mean either proving all of that safe or taking the copy out of
+## practice, for a saving nobody can see: the countdown is dead time either way.
+##
+## The budget is honoured between units of work rather than inside them, so a
+## frame overshoots by at most one unit. The units are small on purpose: one
+## relaxing sweep is under a millisecond on the longest road in the game, and
+## one practice step is a few microseconds.
+func plan_a_little(budget: float) -> bool:
+	if _stage == Stage.DONE:
+		return false
+	# A budget of INF is finish_planning asking for no deadline at all, which is
+	# worth saying outright: a deadline worked out from INF is whatever int()
+	# makes of it rather than a time.
+	var deadline := -1
+	if is_finite(budget):
+		deadline = Time.get_ticks_usec() + int(maxf(budget, 0.0) * 1000.0)
+	while _stage != Stage.DONE:
+		match _stage:
+			Stage.ROAD:
+				_sample_the_road()
+				_mark_the_jumps()
+				_lateral = PackedFloat32Array()
+				_lateral.resize(_count)
+				_start_relaxing(PackedInt32Array([16, 8, 4, 2, 1]), 120)
+				_stage = Stage.RELAX_WIDE
+			Stage.RELAX_WIDE:
+				while _relax_a_sweep():
+					if _out_of_time(deadline):
+						return true
+				_stage = Stage.FURNITURE
+			Stage.FURNITURE:
+				_narrow_line = _lateral.duplicate()
+				_narrow_for_the_furniture()
+				_start_relaxing(PackedInt32Array([8, 4, 2, 1]), 160)
+				_stage = Stage.RELAX_FINE
+			Stage.RELAX_FINE:
+				while _relax_a_sweep():
+					if _out_of_time(deadline):
+						return true
+				_stage = Stage.LIMITS
+			Stage.LIMITS:
+				_build_line()
+				_set_the_limits(_planning_car)
+				_begin_the_lanes()
+			Stage.LANE_NEXT:
+				_next_lane()
+			Stage.LANE_RELAX:
+				while _relax_a_sweep():
+					if _out_of_time(deadline):
+						return true
+				_build_line()
+				_read_the_bends(_planning_car)
+				_brake_for_the_limits(_planning_car)
+				_begin_a_lane()
+				_stage = Stage.LANE_DRIVE
+			Stage.LANE_DRIVE:
+				while _drive_a_lane_step():
+					if _out_of_time(deadline):
+						return true
+				_end_a_lane()
+			Stage.PRACTICE_LAP:
+				while _practise_a_step():
+					if _out_of_time(deadline):
+						return true
+				_end_a_practice_lap()
+			Stage.PRACTICE_MEND:
+				while _relax_a_sweep():
+					if _out_of_time(deadline):
+						return true
+				_build_line()
+				_read_the_bends(_planning_car)
+				_brake_for_the_limits(_planning_car)
+				if _laps_practised >= PRACTICE_LAPS:
+					_stage = Stage.PRACTICE_OVER
+				else:
+					_begin_a_practice_lap()
+					_stage = Stage.PRACTICE_LAP
+			Stage.PRACTICE_OVER:
+				_put_the_copy_away()
+				_stage = Stage.DONE
+		if _out_of_time(deadline):
+			return _stage != Stage.DONE
+	return false
+
+
+## Whether the frame's budget is spent. A deadline below zero is no deadline:
+## whoever asked wants the whole of the plan, however long it takes.
+func _out_of_time(deadline: int) -> bool:
+	return deadline >= 0 and Time.get_ticks_usec() >= deadline
+
+
+## Finish whatever is left of the plan on this frame, however long that takes.
+## For a check or a tool, where a frame of work costs nothing.
+func finish_planning() -> void:
+	while plan_a_little(INF):
+		pass
+
+
+## Work the line out again, all of it, now.
+func plan(car: Car) -> void:
+	start_planning(car)
+	finish_planning()
 
 
 ## Forget where the car was. For when it has been picked up and put down
@@ -179,6 +516,9 @@ func reset_progress() -> void:
 	_since_progress = 0.0
 	_off_road_for = 0.0
 	_wants_reset = false
+	_hold_back = INF
+	_passing = 0
+	_giving_way = false
 
 
 ## Whether the car is stuck or lost and wants putting back at its last
@@ -210,8 +550,14 @@ func limit_at(offset: float) -> float:
 
 ## Throttle and steering for this step, -1 to 1 each: what the car asks of
 ## whatever is driving it.
+##
+## A driver still working its line out asks for nothing, which leaves the car
+## coasting. It is not the car's job to wait for its driver, and it is certainly
+## not the car's job to finish the plan on the frame it first asks a question -
+## that is the hitch this is all here to avoid. Whatever set the race up is what
+## has to have the line ready by GO.
 func controls(car: Car, delta: float) -> Vector2:
-	if _count < 4:
+	if _count < 4 or _stage != Stage.DONE:
 		return Vector2.ZERO
 	_follow(car.global_position, delta, car.frozen,
 		car.is_on_floor() and not car.on_the_road(), car.is_on_floor())
@@ -284,6 +630,9 @@ func _command(car: Car, here: Vector3, travel: Vector3, speed: float,
 	var allowed := INF
 	for k in range(_at, mini(_at + reach + 1, _count)):
 		allowed = minf(allowed, _limit[k])
+	# And under whatever the car in front leaves it, which _lateral_for has
+	# just worked out: the road is not the only thing that can be in the way.
+	allowed = minf(allowed, _hold_back)
 	var throttle := 1.0
 	if not grounded:
 		# Nothing to push against, and a car in the air keeps what it left
@@ -349,12 +698,13 @@ func _follow(here: Vector3, delta: float, frozen: bool, off_road: bool,
 ## Where to aim across the road at a sample, in metres right of the middle:
 ## the line, unless a trap or the other car is in the way of it.
 func _lateral_for(at: float, here: Vector3, travel: Vector3, speed: float) -> float:
+	_hold_back = INF
 	var i := clampi(int(at), 0, _count - 1)
 	var lateral := _lateral[i]
 	var dodge := _dodge_the_traps(i, speed)
 	if not is_nan(dodge):
 		return dodge
-	if rival != null:
+	if rival != null and not _rehearsing:
 		lateral = _around_the_rival(i, lateral, here, travel, speed)
 	return clampf(lateral, _lo[i], _hi[i])
 
@@ -419,30 +769,190 @@ func _inside(gaps: Array[Vector2], lateral: float, half: float) -> bool:
 	return false
 
 
-## Tuck in behind the other car on a straight, and go round it rather than
-## into it anywhere.
+## Tuck in behind the other car on a straight, go round it rather than into it,
+## and lift rather than drive into the back of it when there is nowhere to go.
+##
+## Whether the other car is in the way is a question about where this car
+## actually is, not about where its line says it should be. A bot sitting in
+## someone's tow is by definition off its own line, and one that asked the line
+## would decide the car ahead was three metres away and drive straight through
+## it.
+##
+## Going round is the line moved rather than the line replaced: the bot keeps
+## its own line wherever that is already clear of the other car, and is pushed
+## off it only by as much as two cars side by side need. A driver that aimed at
+## a fixed offset from the other car instead would be steering for wherever the
+## other car went, which on a corner is not a racing line at all.
 func _around_the_rival(i: int, lateral: float, here: Vector3, forward: Vector3,
 		speed: float) -> float:
-	var to_rival := rival.global_position - here
-	var along := to_rival.dot(forward)
-	if along <= 0.0 or along > rival.slipstream_range:
+	var along := (rival.global_position - here).dot(forward)
+	# Well clear of it: still out of its air behind, or far enough past it that
+	# taking the line again takes it in front of nobody.
+	if along > rival.slipstream_range or along < -CLEAR_BY:
+		_passing = 0
+		_giving_way = false
 		return lateral
-	var right := _right[i]
-	var theirs := (rival.global_position - _centre[i]).dot(right)
-	var closing := speed - rival.speed()
-	if along < 10.0 and closing > 0.5 and absf(theirs - lateral) < 2.6:
-		# About to run into it: out to whichever side of it has more road.
-		var left_room := theirs - _lo[i]
-		var right_room := _hi[i] - theirs
-		return theirs + 2.8 if right_room > left_room else theirs - 2.8
-	if difficulty >= SLIPSTREAM_FROM and along > 5.0 and _straight_ahead(i, 30.0):
+	var theirs := _rival_lateral()
+	var mine := (here - _centre[_at]).dot(_right[_at])
+	var apart := _apart_from(forward, PASS_ROOM)
+	var room := _corridor(i, speed)
+	# Whether the road ahead has room for two cars at all. Where it has not -
+	# a fork, a row of barriers, a pinched corner - the car behind is in the
+	# other one's way wherever it is across the road, because there is one way
+	# through and they are both going to want it. Which of them gives way is
+	# settled by which of them is behind: this asks nothing of the car in
+	# front, and the driver in front asks nothing of this one.
+	var abreast := not is_nan(room.x) and room.y - room.x >= apart
+	if abreast:
+		_giving_way = false
+	elif along > 0.0:
+		_giving_way = true
+	var in_the_way := (_giving_way
+		or absf(theirs - mine) < _apart_from(forward, OVERLAP_ROOM))
+
+	# A move already begun is held to the end of it, out past the other car's
+	# tail rather than only past its nose. Held, and not decided afresh every
+	# step, because the room either side of a car changes as this one moves
+	# into one of them: a driver that picked again each step would swap sides
+	# halfway past, and one that stopped the moment it was no longer
+	# overlapping would cut straight back into the car it was passing.
+	var side := 0
+	if abreast and along < PASS_FROM and (_passing != 0 or (along > 0.0 and in_the_way)):
+		side = _which_side(room, theirs, mine, _lateral[i], apart, along)
+	_passing = side
+	if side != 0:
+		var keep := (maxf(lateral, theirs + apart) if side > 0
+			else minf(lateral, theirs - apart))
+		return clampf(keep, room.x, room.y)
+
+	# Behind it with nowhere to go round: sit in its tow rather than drive into
+	# the back of it. The speed that leaves is the same sum the line's own
+	# limits are walked back with - what the car can brake off in the road it
+	# has - against the other car's speed instead of a corner's, so a bot that
+	# cannot get by tucks in at its bumper rather than shoving it down the road.
+	if in_the_way and (along > 0.0 or _giving_way):
+		var spare := along - TUCK_IN
+		# Over the room there is: what the car can brake off in it. Under it:
+		# under the other car's speed, so the gap opens again rather than
+		# staying wherever the shunt left it.
+		var over := sqrt(2.0 * _decel * spare) if spare > 0.0 else spare
+		_hold_back = maxf(rival.speed() + over, 2.0)
+
+	if (along > TUCK_IN * 0.5 and difficulty >= SLIPSTREAM_FROM
+			and _tow_is_clear(i, theirs)):
 		return theirs
 	return lateral
 
 
-func _straight_ahead(i: int, metres: float) -> bool:
-	for k in range(i, mini(i + int(metres / _step) + 1, _count)):
+## Where the other car is across the road, in metres right of the middle,
+## measured against the road where it actually is.
+##
+## Not against the sample this car is steering for. The two cars are up to a
+## slipstream's length apart, and a distance across the road taken against a
+## sample twenty metres back is a distance across some other part of the road.
+func _rival_lateral() -> float:
+	var best := _at
+	var nearest := INF
+	var reach := int(rival.slipstream_range / _step) + 3
+	var back := int(CLEAR_BY / _step) + 3
+	for k in range(maxi(_at - back, 0), mini(_at + reach, _count)):
+		var d := rival.global_position.distance_squared_to(_centre[k])
+		if d < nearest:
+			nearest = d
+			best = k
+	return (rival.global_position - _centre[best]).dot(_right[best])
+
+
+## How far apart two cars have to keep their middles to be side by side without
+## touching, in metres.
+##
+## Their two half widths is only the answer on a straight. A car is twice as
+## long as it is wide, so one turned even a little reaches further across the
+## road than its width - which is the same thing the practice laps know about
+## barriers - and both cars are turning through a corner. So the room asked for
+## grows with how far each of them is pointed off the road's own heading.
+func _apart_from(forward: Vector3, room: float) -> float:
+	var road := Vector3.UP.cross(_right[_at])
+	var ours := absf(sin(road.signed_angle_to(forward, Vector3.UP)))
+	var nose := -rival.global_transform.basis.z
+	nose.y = 0.0
+	var theirs := 0.0
+	if nose.length_squared() > 0.0001:
+		theirs = absf(sin(road.signed_angle_to(nose.normalized(), Vector3.UP)))
+	return CAR_HALF_WIDTH * 2.0 + CAR_HALF_LENGTH * (ours + theirs) + room
+
+
+## Which side of the other car to go down, or 0 for neither: 1 for the right of
+## it, -1 for the left.
+##
+## In order of what it would rather do: the side it is already going down, the
+## side of them it is already on, the side its own line is on, and whichever of
+## the two has the room. A side it has picked is kept only while the car is
+## still on that side of them: a driver that held the side it chose whatever
+## happened afterwards would, if the other car crossed in front of it, set off
+## for a gap on the far side of that car and steer through it to get there.
+func _which_side(room: Vector2, theirs: float, mine: float, line: float,
+		apart: float, along: float) -> int:
+	var open_left := theirs - room.x >= apart
+	var open_right := room.y - theirs >= apart
+	# Room on the far side of the other car is not room this car can have.
+	# From behind it, either side will do: it crosses behind their tail. Level
+	# with them, the only side to be had is the one it is already on, and a
+	# driver that went for the other would be steering through them to get
+	# there - which is how a bot with nowhere to go on its own side ends up
+	# leaning on the car it meant to pass for the length of a straight.
+	if along <= CAR_HALF_LENGTH * 2.0:
+		if mine > theirs:
+			open_left = false
+		elif mine < theirs:
+			open_right = false
+	if _passing > 0 and open_right and mine > theirs - CAR_HALF_WIDTH:
+		return 1
+	if _passing < 0 and open_left and mine < theirs + CAR_HALF_WIDTH:
+		return -1
+	for wants: float in [mine - theirs, line - theirs]:
+		if wants > 0.0 and open_right:
+			return 1
+		if wants < 0.0 and open_left:
+			return -1
+	if open_right:
+		return 1
+	if open_left:
+		return -1
+	return 0
+
+
+## The room the line has over the stretch the two cars will be alongside for,
+## as a lowest and a highest lateral, or NAN either side if it closes up.
+##
+## The narrowest of it, not the room at this one sample: a way past that shuts
+## half a car length later is a way into whatever shut it.
+func _corridor(i: int, speed: float) -> Vector2:
+	var lo := -INF
+	var hi := INF
+	var look := maxf(PASS_FROM + CAR_HALF_LENGTH * 2.0, speed * PASS_SECONDS)
+	var reach := i + int(ceil(look / _step))
+	for k in range(i, mini(reach + 1, _count)):
+		lo = maxf(lo, _lo[k] + (BARRIER_ROOM if (_hemmed[k] & 1) != 0 else 0.0))
+		hi = minf(hi, _hi[k] - (BARRIER_ROOM if (_hemmed[k] & 2) != 0 else 0.0))
+	return Vector2(lo, hi) if lo <= hi else Vector2(NAN, NAN)
+
+
+## Whether the road ahead is worth leaving the line for a tow down: straight
+## for TOW_LOOK metres, with no barrier hemming the line in over any of it, and
+## with the other car's line inside the room the plan left itself all the way.
+##
+## The last two are the ones that were missing. A bot that only asked whether
+## the road was straight would tuck in behind a car heading for a gap it had
+## not chosen, and arrive at the barrier row off its own line with no time left
+## to cross back - which on The Gate cost it the race rather than won it one.
+func _tow_is_clear(i: int, theirs: float) -> bool:
+	for k in range(i, mini(i + int(TOW_LOOK / _step) + 1, _count)):
 		if not is_inf(_limit[k]):
+			return false
+		if _hemmed[k] != 0:
+			return false
+		if theirs < _lo[k] or theirs > _hi[k]:
 			return false
 	return true
 
@@ -467,6 +977,8 @@ func _sample_the_road() -> void:
 		var room := maxf(_half[i] - margin, 0.0)
 		_lo[i] = -room
 		_hi[i] = room
+	_road_lo = _lo.duplicate()
+	_road_hi = _hi.duplicate()
 
 
 func _margin() -> float:
@@ -512,16 +1024,19 @@ func _narrow_for_the_furniture() -> void:
 	var standing: Array[TrackFeatures.Placement] = []
 	_standing = standing
 	_traps.clear()
+	_forks.clear()
 	for placement in features.placements:
 		if placement.kind == TrackFeatures.TRAP:
 			_traps.append(placement)
 		elif placement.kind == TrackFeatures.OBSTACLE:
 			standing.append(placement)
+		elif placement.kind == TrackFeatures.FORK:
+			_forks.append(placement)
 	_pads = features.of_kind(TrackFeatures.BOOST_PAD)
 	var pads: Array = _pads if difficulty >= PADS_FROM else []
 
-	var lo := _lo.duplicate()
-	var hi := _hi.duplicate()
+	var lo := _road_lo.duplicate()
+	var hi := _road_hi.duplicate()
 	_hemmed = PackedByteArray()
 	_hemmed.resize(_count)
 	var held := Vector2.ZERO
@@ -533,7 +1048,8 @@ func _narrow_for_the_furniture() -> void:
 			holding = false
 			continue
 		var half := maxf(_half[i], 0.001)
-		var mine := _lateral[i] / half
+		var mine := _narrow_line[i] / half
+		var lane := _lane_at(float(i) * _step)
 		var chosen := Vector2.ZERO
 		var best := -INF
 		for gap in gaps:
@@ -545,6 +1061,11 @@ func _narrow_for_the_furniture() -> void:
 				score = -absf(clampf(mine, gap.x, gap.y) - mine)
 				if _pad_in(pads, gap, float(i) * _step):
 					score += 1.0
+				# A fork whose two lanes have been timed is not a choice any
+				# more. Worth more than the pad and more than the line, because
+				# the timing already counted both of those.
+				if lane != 0 and signf((gap.x + gap.y) * 0.5) == float(lane):
+					score += 10.0
 			if score > best:
 				best = score
 				chosen = gap
@@ -623,24 +1144,43 @@ func _pad_in(pads: Array, gap: Vector2, offset: float) -> bool:
 ## as its neighbours tell it to, and a sweep over the nearest ones alone would
 ## take thousands of passes to carry a corner's line out to where the corner
 ## begins.
-func _relax(spans: PackedInt32Array, passes: int, from := 2, to := -1) -> void:
-	from = maxi(from, 2)
-	to = _count - 2 if to < 0 else mini(to, _count - 2)
-	for span in spans:
-		for _sweep in passes:
-			for i in range(from, to):
-				if _airborne[i] != 0:
-					continue
-				var a := maxi(i - 2 * span, 0)
-				var b := maxi(i - span, 0)
-				var c := mini(i + span, _count - 1)
-				var d := mini(i + 2 * span, _count - 1)
-				var smooth := (-_flat(a) + 4.0 * _flat(b) + 4.0 * _flat(c) - _flat(d)) / 6.0
-				var want := (smooth - _flat_centre(i)).dot(_right[i])
-				_lateral[i] = clampf(lerpf(_lateral[i], want, 0.6), _lo[i], _hi[i])
-			# Over a jump the line stays where it was at the lip: there is
-			# no steering in the air worth planning on.
-			_hold_over_the_jumps()
+##
+## Set a relaxing going: `passes` sweeps at each span in turn, over the stretch
+## from `from` to `to`. Carried out by _relax_a_sweep, one sweep at a time,
+## because the whole of a relaxing is over a thousand sweeps and no frame can
+## afford them all.
+func _start_relaxing(spans: PackedInt32Array, passes: int, from := 2, to := -1) -> void:
+	_relax_spans = spans
+	_relax_passes = passes
+	_relax_from = maxi(from, 2)
+	_relax_to = _count - 2 if to < 0 else mini(to, _count - 2)
+	_relax_span = 0
+	_relax_sweep = 0
+
+
+## One sweep of the relaxing in progress, and whether any are left after it.
+func _relax_a_sweep() -> bool:
+	if _relax_passes <= 0 or _relax_span >= _relax_spans.size():
+		return false
+	var span := _relax_spans[_relax_span]
+	for i in range(_relax_from, _relax_to):
+		if _airborne[i] != 0:
+			continue
+		var a := maxi(i - 2 * span, 0)
+		var b := maxi(i - span, 0)
+		var c := mini(i + span, _count - 1)
+		var d := mini(i + 2 * span, _count - 1)
+		var smooth := (-_flat(a) + 4.0 * _flat(b) + 4.0 * _flat(c) - _flat(d)) / 6.0
+		var want := (smooth - _flat_centre(i)).dot(_right[i])
+		_lateral[i] = clampf(lerpf(_lateral[i], want, 0.6), _lo[i], _hi[i])
+	# Over a jump the line stays where it was at the lip: there is
+	# no steering in the air worth planning on.
+	_hold_over_the_jumps()
+	_relax_sweep += 1
+	if _relax_sweep >= _relax_passes:
+		_relax_sweep = 0
+		_relax_span += 1
+	return _relax_span < _relax_spans.size()
 
 
 func _hold_over_the_jumps() -> void:
@@ -739,6 +1279,7 @@ func _brake_for_the_limits(car: Car) -> void:
 			base = minf(base, car.max_speed) * _caution[i]
 		_limit[i] = base
 	var decel := car.braking * lerpf(DECEL.x, DECEL.y, difficulty)
+	_decel = decel
 	for i in range(_count - 2, -1, -1):
 		if _airborne[i] != 0:
 			continue
@@ -751,6 +1292,302 @@ func _brake_for_the_limits(car: Car) -> void:
 	for i in _count:
 		if _airborne[i] != 0:
 			_limit[i] = INF
+
+
+## Which side of the divider the line takes through whatever fork covers an
+## offset: 1 for the right of it, -1 for the left, 0 where nothing has been
+## settled - which is every fork until its two lanes have been timed, and every
+## other stretch of road for ever.
+func _lane_at(offset: float) -> int:
+	for f in _forks.size():
+		if not _lane_for.has(f):
+			continue
+		var fork: TrackFeatures.Placement = _forks[f]
+		if offset >= fork.offset and offset <= fork.offset + fork.length:
+			return int(_lane_for[f])
+	return 0
+
+
+# --- timing the lanes of a fork -----------------------------------------
+
+## Take the quicker lane of every fork, by driving both of them.
+##
+## A fork is the one place on a road where the line has a choice rather than a
+## best: a fast lane with a pad in it and a row or two of barriers to thread,
+## and a clear lane with neither. Which of those is quicker is not something to
+## read off the shape of them. The pad is worth more than the barriers cost on
+## a wide road and less on a narrow one, it is worth more into a long straight
+## than into a corner the car has to brake for anyway, and what the barriers
+## cost depends on whether this car can thread them at the speed it arrives -
+## which is a question about the car, not about the road.
+##
+## So it is driven. For each lane in turn: the road is narrowed to that lane,
+## the line is relaxed into it over the fork and its run in, and a copy of the
+## car is driven from before the split to well after it - far enough after that
+## a pad taken in the fast lane has faded before the clock stops, because a
+## boost carried out of a fork is most of what a fast lane is for. The lane
+## with the lower time is the one the plan keeps.
+##
+## It is the same copy, the same `Car.rehearse()` and the same room the
+## practice laps use, for the same reason: a lane timed through anything but
+## the car's own easing, grip and ceiling is a lane timed for some other car.
+func _begin_the_lanes() -> void:
+	_before_the_lanes = _lateral.duplicate()
+	_lane_for.clear()
+	_best_lane.clear()
+	_best_room.clear()
+	_lane_times.clear()
+	_fork_at = 0
+	_lane_try = 0
+	_lane_seconds = Vector2(INF, INF)
+	_lane_clean = Vector2.ZERO
+	if _copy == null and _planning_car != null:
+		_copy = _planning_car.duplicate() as Car
+	_stage = Stage.LANE_NEXT
+
+
+## Set the next lane going, or settle the fork and move on to the next one -
+## and when there are none left, put the best lanes back and get on with the
+## practice.
+func _next_lane() -> void:
+	if _fork_at >= _forks.size():
+		_settle_the_lanes()
+		return
+	if _lane_try >= 2:
+		# Both lanes of this fork driven. A lane the copy still could not hold
+		# after every go at mending it is not a lane, whatever the clock said:
+		# the time it came back with is a time with a barrier in it, and the
+		# practice laps that follow would be spending themselves on a stretch
+		# of road the car was never going to thread. So a clean lane beats a
+		# scraping one, and between two of a kind the quicker one wins.
+		var take_the_right := (_lane_clean.x > _lane_clean.y
+			if _lane_clean.x != _lane_clean.y
+			else _lane_seconds.x <= _lane_seconds.y)
+		_lane_for[_fork_at] = 1 if take_the_right else -1
+		_best_lane[_fork_at] = _lane_for[_fork_at]
+		_best_room[_fork_at] = _lane_room[0 if take_the_right else 1]
+		_lane_times[_fork_at] = _lane_seconds
+		_fork_at += 1
+		_lane_try = 0
+		_lane_seconds = Vector2(INF, INF)
+		_lane_clean = Vector2.ZERO
+		return
+	var fork: TrackFeatures.Placement = _forks[_fork_at]
+	_lane_for[_fork_at] = 1 if _lane_try == 0 else -1
+	_lateral = _before_the_lanes.duplicate()
+	_narrow_for_the_furniture()
+	_lane_from = clampi(
+		int((fork.offset - LANE_BEFORE) / _step), 0, _count - 2)
+	_lane_to = clampi(
+		int((fork.offset + fork.length + LANE_AFTER) / _step), 0, _count - 1)
+	_lane_mends = 0
+	_lane_seen = {}
+	# The caution the other lane's mending laid down is not this lane's, and it
+	# reaches as far as that lane was driven rather than as far as it was
+	# relaxed - so a lane that was taken slower on its way out of the fork
+	# would hand the next one the same slowing and be timed against it.
+	for k in range(maxi(_lane_from - _practice_reach, 0),
+			mini(_lane_to + 4, _count)):
+		_caution[k] = 1.0
+	_relax_a_lane(fork)
+	_stage = Stage.LANE_RELAX
+
+
+## Put the copy at the start of the stretch, going as fast as the line there
+## allows, and start the clock.
+##
+## At the speed the line allows and not at top speed: a fork at the end of a
+## straight is arrived at flat out and one after a hairpin is not, and a lane
+## timed from a speed the car could not have been doing is a lane timed on a
+## road that is not there.
+func _begin_a_lane() -> void:
+	_at = _lane_from
+	_furthest = _lane_from
+	var down := _line[_lane_from + 1] - _line[_lane_from]
+	down.y = 0.0
+	_lane_here = _line[_lane_from]
+	_copy.rehearse_from(
+		Transform3D(Basis.looking_at(down.normalized(), Vector3.UP), _lane_here),
+		minf(_limit[_lane_from], _planning_car.max_speed))
+	_lane_clock = 0.0
+	_lane_step = 0
+	_lane_grace = 0.0
+	_lane_trouble = 0
+	_lane_marks = PackedInt32Array()
+	race_time = 0.0
+	_last_steer = 0.0
+
+
+## One step of a timed lane, and whether the stretch goes on after it. The same
+## shape as a practice step, and for the same reason it is a step at a time.
+func _drive_a_lane_step() -> bool:
+	if _lane_step >= LANE_STEPS or _at >= _lane_to:
+		return false
+	_lane_step += 1
+	var delta := 1.0 / 60.0
+	var here := _lane_here
+	_follow(here, delta, false, false)
+	if _at >= _count - 2 or _at >= _lane_to:
+		return false
+	var i := _at
+	var grounded := _ground[i] != 0
+	_rehearsing = true
+	var wanted := _command(_copy, here, _travel(_copy.transform, _copy.drift()),
+		_copy.speed(), grounded)
+	_rehearsing = false
+	var going := _copy.rehearse(wanted.x, wanted.y, grounded, delta)
+	here += going * delta
+	here.y = _centre[_at].y
+	_copy.transform.origin = here
+	_lane_clock += delta
+	race_time += delta
+	_lane_here = here
+
+	if _lane_grace > 0.0:
+		_lane_grace -= delta
+		return true
+	var across := (here - _centre[i]).dot(_right[i])
+	var road := Vector3.UP.cross(_right[i])
+	var along := float(i) * _step + (here - _centre[i]).dot(road)
+	var angle := road.signed_angle_to(_travel(_copy.transform, 0.0), Vector3.UP)
+	var hit := _clipped(along, across, angle, i)
+	for pad in _pads:
+		if (along >= pad.offset and along <= pad.offset + pad.length
+				and absf(across - pad.lateral * _half[i]) <= pad.half_span * _half[i]):
+			_copy.boost(pad.strength)
+	var edge := maxf(_half[i] - _margin(), 0.0) + PRACTICE_SLACK
+	if hit != 0 or absf(across) > edge:
+		# Charged for it, which is the whole point of timing a lane that has
+		# barriers in it: put back on the line for nothing, a lane the car
+		# cannot thread would come out of this as quick as one it can.
+		var on := mini(i + 2, _count - 2)
+		var down := _line[on + 1] - _line[on]
+		down.y = 0.0
+		_lane_here = _line[on]
+		_copy.rehearse_from(Transform3D(
+			Basis.looking_at(down.normalized(), Vector3.UP), _lane_here),
+			_copy.speed() * (1.0 - _planning_car.obstacle_scrub))
+		_lane_grace = PRACTICE_GRACE
+		_lane_trouble += 1
+		_lane_marks.append(i * 2 + (1 if (hit > 0 or across > edge) else 0))
+	return true
+
+
+## The lane is driven. Give it room where the copy could not hold it and drive
+## it again, or, when there is nothing left to mend or no goes left, keep its
+## time and go round for the next one.
+func _end_a_lane() -> void:
+	if not _lane_marks.is_empty() and _lane_mends < LANE_MENDS:
+		_mend_a_lane()
+		_lane_mends += 1
+		_relax_a_lane(_forks[_fork_at])
+		_stage = Stage.LANE_RELAX
+		return
+	# A lane the copy never got to the end of is not a lane: whatever stopped
+	# it would have stopped the car as well.
+	var seconds := _lane_clock if _at >= _lane_to else INF
+	# The room and the line this lane ended up with, so that the lane that wins
+	# is taken as it was driven rather than planned again from the start.
+	var fork: TrackFeatures.Placement = _forks[_fork_at]
+	var from := maxi(int((fork.offset - LANE_RELAX_IN) / _step), 0)
+	var to := mini(int((fork.offset + fork.length + LANE_RELAX_OUT) / _step) + 1, _count)
+	_lane_room[_lane_try] = {
+		"from": from, "to": to,
+		"lo": _lo.slice(from, to), "hi": _hi.slice(from, to),
+		"lateral": _lateral.slice(from, to),
+		"caution": _caution.slice(from, to),
+	}
+	var scrapes: Vector2 = _lane_scrapes.get(_fork_at, Vector2.ZERO)
+	if _lane_try == 0:
+		_lane_seconds.x = seconds
+		_lane_clean.x = 1.0 if _lane_marks.is_empty() else 0.0
+		_lane_scrapes[_fork_at] = Vector2(float(_lane_trouble), scrapes.y)
+	else:
+		_lane_seconds.y = seconds
+		_lane_clean.y = 1.0 if _lane_marks.is_empty() else 0.0
+		_lane_scrapes[_fork_at] = Vector2(scrapes.x, float(_lane_trouble))
+	_lane_try += 1
+	_stage = Stage.LANE_NEXT
+
+
+## Set a relaxing going over one fork and the road either side of it: the only
+## stretch a lane can have moved. The rest of the line is the one the fine
+## relaxing already settled, and doing the longest piece of work in the plan
+## again for it would be doing it twice for nothing.
+func _relax_a_lane(fork: TrackFeatures.Placement) -> void:
+	_start_relaxing(PackedInt32Array([8, 4, 2, 1]), 60,
+		int((fork.offset - LANE_RELAX_IN) / _step),
+		int((fork.offset + fork.length + LANE_RELAX_OUT) / _step))
+
+
+## Give the line room where the copy could not hold it, the way a practice lap
+## does: more room on the side it went wide on, a little before and a little
+## more after, since it is leaving something the back of a turning car catches.
+func _mend_a_lane() -> void:
+	for mark in _lane_marks:
+		var i := mark >> 1
+		var right := (mark & 1) == 1
+		for k in range(maxi(i - 4, 0), mini(i + 7, _count)):
+			if right and _hi[k] - TIGHTEN >= _lo[k]:
+				_hi[k] -= TIGHTEN
+			elif not right and _lo[k] + TIGHTEN <= _hi[k]:
+				_lo[k] += TIGHTEN
+		# And slower into it where moving the line has already been tried,
+		# which is the other half of what a practice lap does with a mistake.
+		if _lane_seen.has(i >> 2):
+			for k in range(maxi(i - _practice_reach, 0), mini(i + 3, _count)):
+				_caution[k] = maxf(_caution[k] * CAUTION_STEP, CAUTION_FLOOR)
+		_lane_seen[i >> 2] = true
+		_lane_seen[(i >> 2) - 1] = true
+		_lane_seen[(i >> 2) + 1] = true
+
+
+## Every lane driven. Put the road and the line back the way the lanes that won
+## left them.
+func _settle_the_lanes() -> void:
+	_lane_for = _best_lane.duplicate()
+	_lateral = _before_the_lanes.duplicate()
+	_narrow_for_the_furniture()
+	_caution = PackedFloat32Array()
+	_caution.resize(_count)
+	_caution.fill(1.0)
+	for f in _forks.size():
+		if not _best_room.has(f):
+			continue
+		var kept: Dictionary = _best_room[f]
+		var from: int = kept["from"]
+		for k in (kept["lo"] as PackedFloat32Array).size():
+			_lo[from + k] = kept["lo"][k]
+			_hi[from + k] = kept["hi"][k]
+			_lateral[from + k] = kept["lateral"][k]
+			_caution[from + k] = kept["caution"][k]
+	# _set_the_limits' work, with the caution the lanes learned left standing
+	# rather than wiped: a stretch the timed lane could only hold by taking it
+	# slower is a stretch the race has to take slower too.
+	_build_line()
+	_read_the_bends(_planning_car)
+	_brake_for_the_limits(_planning_car)
+	reset_progress()
+	_begin_practice()
+	_stage = Stage.PRACTICE_LAP
+
+
+## Which lane of each fork the timing settled on, and what the two of them
+## took, for a check or a tool to print.
+func lane_choices() -> Array:
+	var out := []
+	for f in _forks.size():
+		var seconds: Vector2 = _lane_times.get(f, Vector2(INF, INF))
+		out.append({
+			"at": _forks[f].offset,
+			"length": _forks[f].length,
+			"fast_lane": int(signf(_forks[f].lateral)),
+			"taken": int(_lane_for.get(f, 0)),
+			"right_lane": seconds.x,
+			"left_lane": seconds.y,
+			"scrapes": _lane_scrapes.get(f, Vector2.ZERO),
+		})
+	return out
 
 
 # --- practice -----------------------------------------------------------
@@ -772,50 +1609,67 @@ func _brake_for_the_limits(car: Car) -> void:
 ## is the car's steering and speed and nothing else. So what it learns is where
 ## the car cannot follow the line, and not where it would bounce off a barrier
 ## - which a line it can follow never meets.
-func _practise(car: Car) -> void:
-	var copy := car.duplicate() as Car
-	var start := car.global_transform
-	var reach := int(ceil(car.max_speed * CAUTION_BACK / _step))
+##
+## Take the copy out and get the first lap ready. The laps themselves are
+## _practise_a_step's, and what is done between them _end_a_practice_lap's,
+## because a lap is thousands of steps and no frame can afford one.
+func _begin_practice() -> void:
+	if _copy == null:
+		_copy = _planning_car.duplicate() as Car
 	# Where it has been in trouble before, in stretches of four samples.
-	var seen := {}
-	for lap in PRACTICE_LAPS:
-		var trouble := _practice_lap(copy, start)
-		_laps_practised = lap + 1
-		if trouble.is_empty():
-			break
-		var first := _count
-		var last := 0
-		for mark in trouble:
-			var i := mark >> 1
-			var right := (mark & 1) == 1
-			first = mini(first, i)
-			last = maxi(last, i)
-			# Given more room on the side it went wide on. Slowing down alone
-			# cannot fix a line that crosses a gap at an angle: the corner of
-			# the car swings out just as far at any speed. From a little
-			# before to a little more after, since it is leaving a barrier
-			# that the back of a car turning away catches.
-			for k in range(maxi(i - 4, 0), mini(i + 7, _count)):
-				if right and _hi[k] - TIGHTEN >= _lo[k]:
-					_hi[k] -= TIGHTEN
-				elif not right and _lo[k] + TIGHTEN <= _hi[k]:
-					_lo[k] += TIGHTEN
-			# Taken slower only where moving the line has already been tried:
-			# a car that could have got through by being put somewhere else
-			# should not also pay for it on every lap after.
-			if seen.has(i >> 2):
-				for k in range(maxi(i - reach, 0), mini(i + 3, _count)):
-					_caution[k] = maxf(_caution[k] * CAUTION_STEP, CAUTION_FLOOR)
-			seen[i >> 2] = true
-			seen[(i >> 2) - 1] = true
-			seen[(i >> 2) + 1] = true
-		_relax(PackedInt32Array([4, 2, 1]), 40, first - 40, last + 40)
-		_build_line()
-		_read_the_bends(car)
-		_brake_for_the_limits(car)
-	copy.free()
+	_practice_seen = {}
+	_begin_a_practice_lap()
+
+
+## The lap is over. If it was clean there is nothing left to learn; otherwise the
+## line is given room where the copy left it, and relaxed again through that
+## stretch - which is PRACTICE_MEND's to carry out.
+##
+## The mending happens after the last lap as well as after the ones before it.
+## What the copy found on lap eight is as true as what it found on lap one, and a
+## race driven on a line that was told about a mistake and not moved for it would
+## be driving into that mistake knowingly.
+func _end_a_practice_lap() -> void:
+	if _practice_trouble.is_empty():
+		_stage = Stage.PRACTICE_OVER
+		return
+	var first := _count
+	var last := 0
+	for mark in _practice_trouble:
+		var i := mark >> 1
+		var right := (mark & 1) == 1
+		first = mini(first, i)
+		last = maxi(last, i)
+		# Given more room on the side it went wide on. Slowing down alone
+		# cannot fix a line that crosses a gap at an angle: the corner of
+		# the car swings out just as far at any speed. From a little
+		# before to a little more after, since it is leaving a barrier
+		# that the back of a car turning away catches.
+		for k in range(maxi(i - 4, 0), mini(i + 7, _count)):
+			if right and _hi[k] - TIGHTEN >= _lo[k]:
+				_hi[k] -= TIGHTEN
+			elif not right and _lo[k] + TIGHTEN <= _hi[k]:
+				_lo[k] += TIGHTEN
+		# Taken slower only where moving the line has already been tried:
+		# a car that could have got through by being put somewhere else
+		# should not also pay for it on every lap after.
+		if _practice_seen.has(i >> 2):
+			for k in range(maxi(i - _practice_reach, 0), mini(i + 3, _count)):
+				_caution[k] = maxf(_caution[k] * CAUTION_STEP, CAUTION_FLOOR)
+		_practice_seen[i >> 2] = true
+		_practice_seen[(i >> 2) - 1] = true
+		_practice_seen[(i >> 2) + 1] = true
+	_start_relaxing(PackedInt32Array([4, 2, 1]), 40, first - 40, last + 40)
+	_stage = Stage.PRACTICE_MEND
+
+
+func _put_the_copy_away() -> void:
+	_copy.free()
+	_copy = null
+	_planning_car = null
 	race_time = 0.0
 	_last_steer = 0.0
+	reset_progress()
 
 
 ## Whether a car with its middle `along` the course and `across` it, turned
@@ -868,69 +1722,85 @@ func _span(points: Array, axis: Vector2) -> Vector2:
 	return Vector2(lowest, highest)
 
 
-## One lap on the copy. Returns where it left the room the line had, one for
-## each time it did: the sample, doubled, plus one if it went out to the right.
-func _practice_lap(copy: Car, start: Transform3D) -> PackedInt32Array:
-	var trouble := PackedInt32Array()
+## Put the copy back on the line and start it on a lap. Where it leaves the room
+## the line had is collected in _practice_trouble, one entry for each time it
+## did: the sample, doubled, plus one if it went out to the right.
+func _begin_a_practice_lap() -> void:
+	_practice_trouble = PackedInt32Array()
 	reset_progress()
 	race_time = 0.0
 	_last_steer = 0.0
-	copy.rehearse_from(start)
-	var here := start.origin
-	var delta := 1.0 / 60.0
-	var grace := 0.0
-	for step in PRACTICE_STEPS:
-		_follow(here, delta, false, false)
-		if _at >= _count - 2:
-			break
-		var i := _at
-		var grounded := _ground[i] != 0
-		var wanted := _command(copy, here, _travel(copy.transform, copy.drift()),
-			copy.speed(), grounded)
-		var going := copy.rehearse(wanted.x, wanted.y, grounded, delta)
-		here += going * delta
-		here.y = _centre[_at].y
-		copy.transform.origin = here
-		race_time += delta
+	_copy.rehearse_from(_practice_start)
+	_practice_here = _practice_start.origin
+	_practice_grace = 0.0
+	_practice_step = 0
+	_laps_practised += 1
 
-		if grace > 0.0:
-			grace -= delta
-			continue
-		var across := (here - _centre[i]).dot(_right[i])
-		var road := Vector3.UP.cross(_right[i])
-		var along := float(i) * _step + (here - _centre[i]).dot(road)
-		var angle := road.signed_angle_to(_travel(copy.transform, 0.0), Vector3.UP)
-		# Into a barrier, by the car's own shape: a box nearly five metres
-		# long at an angle to the road reaches further across it than its
-		# width, and a nose clipping a barrier is a barrier hit.
-		var hit := _clipped(along, across, angle, i)
-		# Over a pad, boosted, the way the car would be: practice that never
-		# took a pad would arrive at whatever follows one slower than the
-		# race does.
-		for pad in _pads:
-			if (along >= pad.offset and along <= pad.offset + pad.length
-					and absf(across - pad.lateral * _half[i]) <= pad.half_span * _half[i]):
-				copy.boost(pad.strength)
-		# Off the side of the road, by the middle of the car. The rails are
-		# beyond the kerb, and a corner over the kerb is not a mistake.
-		var edge := maxf(_half[i] - _margin(), 0.0) + PRACTICE_SLACK
-		var left_out := hit < 0 or across < -edge
-		var right_out := hit > 0 or across > edge
-		if left_out or right_out:
-			trouble.append(i * 2 + (1 if right_out else 0))
-			# Put back on the line a little further on, pointing down it, at
-			# the speed it had, and let alone for a moment to settle. A copy
-			# left wide would spend the rest of the lap finding its way back,
-			# and one checked again at once would be caught on the same
-			# mistake it has just been charged for.
-			var on := mini(i + 2, _count - 2)
-			var down := _line[on + 1] - _line[on]
-			down.y = 0.0
-			here = _line[on]
-			copy.rehearse_from(Transform3D(
-				Basis.looking_at(down.normalized(), Vector3.UP), here), copy.speed())
-			grace = PRACTICE_GRACE
-	return trouble
+
+## One step of the lap, and whether the lap goes on after it. A few microseconds,
+## which is what makes the budget in plan_a_little worth anything: a unit of work
+## this small cannot overshoot a frame.
+func _practise_a_step() -> bool:
+	if _practice_step >= PRACTICE_STEPS:
+		return false
+	_practice_step += 1
+	var delta := 1.0 / 60.0
+	var here := _practice_here
+	_follow(here, delta, false, false)
+	if _at >= _count - 2:
+		return false
+	var i := _at
+	var grounded := _ground[i] != 0
+	_rehearsing = true
+	var wanted := _command(_copy, here, _travel(_copy.transform, _copy.drift()),
+		_copy.speed(), grounded)
+	_rehearsing = false
+	var going := _copy.rehearse(wanted.x, wanted.y, grounded, delta)
+	here += going * delta
+	here.y = _centre[_at].y
+	_copy.transform.origin = here
+	race_time += delta
+	_practice_here = here
+
+	if _practice_grace > 0.0:
+		_practice_grace -= delta
+		return true
+	var across := (here - _centre[i]).dot(_right[i])
+	var road := Vector3.UP.cross(_right[i])
+	var along := float(i) * _step + (here - _centre[i]).dot(road)
+	var angle := road.signed_angle_to(_travel(_copy.transform, 0.0), Vector3.UP)
+	# Into a barrier, by the car's own shape: a box nearly five metres
+	# long at an angle to the road reaches further across it than its
+	# width, and a nose clipping a barrier is a barrier hit.
+	var hit := _clipped(along, across, angle, i)
+	# Over a pad, boosted, the way the car would be: practice that never
+	# took a pad would arrive at whatever follows one slower than the
+	# race does.
+	for pad in _pads:
+		if (along >= pad.offset and along <= pad.offset + pad.length
+				and absf(across - pad.lateral * _half[i]) <= pad.half_span * _half[i]):
+			_copy.boost(pad.strength)
+	# Off the side of the road, by the middle of the car. The rails are
+	# beyond the kerb, and a corner over the kerb is not a mistake.
+	var edge := maxf(_half[i] - _margin(), 0.0) + PRACTICE_SLACK
+	var left_out := hit < 0 or across < -edge
+	var right_out := hit > 0 or across > edge
+	if left_out or right_out:
+		_practice_trouble.append(i * 2 + (1 if right_out else 0))
+		# Put back on the line a little further on, pointing down it, at
+		# the speed it had, and let alone for a moment to settle. A copy
+		# left wide would spend the rest of the lap finding its way back,
+		# and one checked again at once would be caught on the same
+		# mistake it has just been charged for.
+		var on := mini(i + 2, _count - 2)
+		var down := _line[on + 1] - _line[on]
+		down.y = 0.0
+		_practice_here = _line[on]
+		_copy.rehearse_from(Transform3D(
+			Basis.looking_at(down.normalized(), Vector3.UP), _practice_here),
+			_copy.speed())
+		_practice_grace = PRACTICE_GRACE
+	return true
 
 
 ## The radius the line bends at, at a sample, across the ground: the tightest

@@ -52,8 +52,14 @@ func _init() -> void:
 	var track: Track = main.get_node("Track")
 	# Only the tracks named after `--`, if any are: redrawing all of them to add
 	# one changes pictures nobody asked to change.
+	#
+	# The sweep is the two grids rather than every road there is. A bot road is
+	# never drawn as a cell with an overhead shot in it - the select screen
+	# gives it its own face - so a picture of one is a picture nothing hangs.
+	# Named explicitly it is still drawn, because that is what naming it means.
 	var wanted: Array = OS.get_cmdline_user_args()
-	for path in (wanted if not wanted.is_empty() else TrackRoster.all_files()):
+	for path in (wanted if not wanted.is_empty()
+			else TrackRoster.FILES + TrackRoster.ACROBATIC_FILES):
 		track.track_file = path
 		track.generate(0)
 		await process_frame

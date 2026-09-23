@@ -125,9 +125,11 @@ func _build() -> void:
 
 	_picker = OptionButton.new()
 	# Only tracks that exist. An empty slot has no road, so it cannot have a
-	# board, and offering one is offering a page that is always blank.
+	# board, and offering one is offering a page that is always blank. A bot
+	# road is left out for the same reason and not a weaker one: it exists, but
+	# no time is ever written down on it, so its board would be blank forever.
 	for index in TrackRoster.TOTAL:
-		if TrackRoster.exists(index):
+		if TrackRoster.exists(index) and TrackRoster.kind_of(index) != TrackRoster.BOT:
 			_picker.add_item(TrackRoster.track_name(index).to_upper(), index)
 	_picker.item_selected.connect(_on_picked)
 	box.add_child(_picker)

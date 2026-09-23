@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://scripts/medal_badge.gd" id="11_badge"]
 [ext_resource type="Script" path="res://scripts/condition_bar.gd" id="12_condition"]
 [ext_resource type="Script" path="res://scripts/lost_prompt.gd" id="13_lost"]
+[ext_resource type="Script" uid="uid://bb8h05not4sca" path="res://scripts/rival_arrow.gd" id="14_arrow"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
 
@@ -68,6 +69,10 @@ shape = SubResource("Ground_shape")
 
 [node name="Car" parent="." instance=ExtResource("2_car")]
 
+[node name="Arrow" type="MeshInstance3D" parent="."]
+visible = false
+script = ExtResource("14_arrow")
+
 [node name="Camera" type="Camera3D" parent="."]
 script = ExtResource("3_cam")
 
@@ -105,6 +110,15 @@ size_flags_horizontal = 0
 size_flags_vertical = 0
 mouse_filter = 2
 theme_override_constants/separation = -8
+
+[node name="Place" type="Label" parent="Hud/Corner/Box"]
+visible = false
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 46
 
 [node name="Clock" type="Label" parent="Hud/Corner/Box"]
 layout_mode = 2

@@ -601,17 +601,12 @@ func _show_clock(text: String) -> void:
 ## Who is ahead, by distance along the course. Each player is told their own
 ## position, in their own half.
 ##
-## Nobody leads off the grid, where both cars are the same distance along, so
-## the places start as a dash rather than picking one arbitrarily. The two
-## margins give it hysteresis: a lead has to be earned, and only a clear return
-## to level gives it up, so the display cannot strobe wheel to wheel.
+## When a lead counts as a lead is Places' rule rather than this scene's,
+## because the bot race asks the same question of the same two margins and two
+## copies of that rule would drift apart.
 func _show_places(offsets: Array[float]) -> void:
-	var gap := offsets[0] - offsets[1]
-	if absf(gap) < level_margin:
-		_leader = -1
-	elif absf(gap) > lead_margin:
-		_leader = 0 if gap > 0.0 else 1
-
+	_leader = Places.leader(
+		offsets[0] - offsets[1], _leader, level_margin, lead_margin)
 	for i in _places.size():
 		if _leader < 0:
 			_places[i].text = "\u2013"

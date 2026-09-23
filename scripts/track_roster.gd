@@ -13,11 +13,17 @@ extends RefCounted
 ## Names written down in two places drift apart, and the one on the button
 ## would be the one nobody notices is wrong.
 
-## The two kinds of track, which the select screen shows as two grids. An
+## The kinds of road. The first two are the select screen's two grids: an
 ## acrobatic track is a different thing to drive - rings instead of painted
 ## checkpoints, and mostly in the air - so the two are never mixed in one grid.
+##
+## The third is not a grid. A bot road is a door at the end of a block of ten,
+## driven once against a computer, and it is a kind rather than a flag because
+## everything that asks a slot what it is - which grid it belongs in, what comes
+## after it - has to have an answer that is neither of the other two.
 const NORMAL := 0
 const ACROBATIC := 1
+const BOT := 2
 
 ## How many normal tracks there will be.
 const COUNT := 20
@@ -68,48 +74,100 @@ const ACROBATIC_FILES := [
 	"res://tracks/acrobatic/a10_last_leap.gd",
 ]
 
+## The bot races, one at the end of each block of ten, and their slots.
+##
+## A bot road is not a twenty-first track: it is a door. It is driven once,
+## against a computer, and nothing a time trial writes down is written down on
+## one - no time, no medal, no place on the leaderboard - so it appears in
+## neither grid.
+##
+## It still has a slot, because everything that wants to look a road up by its
+## file and ask what it is worth goes through one: `index_of()` into `targets()`
+## is how `tools/checks/bot_race.gd` finds the time it measures the bot against.
+## The slots carry on where the acrobatic ones stop, so no road anywhere in the
+## game shares a number with another.
+##
+## Bot files start with a `b` for the reason the acrobatic ones start with an
+## `a`: a time is kept and sent under the file's name, and no two roads may
+## share a key.
+const BOT_COUNT := 2
+const BOT_FILES := [
+	"res://tracks/bot/b1_the_gate.gd",
+	"res://tracks/bot/b2_the_toll.gd",
+]
+
+
 ## Where the overhead shots live. Built by tools/track_thumbnails.gd, one per
 ## track, named after the track file.
 const THUMBNAILS := "res://assets/tracks/%s.png"
 
 
-## Every slot, normal and acrobatic.
-const TOTAL := COUNT + ACROBATIC_COUNT
+## Every slot there is: the normal tracks, the acrobatic ones, the bot roads.
+const TOTAL := COUNT + ACROBATIC_COUNT + BOT_COUNT
 
 
 ## The first slot of a kind, and how many slots it has.
 static func first(kind: int) -> int:
-	return COUNT if kind == ACROBATIC else 0
+	match kind:
+		ACROBATIC:
+			return COUNT
+		BOT:
+			return COUNT + ACROBATIC_COUNT
+		_:
+			return 0
 
 
 static func count(kind: int) -> int:
-	return ACROBATIC_COUNT if kind == ACROBATIC else COUNT
+	match kind:
+		ACROBATIC:
+			return ACROBATIC_COUNT
+		BOT:
+			return BOT_COUNT
+		_:
+			return COUNT
 
 
-## Which kind of track a slot holds.
+## Which kind of road a slot holds.
 static func kind_of(index: int) -> int:
+	if index >= COUNT + ACROBATIC_COUNT:
+		return BOT
 	return ACROBATIC if index >= COUNT else NORMAL
 
 
-## Every track that exists, of both kinds, in slot order.
+## Every road that exists, of all three kinds, in slot order.
+##
+## This is every road the game has, which is what a tool sweeping the lot wants
+## - it is not every track, and anything that means the time trials wants the
+## two lists rather than this.
 static func all_files() -> Array:
-	return FILES + ACROBATIC_FILES
+	return FILES + ACROBATIC_FILES + BOT_FILES
 
 
-## Whether there is a track in this slot yet.
+## Whether there is a road in this slot yet.
 static func exists(index: int) -> bool:
 	if index < 0 or index >= TOTAL:
 		return false
-	if index < COUNT:
-		return index < FILES.size()
-	return index - COUNT < ACROBATIC_FILES.size()
+	return index - first(kind_of(index)) < _list(kind_of(index)).size()
 
 
-## The track file for a slot, or an empty string for one still to come.
+## The road file for a slot, or an empty string for one still to come.
 static func file(index: int) -> String:
 	if not exists(index):
 		return ""
-	return FILES[index] if index < COUNT else ACROBATIC_FILES[index - COUNT]
+	var kind := kind_of(index)
+	return _list(kind)[index - first(kind)]
+
+
+## The files of one kind. The three lists are kept apart because they are three
+## different things to a player; this is the one place that stops caring which.
+static func _list(kind: int) -> Array:
+	match kind:
+		ACROBATIC:
+			return ACROBATIC_FILES
+		BOT:
+			return BOT_FILES
+		_:
+			return FILES
 
 
 ## What a track calls itself. Read off the track by building its description,
@@ -127,13 +185,40 @@ static func track_name(index: int) -> String:
 	return definition.track_name
 
 
-## Which slot a track file sits in, or -1 for one that is not on the list.
+## Whether a road file is a bot road rather than a time trial. Asked of the
+## file rather than of a slot, because `Solo` is handed a file and wants the
+## answer before it has built anything.
+static func is_bot_road(track_file: String) -> bool:
+	return BOT_FILES.has(track_file)
+
+
+## The bot road standing at the end of a block of ten, or an empty string for a
+## block whose door is not built yet.
+##
+## Here rather than worked out at the call sites, because the arithmetic that
+## turns a block into a road and back is the one thing the menu and the race
+## have to agree about: the menu opens a door and the race writes down which
+## door was opened, and the two are the same number or the gate opens the wrong
+## ten.
+static func bot_road(block: int) -> String:
+	if block < 0 or block >= BOT_FILES.size():
+		return ""
+	return BOT_FILES[block]
+
+
+## Which block a bot road is the door at the end of, or -1 for a road that is
+## not one.
+static func block_of_bot_road(track_file: String) -> int:
+	return BOT_FILES.find(track_file)
+
+
+## Which slot a road file sits in, or -1 for one that is not on any list.
 static func index_of(track_file: String) -> int:
-	var normal := FILES.find(track_file)
-	if normal >= 0:
-		return normal
-	var acrobatic := ACROBATIC_FILES.find(track_file)
-	return COUNT + acrobatic if acrobatic >= 0 else -1
+	for kind in [NORMAL, ACROBATIC, BOT]:
+		var at: int = _list(kind).find(track_file)
+		if at >= 0:
+			return first(kind) + at
+	return -1
 
 
 ## What a lap of this track is worth: gold, silver and bronze in seconds, or

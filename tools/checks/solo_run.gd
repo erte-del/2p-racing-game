@@ -208,6 +208,7 @@ func _check_the_endless_course(previous: Node) -> int:
 ## set its speed outright, which drives nothing like the car a player has.
 func _drive(solo: Node, track: Track, car: Car) -> bool:
 	var bot := BotDriver.new(track, car)
+	bot.finish_planning()
 	car.driver = bot
 	var resets := 0
 	for i in 60 * 150:
