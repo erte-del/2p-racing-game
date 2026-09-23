@@ -2,8 +2,9 @@
 
 Five things to add to the game, written out properly: what each one is, why it
 is worth having, the rules it has to obey, and the files it lands in. Damage
-mode and traps are built (2026-09-16), and the acrobatic tracks with them
-(2026-09-18); nothing else here is yet.
+mode and traps are built (2026-09-16), the acrobatic tracks with them
+(2026-09-18), the bot and the medal gate after those (2026-09-22), and the
+coins after those (2026-09-23); the shop and car customisation are not.
 
 The order below is the order they should be built in, and that order is not
 arbitrary - damage needs nothing, traps need nothing, but the bot needs a
@@ -28,7 +29,7 @@ drives it and says so, and none of the five below is an exception.
 2. [Traps](#2-traps) - **done**
 3. [Acrobatic tracks](#3-acrobatic-tracks) - **done**
 4. [The bot, and the medal gate](#4-the-bot-and-the-medal-gate) - **done**
-5. [Coins](#5-coins)
+5. [Coins](#5-coins) - **done**
 6. [The shop](#6-the-shop)
 7. [Car customisation](#7-car-customisation)
 8. [What all of this touches](#what-all-of-this-touches)
@@ -834,6 +835,52 @@ every time the car is retuned.
 
 ## 5. Coins
 
+> **Done, 2026-09-23.** Built to the spec below, with these additions:
+>
+> - **Laid-out tracks get coins too.** The spec left it open by talking about
+>   "a course", and `adopt` takes a track file at its word about what is on the
+>   road. But a coin is not part of what a track file describes - it is not a
+>   corner to be driven or a barrier to be got past, it is loose change on
+>   somebody else's road - so the same pass runs over both, seeded off the
+>   track's name so a track always has its coins in the same places. High roads
+>   get none: one there would be change the course's own count knows nothing
+>   about.
+> - **A coin also has to be clear of what stands just past it.** Keeping one
+>   out of barriers is not enough. A coin lined up with a wall fourteen metres
+>   on is not an offer, it is bait, so a coin has to sit in the way past every
+>   standing row within `coin_run_up` of it as well as in the way past whatever
+>   is beside it.
+> - **The disc leans 26 degrees out of upright.** Turning about the upright
+>   itself, a coin a quarter turn from facing the driver is a line 14 cm wide -
+>   invisible for about a third of a second, which at thirty metres a second is
+>   ten metres of road. Leaned, the worst it ever shows is an ellipse.
+> - **Coins are banked in the furniture**, at the moment the car drives into
+>   one, rather than by whichever scene is running the race. Two scenes run
+>   races today and a coin that paid in one and quietly did not in the other is
+>   a bug nobody can see. It is also what makes an abandoned run's coins count
+>   without anything having to remember to let them.
+>
+> Differences from the spec:
+>
+> - **The purse is above the buttons on the title screen, not below.** The
+>   column already runs to the bottom of a 720-high window, so a total under it
+>   would be a total nobody ever sees. It is still against that column, which
+>   is where the Shop button goes.
+> - `Purse` also holds `spend`, `buy` and `owns`, because the file has to hold
+>   what has been bought and the purse is the only thing that knows what is
+>   already in it. The shop itself is section 6 and is not built.
+>
+> Found on the way, and **not fixed** because it is not this: `pad_layout.gd`
+> parks its car by `curve.sample_baked(offset)`, and a course offset is a
+> distance along the flat while the curve is a 3D line. On a course with climbs
+> the two are metres apart by the far end. It does not fail today because pads
+> are on flat straights early on; `coins.gd` and `coin_shot.gd` use
+> `Track.centre_at` instead.
+>
+> What it does and why is in the README under **Coins**. The checks are
+> `tools/checks/coins.gd` and `coin_shot.gd`. Everything below is the original
+> spec, kept for the reasoning.
+
 ### What it is
 
 Coins scattered along the road, picked up by driving through them, spent in the
@@ -848,16 +895,16 @@ is closest to a boost pad: an `Area3D` that fires once when a car enters it
 [scripts/track_furniture.gd:296](scripts/track_furniture.gd:296)), just
 without the speed.
 
-- [ ] `TrackFeatures.COIN`, a fourth kind.
-- [ ] A `_place_coins` pass, after pads and obstacles so it knows what is
+- [x] `TrackFeatures.COIN`, a fourth kind.
+- [x] A `_place_coins` pass, after pads and obstacles so it knows what is
 	  already there. Count rolled in `[5, 15]`.
-- [ ] Coins obey the same `keep_out` the pads do - not on the start line, not
+- [x] Coins obey the same `keep_out` the pads do - not on the start line, not
 	  on the finish, not on a checkpoint
 	  ([scripts/track_features.gd:88](scripts/track_features.gd:88)). A free
 	  coin for being reset is not a coin anyone earned.
-- [ ] Never inside a barrier, never in the hole of a jump, never on a trap's
+- [x] Never inside a barrier, never in the hole of a jump, never on a trap's
 	  path in any phase.
-- [ ] Put them where they are worth something. A coin in the middle of an empty
+- [x] Put them where they are worth something. A coin in the middle of an empty
 	  straight is not a decision; a coin in the fast lane of the fork, or on the
 	  outside line of a corner, or just past a barrier, is. Weight the placement
 	  towards the interesting half of the road rather than rolling a lateral
@@ -865,25 +912,25 @@ without the speed.
 
 ### Picking one up
 
-- [ ] Fires once per car per course. A coin taken by player one is gone, for
+- [x] Fires once per car per course. A coin taken by player one is gone, for
 	  both - it is one coin.
-- [ ] Both players' coins go to the same purse. The shop is the game's, not a
+- [x] Both players' coins go to the same purse. The shop is the game's, not a
 	  player's, and two people on one keyboard share a machine.
-- [ ] Taking one shows something: the coin lifting and fading, a small number,
+- [x] Taking one shows something: the coin lifting and fading, a small number,
 	  the purse in the corner ticking up. A pickup with no feedback reads as a
 	  bug.
-- [ ] **A coin taken on a run that is abandoned still counts.** Keeping a run's
+- [x] **A coin taken on a run that is abandoned still counts.** Keeping a run's
 	  coins in escrow until the flag punishes exactly the players who are
 	  struggling, and the purse is not a score.
 
 ### The purse
 
-- [ ] `scripts/purse.gd`, an autoload, saved to `user://purse.cfg`: how many
+- [x] `scripts/purse.gd`, an autoload, saved to `user://purse.cfg`: how many
 	  coins, and what has been bought. Kept apart from `GameSettings` for the
 	  same reason `TrackTimes` is - a coin is a thing that happened, not a
 	  preference.
-- [ ] Shown on the title screen, small, near the Shop button.
-- [ ] This is a single-player local game with no server behind the economy, so
+- [x] Shown on the title screen, small, near the Shop button.
+- [x] This is a single-player local game with no server behind the economy, so
 	  there is nothing to protect against: a player who wants to edit
 	  `purse.cfg` has bought the thing already. Do not build anti-cheat for
 	  it. (Unlike times, which go to a shared board and are constrained in the

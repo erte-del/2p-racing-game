@@ -3505,6 +3505,200 @@ screen, counting the cells across the blocks rather than off one grid.
 Godot --path . --headless --script tools/checks/track_select.gd
 ```
 
+## Coins
+
+Gold discs standing a metre above the road, taken by driving through them and
+spent in the shop. Every course carries between **5 and 15**, rolled per
+course.
+
+A coin is furniture, so it is planned by the thing that plans furniture and
+built by the thing that builds it: `TrackFeatures.COIN` is a fourth kind of
+placement beside the pads, the barriers and the traps, and `TrackFurniture`
+turns it into an `Area3D` with a disc inside it. It is closest to a boost pad -
+something that fires once when a car drives into it - without the speed.
+
+It is also the only piece of furniture that has no opinion about how the course
+drives. Nothing is blocked by one, nothing is landed on one, and none of the
+rules about whether a barrier can be got past look at one. That is what lets
+the coins go down last, over whatever road the rest of the plan left, in a pass
+of their own.
+
+### Where they go
+
+`scatter_coins` runs after everything else, seeded separately from the course.
+Separately on purpose: rolling the coins out of the course's own generator
+would move every roll after it, and every course in the game would have come
+out different the day coins were turned on.
+
+Coins obey the same `keep_out` the pads do - `pad_keep_out` (20 m) from the
+grid, the finish and every respawn - because a coin picked up for being put
+back on the road is not a coin anybody earned. They are never in the hole of a
+jump, never over the kerb, never inside a barrier, a kicker or a platform, and
+never anywhere a trap passes through in any phase, which is checked against the
+whole sweep rather than against the places it rests.
+
+Two rules are about the car rather than the plan. A coin has to sit inside one
+of the ways past whatever stands at its own offset, or it is money behind a
+wall. And it has to sit inside the way past every row standing within
+`coin_run_up` (14 m) ahead of it, because a coin lined up with a barrier a few
+metres past it is not an offer, it is bait: a car that went for it has already
+committed to the line it is about to hit.
+
+Where they go inside all of that is a weighted draw rather than a uniform one.
+A coin in the middle of an empty straight is not a decision - it is a pickup on
+the line the car was already on. So the course is walked every `coin_step`
+(4 m), each offset offers at most one place, and the interesting ones are drawn
+from far more often:
+
+| Where | Weight |
+| --- | --- |
+| The fast lane of the fork | 5.0 |
+| The gap just past a row of barriers, 5-16 m on | 4.0 |
+| The outside line of a corner | 2.5 |
+| Open road, anywhere across it | 0.6 |
+
+Only the fast lane of a fork, never the clear side: a coin over there would pay
+a player for giving the fork's choice a miss, which is the one thing that set
+piece exists to make cost something. And only rows that stand still count as
+"just past a barrier" - the way past a trap is somewhere else a second later,
+so a coin left in one is a coin in the middle of the road.
+
+Over a hundred courses that comes out at about 15% in a fork, 10% just past a
+row, 42% on a corner and 33% on open road.
+
+The coins are packed closer rather than left off if a course cannot hold them
+`min_coin_spacing` (18 m) apart - a short course, or one that is mostly jump
+and checkpoint, still owes the player five. A course with four coins on it
+would be a shop that is quietly slower to reach and nobody would ever know why.
+
+Laid-out tracks get the same pass. What a track file says is on the road is
+what is on it, and that is what `TrackFeatures.adopt` is for - but a coin is
+not part of what a track file describes. It is not a corner to be driven or a
+barrier to be got past, it is loose change on somebody else's road. An authored
+track's coins are seeded off its own name, so a track always has them in the
+same places: a player who drove it yesterday and knows where they are is
+remembering the road, which is the whole point of a road worth learning. High
+roads get none - one there would be change the course's own count knows nothing
+about, and a player who took the kicker would be paid twice for it.
+
+### Taking one
+
+Driving through a coin banks it, once, for both players. It is one coin:
+whoever reaches it first has it, and what the other one sees is an empty piece
+of road, which is exactly what it is.
+
+It is banked in the furniture, at the moment the car drives into it, rather
+than handed to whichever scene is running the race. Two scenes run races today
+and there will be more, and a coin that paid in one of them and quietly did not
+in another is the kind of bug nobody reports because nobody can see it. It also
+settles what happens to a run that is given up halfway: **a coin taken on an
+abandoned run still counts**, because the coins were already in the purse and
+there was never anywhere else for them to be. Keeping a run's coins in escrow
+until the flag would punish exactly the players who are struggling, and the
+purse is not a score.
+
+Three things happen when one is taken, because a pickup with no feedback reads
+as a bug - a thing that was there is suddenly not there. The coin lifts
+`coin_take_rise` (1.7 m) and fades out over `coin_take_seconds` (0.5 s); a small
+`+1` goes up beside it, off to one side rather than through the middle of it;
+and the tally in the corner ticks.
+
+### What it looks like
+
+The disc faces the way a car arrives from rather than lying flat on the road,
+because a thing to be driven through has to be seen from the run up, and it
+turns slowly about the upright so that it flashes from a full face to an edge
+and back. It is gold and lit hard, like the pads and the rings, because half of
+every race is at night.
+
+It also **leans** `coin_lean` (26 degrees) out of upright, so the axis it turns
+about is a cone rather than the upright itself. Without that, a coin a quarter
+turn from facing the driver is edge on, and edge on it is a line 14 cm wide -
+invisible, for about a third of a second, which at thirty metres a second is
+ten metres of road. Leaned over, the worst it ever shows is an ellipse that far
+off the full face.
+
+The coins turn on the race clock, the same one the traps sweep on: two players
+on a split screen should be looking at the same coin at the same angle, and a
+race put back on the line should put them back where they were. Each one starts
+at its own angle, taken from where it sits on the course, so a course does not
+flash all over at once like a row of indicators.
+
+### The purse
+
+`Purse` is an autoload, saved to `user://purse.cfg`: how many coins there are
+and what has been bought. It is kept apart from `GameSettings` for the reason
+`TrackTimes` is - a setting is something a player chose and can change back,
+and a coin is something that happened - and apart from `TrackTimes` as well,
+because a time belongs to a track and a coin belongs to nobody in particular.
+
+One purse for the whole game rather than one each. Two people on a split screen
+are sharing a keyboard and a machine, and the shop they are saving for is the
+machine's. Splitting it would turn every race into a squabble about who got to
+the coin first, which is not the game this is. On a split screen both halves
+show the same number, which is not a mistake: they are saving up together.
+
+There is no server behind any of this and nothing here is worth protecting. A
+player who wants to open `purse.cfg` and write a bigger number in it has
+already bought the thing, so there is no checksum, no obfuscation and no second
+copy of the count to disagree with the first. That is the opposite of times,
+which go to a shared board and are constrained in the database - see
+`backend/schema.sql`.
+
+`PurseTally` draws the total: one gold disc and one number, small, in the
+corner of a race and over the buttons on the title screen. Drawn rather than
+written, because the thing it is counting is a gold disc and a player should
+not have to read a word to know that. It swells and settles when a coin goes in
+- without that, a pickup on the road and a number in the corner are two things
+a player has to connect for themselves - and it does not tick for spending,
+which is something they did deliberately on a screen of its own. On the title
+it sits against the column of buttons rather than off in a corner, because the
+shop that spends it belongs in that column.
+
+Both `TrackFurniture` and `PurseTally` find the purse off the tree rather than
+naming it. `Purse` is an autoload and those two are `class_name` scripts, and
+the two do not mix: every check under `tools/` is a `--script` run, which
+compiles those files and everything they depend on before the autoloads exist,
+and a bare `Purse` in either fails to compile every one of them.
+
+### Under chaos
+
+Chaos rerolls where the coins are, because it rerolls the road they are on. It
+does not reroll how many there are: the 5-15 roll is the same with chaos on and
+off. A chaos run that also paid better would be the efficient way to farm
+rather than a different race, and the shop would end up priced against a mode
+instead of against a game.
+
+### Checking it
+
+`tools/checks/coins.gd` is the whole of it. It exercises the purse on its own -
+what goes in comes out, what is spent is gone, nothing is bought twice, and it
+all survives being written down and read back. It lays out a hundred courses
+and holds every coin on them to every rule above, counting where they landed so
+that the weighting failing quietly shows up as a number. It builds every
+laid-out track, checks the count on each, checks that laying the same track out
+twice puts the coins in the same places, and checks that no high road carries
+any. Then it drives a car into a real coin: through it once for one coin,
+leaves it sitting there to see that a coin does not pay for as long as a car is
+inside it, drives away and back through the same coin for still one coin, parks
+alongside for none, and generates a fresh course to see that the new coins pay.
+Last it rolls a run of chaos worlds and counts those.
+
+It cannot touch the player's own purse: every check under `tools/` is
+sandboxed, so what it banks goes to a purse of its own. See `Sandbox`.
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/coins.gd
+```
+
+`tools/checks/coin_shot.gd` looks at a coin from the car's own view, by day and
+at night, caught at the worst angle it ever turns to, and again a moment after
+it has been taken:
+
+```
+Godot --path . --script tools/checks/coin_shot.gd -- /tmp/shots
+```
+
 ## Adding a track
 
 Everything a track needs is in place, so adding a twenty-first is three steps
