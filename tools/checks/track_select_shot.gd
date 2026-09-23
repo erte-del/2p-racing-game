@@ -16,8 +16,17 @@ func _init() -> void:
 	var times: Node = root.get_node_or_null(^"/root/TrackTimes")
 	if times != null:
 		times.save_path = "user://times_shot.cfg"
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(times.save_path))
 		times.load_times()
 		times.record("res://tracks/01_first_light.gd", 41.55)
+	# And a profile that has won nothing, so the pictures below start where a
+	# player starts: the first ten open, the second ten shut, and the door at
+	# the end of the first ten asking for golds that are not there yet.
+	var progress: Node = root.get_node_or_null(^"/root/Progress")
+	if progress != null:
+		progress.save_path = "user://progress_shot.cfg"
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(progress.save_path))
+		progress.load_progress()
 
 	var menu: Node = load("res://scenes/menu.tscn").instantiate()
 	root.add_child(menu)
@@ -50,19 +59,37 @@ func _init() -> void:
 		await process_frame
 	root.get_texture().get_image().save_png("%s/03_tracks.png" % out)
 
-	# And the rows the page opens scrolled away from, whose names are no less
-	# likely to be too long for their columns.
+	# And the rest of the page: the door at the end of the first ten, and the
+	# second ten shut behind it. This is the half of the grid the three states
+	# are actually on, so it is the half worth looking at hardest.
 	var scroll: ScrollContainer = menu.get_node("TrackChoice/Page/Panel/Margin/Box/Scroll")
-	var grid: GridContainer = scroll.get_node("Grid")
-	scroll.scroll_vertical = int(grid.get_child(grid.columns * 2).position.y)
-	for i in 12:
-		await process_frame
+	var blocks: VBoxContainer = scroll.get_node("Blocks")
+	await _scroll_to_the_door(scroll, blocks)
 	root.get_texture().get_image().save_png("%s/04_tracks_below.png" % out)
+
+	# The same page with three golds in the first ten and then with five:
+	# the count on the door has to move, and on the fifth the door has to
+	# open. Three and five rather than none and five because the picture worth
+	# checking is the one where a player is partway there and the page is
+	# telling them how far.
+	if times != null and progress != null:
+		var golds: int = progress.GOLDS_NEEDED
+		for index in golds:
+			if index == golds - 2:
+				await _look_at_the_gate(menu, scroll, blocks,
+					"%s/05_gate_short.png" % out)
+			times.record(TrackRoster.file(index),
+				TrackRoster.targets(index).x - 0.5)
+		await _look_at_the_gate(menu, scroll, blocks, "%s/06_gate_open.png" % out)
+		# And once it has been beaten, with the ten behind it open.
+		progress.win(0)
+		await _look_at_the_gate(menu, scroll, blocks, "%s/07_gate_won.png" % out)
+		print("the door reads '%s'" % menu.call("_doors")[0].text)
 
 	# Said as well as drawn: a name cut off at one end of twenty is easy to
 	# look straight past in a picture.
 	var too_long := 0
-	for cell in grid.get_children():
+	for cell in menu.call("_track_cells"):
 		var label := cell.get_child(0) as Label
 		var needs := label.get_theme_font("font").get_string_size(
 			label.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
@@ -72,6 +99,29 @@ func _init() -> void:
 			too_long += 1
 	if times != null:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(times.save_path))
+	if progress != null:
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(progress.save_path))
 	print("mode page and track select drawn, %d names too long for their columns"
 		% too_long)
 	quit()
+
+
+## Build the page again and look at the door at the end of the first ten, which
+## is where all three states are on the screen at once: the open ten above it,
+## the door itself, and the shut ten below.
+func _look_at_the_gate(menu: Node, scroll: ScrollContainer, blocks: VBoxContainer,
+		where: String) -> void:
+	menu.call("_refresh_the_track_grid")
+	for i in 12:
+		await Engine.get_main_loop().process_frame
+	await _scroll_to_the_door(scroll, blocks)
+	Engine.get_main_loop().root.get_texture().get_image().save_png(where)
+
+
+## Scroll down to the second row of the first block, which puts the door and
+## the block under it on the screen.
+func _scroll_to_the_door(scroll: ScrollContainer, blocks: VBoxContainer) -> void:
+	var grid := blocks.get_child(0) as GridContainer
+	scroll.scroll_vertical = int(grid.get_child(grid.columns).position.y)
+	for i in 12:
+		await Engine.get_main_loop().process_frame

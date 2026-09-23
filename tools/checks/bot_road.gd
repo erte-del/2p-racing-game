@@ -7,8 +7,9 @@ extends SceneTree
 # is about the race it is in: that a second car appears on a bot road and on
 # nothing else, that the two of them start side by side and know about each
 # other, that either of them crossing the line ends it and says so, that a
-# broken car ends it the other way round, and that nothing about any of it is
-# written down. A bot road is a door, not a time trial.
+# broken car ends it the other way round, and that the only thing written down
+# is the one thing a door has to write down: that it was opened. A bot road is
+# a door, not a time trial - no time is kept on one and no medal is handed out.
 #
 # The player's car is driven by a BotDriver here too, because a check has no
 # hands. That is the only cheat: the car it drives is the player's car, taking
@@ -27,6 +28,7 @@ var _faults := 0
 var _settings: Node
 var _times: Node
 var _garage: Node
+var _progress: Node
 
 
 func _init() -> void:
@@ -39,6 +41,14 @@ func _init() -> void:
 	if _times != null:
 		_times.save_path = "user://times_bot_road.cfg"
 		_wipe_the_times()
+	# A won race is written down, so this check is pointed at a profile of its
+	# own for the same reason it is pointed at a scratch times file: a check
+	# that opens the second block of ten for whoever ran it has taken something
+	# away from them.
+	_progress = root.get_node_or_null(^"/root/Progress")
+	if _progress != null:
+		_progress.save_path = Sandbox.path("user://progress_bot_road.cfg")
+		_wipe_the_progress()
 
 	await _a_time_trial_carries_no_bot()
 	await _the_line_is_worked_out_during_the_countdown()
@@ -51,6 +61,7 @@ func _init() -> void:
 	_the_places()
 
 	_wipe_the_times()
+	_wipe_the_progress()
 	print("%d faults" % _faults)
 	quit(1 if _faults > 0 else 0)
 
@@ -246,6 +257,9 @@ func _the_bot_wins() -> void:
 ## The player's car driven properly against a bot turned down, which is the race
 ## the other way round.
 func _the_player_wins() -> void:
+	if _progress != null:
+		_wipe_the_progress()
+		_progress.load_progress()
 	var solo := await _open(ROAD, 0.3)
 	await _race(solo, 1.0)
 	print("the player wins: %s / %s / %s" % [
@@ -254,6 +268,20 @@ func _the_player_wins() -> void:
 		_fault("the player got there first and the panel did not say so")
 	if not _line(solo, "Note").ends_with(" m"):
 		_fault("the panel does not say by how much")
+	# And the one thing a won door writes down. Without this the race is a race
+	# nobody can get past: the select screen asks `Progress` which doors have
+	# been opened, and nothing else in the game ever tells it.
+	if _progress != null:
+		var block := TrackRoster.block_of_bot_road(ROAD)
+		print("  written down: block %d won %s, the ten after it open %s"
+			% [block, _progress.won(block), _progress.open(block + 1)])
+		if not _progress.won(block):
+			_fault("winning the race did not open the door")
+		# Off the disk as well as in memory, or it is open until the game is
+		# next closed.
+		_progress.load_progress()
+		if not _progress.won(block):
+			_fault("the win did not survive being written out")
 	_close(solo)
 
 
@@ -388,6 +416,12 @@ func _who(leader: int) -> String:
 	if leader < 0:
 		return "level"
 	return "the player" if leader == 0 else "the bot"
+
+
+func _wipe_the_progress() -> void:
+	if _progress == null:
+		return
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(_progress.save_path))
 
 
 func _wipe_the_times() -> void:

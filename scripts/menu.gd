@@ -102,6 +102,23 @@ extends Control
 ## The smallest a name too long for its column is shrunk to. Below this a
 ## name stops reading as a name from where a menu is looked at.
 @export var track_name_smallest_font_size := 13
+## How many tracks stand across the grid.
+##
+## Five across and ten to a block means a block is exactly two rows, which is
+## what lets a door sit between one block and the next without any cell losing
+## the column it is lined up in.
+@export var track_columns := 5
+## The gap between cells, and between a block and the door under it.
+@export var track_spacing := 14
+## How big the lock over a shut track is drawn, in pixels. Big enough to read
+## as a lock at a glance over a picture, small enough that the road under it is
+## still a road rather than a background.
+@export var lock_size := 46.0
+## How tall a door is, in pixels, and the size the words on it are set in.
+## Plainly not a track: a track is a picture 152 across, a door is a strip the
+## width of the page with nothing in it but words.
+@export var door_height := 56.0
+@export var door_font_size := 22
 
 @export_group("Chaos")
 ## The chaos button never settles on a colour. Everything else on the page
@@ -121,6 +138,17 @@ extends Control
 ## enough to read as movement, short enough that a player who knows what they
 ## want is not waiting on it.
 @export var slide_seconds := 0.22
+
+## The colour of the gate wherever it shows: the frame round a shut track, the
+## lock over it, and the door at the end of a block. The bot's own amber, taken
+## from the car it paints rather than picked again here, because the one thing
+## that opens any of it is beating that car.
+const GATE_COLOUR := Solo.BOT_COLOUR
+
+## The colour of a door that has been won. Green rather than a fourth shade of
+## the gate's amber: a door that is behind a player is a different thing from
+## one in front of them, and the grid is read at a glance.
+const WON_COLOUR := Color(0.44, 0.85, 0.52)
 
 @onready var _title: Label = $TitleSlot/Title
 @onready var _play: Button = $Play
@@ -150,7 +178,7 @@ extends Control
 @onready var _acrobatic_button: Button = $ModeChoice/Page/Panel/Margin/Box/ModeSlot/Inner/KindSlot/Inner/Row/Acrobatic
 @onready var _track_heading: Label = $TrackChoice/Page/Panel/Margin/Box/Heading
 @onready var _track_choice: Control = $TrackChoice
-@onready var _track_grid: GridContainer = $TrackChoice/Page/Panel/Margin/Box/Scroll/Grid
+@onready var _track_blocks: VBoxContainer = $TrackChoice/Page/Panel/Margin/Box/Scroll/Blocks
 @onready var _track_back: Button = $TrackChoice/Page/Panel/Margin/Box/Back
 @onready var _world: Node3D = $World
 @onready var _orbit: Camera3D = $Orbit
@@ -196,6 +224,12 @@ func _ready() -> void:
 	# A time pulled down off the server is a time this screen is showing the
 	# old version of, so the grid is rebuilt when the sync moves one.
 	Leaderboard.times_changed.connect(_on_times_changed)
+	# `Progress.changed` is deliberately not listened to here beside it, and the
+	# difference is worth writing down. A time can move while this screen is up,
+	# because the sync runs underneath it. A bot race cannot: it is a scene of
+	# its own, and coming back from it builds this one again from nothing. A
+	# player who wins one and comes back finds the next ten open because the
+	# grid was built afresh, not because anything told it.
 	# A build with no server in it should not grow a button that cannot do
 	# anything, or a board that is always empty.
 	_account_button.visible = Leaderboard.available()
@@ -224,6 +258,14 @@ func _open_where_they_left_off() -> void:
 	_slide_kinds(true)
 	var index := TrackRoster.index_of(GameSettings.track_file)
 	var kind := TrackRoster.kind_of(index)
+	# A bot road is a door on the normal grid rather than a grid of its own, so
+	# coming back off one opens the ten it stands at the end of, with the
+	# cursor on the door itself - which is where a player who has just lost to
+	# the bot is about to press again.
+	if kind == TrackRoster.BOT:
+		_open_track_grid(TrackRoster.NORMAL)
+		_focus_door(index - TrackRoster.first(TrackRoster.BOT))
+		return
 	_open_track_grid(kind)
 	_focus_track(index - TrackRoster.first(kind))
 
@@ -342,95 +384,394 @@ func _start_infinite(chaos: bool) -> void:
 
 # --- choosing a track ---------------------------------------------------
 
-## One cell per track the game intends to have, not per track it has.
+## The grid of tracks: blocks of ten, each with the door that opens the next
+## ten standing under it.
 ##
-## A slot with nothing in it is still shown, greyed and unpressable, because
-## nineteen doors that do not open yet say what the game is going to be. A
-## short grid that grew every few weeks would say nothing at all.
+## One cell per track the game intends to have, not per track it has, and three
+## states on a cell rather than two. A slot with nothing in it is still shown,
+## greyed and unpressable, because nineteen doors that do not open yet say what
+## the game is going to be; a short grid that grew every few weeks would say
+## nothing at all. A built track a player has not opened yet is shown a third
+## way, with its picture behind a lock, because a road that exists and is shut
+## is not the same thing as a road that has not been drawn - showing the two
+## alike tells a player the game is unfinished when in fact they are.
 ##
-## Built here rather than in the scene: twenty cells is a great deal of scene
-## to write down, and every one of them would have to be edited again the day
-## a track was added.
+## A grid per block rather than one grid of twenty. Five across and ten to a
+## block means a block is exactly two rows, so a door can sit in a strip of its
+## own between one block and the next while every cell keeps the column it was
+## always lined up in.
+##
+## Built here rather than in the scene: twenty cells is a great deal of scene to
+## write down, and every one of them would have to be edited again the day a
+## track was added.
 func _fill_the_track_grid() -> void:
+	_track_blocks.add_theme_constant_override("separation", track_spacing)
 	var first := TrackRoster.first(_track_kind)
-	for index in range(first, first + TrackRoster.count(_track_kind)):
-		var exists := TrackRoster.exists(index)
-		# Each of these is asked once a cell. The name and the targets are
-		# each a track file built and described, and the best time is checked
-		# against the file on the disk every time it is asked for.
-		var called := TrackRoster.track_name(index)
-		var targets := TrackRoster.targets(index)
-		var best := TrackTimes.best(TrackRoster.file(index)) if exists else -1.0
+	var total := TrackRoster.count(_track_kind)
+	var block := 0
+	while block * Progress.BLOCK < total:
+		var grid := _a_block_grid()
+		_track_blocks.add_child(grid)
+		for offset in range(block * Progress.BLOCK,
+				mini((block + 1) * Progress.BLOCK, total)):
+			var cell := _a_track_cell(first + offset)
+			grid.add_child(cell)
+			# Not until now: off the page, the name does not know which font
+			# the theme will draw it in, and so can say neither how wide it
+			# will be nor how tall the rest of its row is.
+			_fit_the_name(cell.get_child(0) as Label)
+		# Only the time trials are gated, so only they have doors. The
+		# acrobatic tracks are one block of ten with nothing at the end of it:
+		# they are a different thing to drive, in their own grid, and a player
+		# who cannot find five golds among the first ten should still be free
+		# to go and fly through some rings.
+		if _track_kind == TrackRoster.NORMAL:
+			_track_blocks.add_child(_a_door(block))
+		block += 1
+	_tie_the_blocks_together()
 
-		var cell := VBoxContainer.new()
-		cell.add_theme_constant_override("separation", 4)
 
-		var label := Label.new()
-		label.text = called.to_upper()
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		# Held to the width of the picture rather than allowed to set the width
-		# of its column: one long name would otherwise stretch the whole grid
-		# out around it. A name that does not fit is set smaller to fit it,
-		# once the cell is on the grid; clipped only past the smallest size.
-		label.autowrap_mode = TextServer.AUTOWRAP_OFF
-		label.clip_text = true
-		label.custom_minimum_size.x = track_button_size
-		if not exists:
-			label.add_theme_color_override("font_color", Color(0.55, 0.58, 0.66))
-		cell.add_child(label)
+## Tie the blocks to the doors between them, for the keyboard.
+##
+## Godot works out where focus goes next from where things are on the screen,
+## which is right inside a grid and no use at all at a seam: what lies below
+## the bottom row of a block is a door in a container of its own, and the
+## search walks straight past it and off the page altogether - pressing down
+## off the last row of the first ten landed on the title screen behind it.
+##
+## So the seams are said outright. Down off the last row is the door, down off
+## the door is the top row of the ten it opens, and back up again the same way.
+## Only the seams: inside a block the geometry has always been right.
+func _tie_the_blocks_together() -> void:
+	# The last row built so far, and a door still waiting for the block under
+	# it - the page is a grid, a door, a grid, a door, and each one is tied to
+	# the one before as it goes by.
+	var last_row: Array = []
+	var waiting: Button = null
+	for child in _track_blocks.get_children():
+		var door := child as Button
+		if door != null:
+			for button in last_row:
+				button.focus_neighbor_bottom = door.get_path()
+			if not last_row.is_empty():
+				door.focus_neighbor_top = last_row[0].get_path()
+			last_row = []
+			waiting = door
+			continue
+		var grid := child as GridContainer
+		if grid == null:
+			continue
+		var buttons: Array = []
+		for cell in grid.get_children():
+			var button := _button_in(cell)
+			if button != null:
+				buttons.append(button)
+		if buttons.is_empty():
+			continue
+		if waiting != null:
+			var top := buttons.slice(0, mini(grid.columns, buttons.size()))
+			for button in top:
+				button.focus_neighbor_top = waiting.get_path()
+			waiting.focus_neighbor_bottom = top[0].get_path()
+			waiting = null
+		last_row = buttons.slice(
+			(buttons.size() - 1) / grid.columns * grid.columns)
 
-		var button := Button.new()
-		button.custom_minimum_size = Vector2(track_button_size, track_button_size)
-		button.expand_icon = true
-		button.icon = TrackRoster.thumbnail(index)
-		button.disabled = not exists
-		if button.disabled:
-			# The theme greys a disabled button until it disappears into the
-			# page, which reads as a hole rather than as a track still to
-			# come. An empty slot gets its own frame instead: dark, outlined,
-			# and plainly a place where something goes.
-			button.add_theme_stylebox_override("disabled", _empty_slot())
-		button.tooltip_text = _what_it_asks(exists, called, targets)
-		if not button.disabled:
-			button.pressed.connect(_start_track.bind(TrackRoster.file(index)))
-		cell.add_child(button)
 
-		# A bar of the medal's colour directly under the picture. Colouring
-		# the time alone was not enough: against a dark panel a silver time
-		# and a time worth nothing are two shades of pale, and a medal that
-		# has to be compared with its neighbours to be seen is not one.
-		var medal := Medal.earned(best, targets)
-		var rule := ColorRect.new()
-		rule.custom_minimum_size = Vector2(track_button_size, 5)
-		rule.color = Medal.colour(medal)
-		rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		rule.visible = medal != Medal.NONE
-		cell.add_child(rule)
+## One block's worth of cells, five across.
+func _a_block_grid() -> GridContainer:
+	var grid := GridContainer.new()
+	grid.columns = track_columns
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", track_spacing)
+	grid.add_theme_constant_override("v_separation", track_spacing)
+	return grid
 
-		# The time under the picture, because it is the thing that changes.
-		# A track with no time to its name says so rather than showing a dash:
-		# there is a difference between a road nobody has finished and one
-		# that is not built.
-		var time := Label.new()
-		time.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		time.custom_minimum_size.x = track_button_size
-		time.clip_text = true
-		time.add_theme_font_size_override("font_size", 20)
-		if best >= 0.0:
-			# Coloured to match the bar rather than spelled out. A cell this
-			# size has room for a number or for a word, and the number is the
-			# one a player is trying to change.
-			time.text = RaceClock.format(best)
-			time.add_theme_color_override("font_color", Medal.colour(medal))
-		elif exists:
-			time.text = "NO TIME"
-			time.add_theme_color_override("font_color", Color(0.55, 0.58, 0.66))
-		cell.add_child(time)
 
-		_track_grid.add_child(cell)
-		# Not until now: off the grid, the label does not know which font the
-		# page's theme will draw it in, and so cannot say how wide it will be.
-		_fit_the_name(label)
+## One track: its name, its picture, what a lap of it was worth and what it is
+## worth now - or, if it is still shut, a lock over the picture and the one
+## thing to go and do about it.
+func _a_track_cell(index: int) -> VBoxContainer:
+	var exists := TrackRoster.exists(index)
+	var shut := exists and not _open_to_the_player(index)
+	# Each of these is asked once a cell. The name and the targets are
+	# each a track file built and described, and the best time is checked
+	# against the file on the disk every time it is asked for.
+	var called := TrackRoster.track_name(index)
+	var targets := TrackRoster.targets(index)
+	var best := TrackTimes.best(TrackRoster.file(index)) if exists else -1.0
+
+	var cell := VBoxContainer.new()
+	cell.add_theme_constant_override("separation", 4)
+
+	var label := Label.new()
+	label.text = called.to_upper()
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Held to the width of the picture rather than allowed to set the width
+	# of its column: one long name would otherwise stretch the whole grid
+	# out around it. A name that does not fit is set smaller to fit it,
+	# once the cell is on the grid; clipped only past the smallest size.
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	label.clip_text = true
+	label.custom_minimum_size.x = track_button_size
+	# Greyed for a slot with nothing in it, and only for that. A shut track
+	# keeps its name in white: the name is the one part of it that is not
+	# being withheld, and a grey name is how this page says "not built".
+	if not exists:
+		label.add_theme_color_override("font_color", Color(0.55, 0.58, 0.66))
+	cell.add_child(label)
+
+	var button := Button.new()
+	button.custom_minimum_size = Vector2(track_button_size, track_button_size)
+	button.expand_icon = true
+	button.icon = TrackRoster.thumbnail(index)
+	button.disabled = not exists or shut
+	if not exists:
+		# The theme greys a disabled button until it disappears into the
+		# page, which reads as a hole rather than as a track still to
+		# come. An empty slot gets its own frame instead: dark, outlined,
+		# and plainly a place where something goes.
+		button.add_theme_stylebox_override("disabled", _empty_slot())
+	elif shut:
+		# The picture stays, dimmed, with a lock over it. What is behind the
+		# gate is a road somebody drew and a player is meant to want to get
+		# to, and an empty frame in its place would hide the reason for
+		# going and earning it.
+		button.add_theme_stylebox_override("disabled", _shut_slot())
+		button.add_theme_color_override("icon_disabled_color", Color(1, 1, 1, 0.26))
+		button.add_child(_a_lock(lock_size, GATE_COLOUR))
+	button.tooltip_text = _what_it_asks(index, called, targets)
+	if not button.disabled:
+		button.pressed.connect(_start_track.bind(TrackRoster.file(index)))
+	cell.add_child(button)
+
+	# A bar of the medal's colour directly under the picture. Colouring
+	# the time alone was not enough: against a dark panel a silver time
+	# and a time worth nothing are two shades of pale, and a medal that
+	# has to be compared with its neighbours to be seen is not one.
+	var medal := Medal.earned(best, targets)
+	var rule := ColorRect.new()
+	rule.custom_minimum_size = Vector2(track_button_size, 5)
+	rule.color = Medal.colour(medal)
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rule.visible = medal != Medal.NONE
+	cell.add_child(rule)
+
+	# The time under the picture, because it is the thing that changes.
+	# A track with no time to its name says so rather than showing a dash:
+	# there is a difference between a road nobody has finished and one
+	# that is not built. A shut track says the same as any other road
+	# nobody has driven, because that is what it is.
+	var time := Label.new()
+	time.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	time.custom_minimum_size.x = track_button_size
+	time.clip_text = true
+	time.add_theme_font_size_override("font_size", 20)
+	if best >= 0.0:
+		# Coloured to match the bar rather than spelled out. A cell this
+		# size has room for a number or for a word, and the number is the
+		# one a player is trying to change.
+		time.text = RaceClock.format(best)
+		time.add_theme_color_override("font_color", Medal.colour(medal))
+	elif exists:
+		time.text = "NO TIME"
+		time.add_theme_color_override("font_color", Color(0.55, 0.58, 0.66))
+	cell.add_child(time)
+	# The name is not fitted here. It cannot be: a cell that is not on the page
+	# yet has no theme to be measured in. `_fill_the_track_grid` does it once
+	# the cell is on its grid.
+	return cell
+
+
+## Whether a slot's track may be driven at all.
+##
+## Only the normal tracks are gated. An acrobatic track is a different thing to
+## drive, shown in its own grid, and nothing about the gate has ever mentioned
+## one; do not fold them into a block as a kindness, because it would be a wall.
+func _open_to_the_player(index: int) -> bool:
+	if TrackRoster.kind_of(index) != TrackRoster.NORMAL:
+		return true
+	return Progress.open(index / Progress.BLOCK)
+
+
+## The door at the end of a block of ten: the race against the computer that
+## opens the next ten.
+##
+## A strip of its own rather than a cell on the grid. It is not a track - no
+## overhead shot, no medal, no time under it, and nothing it does is written
+## down on a leaderboard - and standing it in a row with five tracks would make
+## it read as a sixth. Across the width of the page it reads as what it is: the
+## end of these ten, and the way through to the next.
+##
+## Three things it can be, and the words on it say which: shut, with what it
+## wants; open, with the race to go and drive; or won, and behind them.
+func _a_door(block: int) -> Button:
+	var door := Button.new()
+	door.custom_minimum_size.y = door_height
+	door.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	door.add_theme_font_size_override("font_size", door_font_size)
+	door.clip_text = true
+	var road := TrackRoster.bot_road(block)
+	# The door lets a player into the block after this one, which is the block
+	# whose golds it asks for - `Progress` counts the two the same way round.
+	var wanted := _what_the_gate_wants(block + 1)
+	if road.is_empty():
+		# The same pale empty frame a slot with no track in it wears, for the
+		# same reason: a door that has not been built is not a door that is
+		# shut against the player.
+		door.text = "THE RACE AT THE END OF %s IS NOT BUILT YET" % _block_range(block)
+		door.tooltip_text = "Not built yet."
+		door.disabled = true
+		door.add_theme_stylebox_override(
+			"disabled", _door_face(Color(0.898, 0.929, 1.0), 0.0, 0.16))
+		return door
+
+	var called := TrackRoster.track_name(TrackRoster.first(TrackRoster.BOT) + block)
+	if not Progress.gate_open(block + 1):
+		# Said on the face as well as in the tooltip. A cell has room for a
+		# picture or a word; a strip this wide has room for the sentence, and
+		# a player should not have to hover over the one thing on the page
+		# that is telling them what to go and do.
+		door.text = "%s     %s" % [called.to_upper(), wanted]
+		door.tooltip_text = "%s\n%s" % [called, wanted]
+		door.disabled = true
+		door.add_theme_stylebox_override("disabled", _door_face(GATE_COLOUR, 0.04, 0.30))
+		return door
+
+	if Progress.won(block):
+		door.text = "%s     WON" % called.to_upper()
+		door.tooltip_text = "%s\nWon. Race it again whenever you like." % called
+		_dress_the_door(door, WON_COLOUR)
+	else:
+		door.text = "%s     RACE THE BOT" % called.to_upper()
+		door.tooltip_text = "%s\nBeat the bot to open %s." % [
+			called, _block_range(block + 1)]
+		_dress_the_door(door, GATE_COLOUR)
+	door.pressed.connect(_start_track.bind(road))
+	return door
+
+
+## What a player has to go and do to open a block, in the words they would use
+## to do it.
+##
+## Never the word "locked" on its own. A door that says only that it is shut
+## tells a player to give up; the same door saying "5 GOLD IN 1-10, you have 3"
+## tells them where to go and how far off they are.
+##
+## Two answers, because there are two things in the way and they come in order.
+## The golds buy the right to start the race; the race opens the ten. A player
+## who has the golds and has not driven it is told about the race, not asked
+## again for medals they already have.
+func _what_the_gate_wants(block: int) -> String:
+	var before := block - 1
+	if not Progress.gate_open(block):
+		return "%d GOLD IN %s, you have %d" % [
+			Progress.GOLDS_NEEDED, _block_range(before), Progress.golds_in(before)]
+	return "WIN THE RACE AT THE END OF %s" % _block_range(before)
+
+
+## A block of ten the way a player counts them, so the first block is 1-10.
+func _block_range(block: int) -> String:
+	return "%d-%d" % [block * Progress.BLOCK + 1, (block + 1) * Progress.BLOCK]
+
+
+## A padlock, drawn rather than set in a font or shipped as a picture.
+##
+## Drawn because the only thing it has to do is be there. A glyph is a lock
+## only if the font on the machine has one, and a font that does not draws a
+## hollow box - which over a greyed picture reads as something broken rather
+## than as something shut, which is the exact wrong thing for this cell to say.
+##
+## It lies over the whole of the button and draws itself in the middle, so it
+## needs no layout of its own and cannot be knocked out of place by one.
+func _a_lock(across: float, colour: Color) -> Control:
+	var lock := Control.new()
+	lock.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lock.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	lock.draw.connect(_draw_a_lock.bind(lock, across, colour))
+	return lock
+
+
+## A shackle standing on a body, drawn in a box sixteen units square and scaled
+## to whatever size was asked for.
+func _draw_a_lock(on: Control, across: float, colour: Color) -> void:
+	var unit := across / 16.0
+	var middle := on.size * 0.5
+	var shoulder := middle.y - unit
+	on.draw_arc(Vector2(middle.x, shoulder), 3.5 * unit, PI, TAU, 24,
+		colour, 1.8 * unit)
+	on.draw_rect(Rect2(middle.x - 5.5 * unit, shoulder,
+		11.0 * unit, 7.0 * unit), colour)
+
+
+## What a track is and what it wants, for anyone who goes looking.
+func _what_it_asks(index: int, called: String, targets: Vector3) -> String:
+	if not TrackRoster.exists(index):
+		return "Not built yet."
+	if not _open_to_the_player(index):
+		# The name first, so a shut cell still says which road it is, and then
+		# the one thing to go and do about it.
+		return "%s\n%s" % [called, _what_the_gate_wants(index / Progress.BLOCK)]
+	if targets == Vector3.ZERO:
+		return called
+	return "%s\nGOLD %s     SILVER %s     BRONZE %s" % [
+		called, RaceClock.format(targets.x),
+		RaceClock.format(targets.y), RaceClock.format(targets.z)]
+
+
+## The face of a track that does not exist yet.
+func _empty_slot() -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.075, 0.098, 0.157, 0.9)
+	box.border_color = Color(0.898, 0.929, 1.0, 0.16)
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(6)
+	return box
+
+
+## The face of a track that is built but still shut.
+##
+## Plainly not the empty frame, and it has to be: the frame round it is the
+## gate's own amber rather than the pale outline of a slot with nothing in it,
+## and there is a road showing dimly behind the lock where an empty slot has
+## nothing at all.
+func _shut_slot() -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.075, 0.098, 0.157, 0.9)
+	box.border_color = Color(GATE_COLOUR, 0.45)
+	box.set_border_width_all(2)
+	box.set_corner_radius_all(6)
+	return box
+
+
+## The face of a door, in whatever colour that door is. Built here rather than
+## taken from the theme because a door left with the theme's own boxes is a
+## wide button, and the one thing this cell must not read as is another button.
+func _door_face(tint: Color, fill: float, border: float) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(tint, fill)
+	box.border_color = Color(tint, border)
+	box.set_border_width_all(3)
+	box.set_corner_radius_all(8)
+	box.content_margin_left = 18.0
+	box.content_margin_right = 18.0
+	box.content_margin_top = 8.0
+	box.content_margin_bottom = 8.0
+	return box
+
+
+## Dress a door that can be pressed: a face for each state a button has, and
+## the words in the door's own colour.
+func _dress_the_door(door: Button, tint: Color) -> void:
+	door.add_theme_stylebox_override("normal", _door_face(tint, 0.10, 0.85))
+	door.add_theme_stylebox_override("hover", _door_face(tint, 0.26, 1.0))
+	door.add_theme_stylebox_override("pressed", _door_face(tint, 0.34, 1.0))
+	# Drawn over whichever of the three is showing rather than instead of it,
+	# so the focused door is a brighter edge and not a second face.
+	door.add_theme_stylebox_override("focus", _door_face(tint, 0.0, 1.0))
+	for named in ["font_color", "font_hover_color", "font_pressed_color",
+			"font_focus_color", "font_hover_pressed_color"]:
+		door.add_theme_color_override(named, tint)
 
 
 ## Set a track's name as small as it has to be to read whole over its picture.
@@ -457,37 +798,33 @@ func _fit_the_name(label: Label) -> void:
 	label.add_theme_font_size_override("font_size", points)
 
 
-## What a track is and what it wants, for anyone who goes looking.
-func _what_it_asks(exists: bool, called: String, targets: Vector3) -> String:
-	if not exists:
-		return "Not built yet."
-	if targets == Vector3.ZERO:
-		return called
-	return "%s\nGOLD %s     SILVER %s     BRONZE %s" % [
-		called, RaceClock.format(targets.x),
-		RaceClock.format(targets.y), RaceClock.format(targets.z)]
-
-
-## The face of a track that does not exist yet.
-func _empty_slot() -> StyleBoxFlat:
-	var box := StyleBoxFlat.new()
-	box.bg_color = Color(0.075, 0.098, 0.157, 0.9)
-	box.border_color = Color(0.898, 0.929, 1.0, 0.16)
-	box.set_border_width_all(2)
-	box.set_corner_radius_all(6)
-	return box
-
-
 ## Rebuilt each time the page opens rather than once at startup: a player
 ## comes back to this screen straight from having beaten something, and a
 ## grid built before the race would still be showing the old time.
 func _refresh_the_track_grid() -> void:
-	for cell in _track_grid.get_children():
+	for block in _track_blocks.get_children():
 		# Taken out as well as freed: freed nodes are still children until the
-		# frame ends, and a grid with two sets of cells in it lays out both.
-		_track_grid.remove_child(cell)
-		cell.queue_free()
+		# frame ends, and a column with two sets of blocks in it lays out both.
+		_track_blocks.remove_child(block)
+		block.queue_free()
 	_fill_the_track_grid()
+
+
+## Every cell holding a track, in the order they are shown, across the blocks.
+## What the page is made of is grids and doors; what a track index means is
+## this list, so everything that counts tracks or looks one up asks here.
+func _track_cells() -> Array:
+	var cells := []
+	for block in _track_blocks.get_children():
+		if block is GridContainer:
+			cells.append_array(block.get_children())
+	return cells
+
+
+## The doors, in the order they stand: one under each block of ten.
+func _doors() -> Array:
+	return _track_blocks.get_children().filter(
+		func(node: Node) -> bool: return node is Button)
 
 
 func _open_track_grid(kind := TrackRoster.NORMAL) -> void:
@@ -507,18 +844,37 @@ func _open_track_grid(kind := TrackRoster.NORMAL) -> void:
 ## one track made that is the only one; with twenty it is still where a player
 ## wants to start.
 func _focus_track(index := -1) -> void:
-	var cells := _track_grid.get_children()
+	var cells := _track_cells()
 	if index >= 0 and index < cells.size():
 		var wanted := _button_in(cells[index])
 		if wanted != null and not wanted.disabled:
 			wanted.grab_focus()
 			return
-	for cell in cells:
-		var button := _button_in(cell)
-		if button != null and not button.disabled:
-			button.grab_focus()
-			return
+	# Anything on the page that can be pressed, doors included, in the order
+	# the page shows them. A player whose first ten are behind them should land
+	# on the door they are about to drive rather than on the way out.
+	for block in _track_blocks.get_children():
+		var door := block as Button
+		if door != null:
+			if not door.disabled:
+				door.grab_focus()
+				return
+			continue
+		for cell in block.get_children():
+			var button := _button_in(cell)
+			if button != null and not button.disabled:
+				button.grab_focus()
+				return
 	_track_back.grab_focus()
+
+
+## Put the cursor on the door at the end of a block, for coming back off one.
+func _focus_door(block: int) -> void:
+	var doors := _doors()
+	if block >= 0 and block < doors.size() and not doors[block].disabled:
+		doors[block].grab_focus()
+		return
+	_focus_track()
 
 
 func _button_in(cell: Node) -> Button:
@@ -553,6 +909,12 @@ func _close_track_choice() -> void:
 ## course or a laid-out track, chaos or not - is a setting the scene reads;
 ## how many are playing is the one thing that decides which scene it is.
 func _scene_for_the_players() -> String:
+	# With one exception, and it is not a preference being overridden. A bot
+	# race is one player against one computer: the second car on that road is
+	# the thing being raced, and there is no seat in it for a second player
+	# however the question at the top of the page was answered.
+	if TrackRoster.is_bot_road(GameSettings.track_file):
+		return solo_scene
 	return solo_scene if GameSettings.solo else race_scene
 
 
@@ -754,8 +1116,20 @@ func _on_times_changed() -> void:
 ## out from focus rather than remembered, so it cannot go stale.
 func _track_under_the_cursor() -> String:
 	var focused := get_viewport().gui_get_focus_owner()
-	var cells := _track_grid.get_children()
+	var cells := _track_cells()
 	for index in cells.size():
 		if _button_in(cells[index]) == focused:
 			return TrackRoster.file(TrackRoster.first(_track_kind) + index)
+	# A bot road keeps nothing a board can show - no time, no medal, no place -
+	# so a cursor sitting on a door falls back to the first of the ten it
+	# stands at the end of rather than opening a board that can never have
+	# anything on it. The same for a player who came back from one, whose
+	# picked road is still that door.
+	var doors := _doors()
+	for block in doors.size():
+		if doors[block] == focused:
+			return TrackRoster.file(block * Progress.BLOCK)
+	if TrackRoster.is_bot_road(GameSettings.track_file):
+		return TrackRoster.file(
+			TrackRoster.block_of_bot_road(GameSettings.track_file) * Progress.BLOCK)
 	return GameSettings.track_file

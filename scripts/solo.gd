@@ -789,7 +789,20 @@ func _track_targets() -> Vector3:
 ## The player got there first.
 func _won_the_race() -> void:
 	_stop_the_race(true)
+	_write_the_win_down()
 	_say_who_won("YOU WIN", "BY %s" % _how_far_back(_bot), Color.WHITE)
+
+
+## A won bot race is the only result in the game that opens anything, so it is
+## the only one written down rather than merely shown. Everything else a race
+## produces is a time, and a time is `TrackTimes`' business.
+##
+## Called from both ways of winning. Beating the bot to the flag and outlasting
+## it are the same win: the road is shut behind a race, and the race is over.
+func _write_the_win_down() -> void:
+	var block := TrackRoster.block_of_bot_road(_track_file)
+	if block >= 0:
+		Progress.win(block)
 
 
 ## The bot did.
@@ -811,6 +824,7 @@ func _bot_broke_down() -> void:
 	if _car.is_broken() and _bot.is_broken():
 		_say_who_won("DRAW", "BOTH CARS BROKEN", _condition.warning_colour)
 	elif _bot.is_broken():
+		_write_the_win_down()
 		_say_who_won("YOU WIN", "THE BOT BROKE DOWN", Color.WHITE)
 	else:
 		_say_who_won("THE BOT WINS", "YOUR CAR BROKE DOWN",

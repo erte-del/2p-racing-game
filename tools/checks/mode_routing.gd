@@ -144,18 +144,21 @@ func _init() -> void:
 	if not menu2.get_node(kinds).visible or menu2.get_node("TrackChoice").visible:
 		print("  tracks did not open onto the kinds of track")
 		faults += 1
-	var grid: GridContainer = menu2.get_node("TrackChoice/Page/Panel/Margin/Box/Scroll/Grid")
 	menu2.get_node(kinds + "/Inner/Row/Acrobatic").pressed.emit()
 	await process_frame
-	var acrobatic_slots := grid.get_child_count()
-	var first_button: Button = _button_in(grid.get_child(0))
+	# Counted across the blocks the page is built of rather than off one grid:
+	# the normal tracks are two blocks of ten with a door under each now, and
+	# the acrobatic ones are one block with nothing at the end of it.
+	var acrobatic_slots: int = menu2.call("_track_cells").size()
+	var first_button: Button = _button_in(menu2.call("_track_cells")[0])
 	var first_live := first_button != null and not first_button.disabled
 	menu2.call("_close_track_choice")
 	var back_on: Control = menu2.get_viewport().gui_get_focus_owner()
 	menu2.get_node(kinds + "/Inner/Row/Normal").pressed.emit()
 	await process_frame
-	print("acrobatic opens %d slots, normal opens %d" % [acrobatic_slots, grid.get_child_count()])
-	if acrobatic_slots != TrackRoster.ACROBATIC_COUNT or grid.get_child_count() != TrackRoster.COUNT:
+	var normal_slots: int = menu2.call("_track_cells").size()
+	print("acrobatic opens %d slots, normal opens %d" % [acrobatic_slots, normal_slots])
+	if acrobatic_slots != TrackRoster.ACROBATIC_COUNT or normal_slots != TrackRoster.COUNT:
 		print("  the two kinds of track did not open their own grids")
 		faults += 1
 	if not first_live:
