@@ -12,6 +12,10 @@ extends Node3D
 
 signal regenerated
 
+## Passed straight out of the furniture: a car drove through a coin, and the
+## purse has already taken it. What a HUD listens to.
+signal coin_taken
+
 @export_group("Road")
 ## Distance between cross-sections. Smaller is smoother and heavier.
 @export var sample_step := 2.5
@@ -114,11 +118,28 @@ signal regenerated
 ## the next. Both are what keep a course from turning into a chain of pads.
 @export_range(0.0, 1.0) var pad_chance := 0.72
 @export var min_pad_spacing := 60.0
-## How far a pad keeps from the grid, the finish line and every checkpoint.
+## How far a pad keeps from the grid, the finish line and every checkpoint -
+## and, with it, everything else the planner scatters on the road.
 @export var pad_keep_out := 20.0
 ## How far anything built on the road keeps from a jump, on top of the jump's
 ## own length.
 @export var jump_keep_out := 12.0
+
+@export_group("Coins")
+## Coins scattered along the road, picked up by driving through them and spent
+## in the shop. Every course carries a handful, laid out or rolled: a track
+## file describes a road, and loose change on it is not part of what it
+## describes.
+@export var coins_enabled := true
+## How many a course carries, rolled per course. The same range under chaos, so
+## a chaos run is a different race rather than the quick way to a full purse.
+@export var coin_count := Vector2i(5, 15)
+## Metres between one coin and the next, so a handful of them reads as a
+## scattering rather than as a pile. How far a coin keeps from the grid, the
+## finish and every respawn is `pad_keep_out`, which is what everything on the
+## road keeps from them - a coin picked up for being put back on the road is
+## not a coin anybody earned.
+@export var min_coin_spacing := 18.0
 
 @export_group("Laid out")
 ## A track written down rather than rolled. When this is set, generate()
@@ -277,6 +298,11 @@ func _ready() -> void:
 	# is what banks a checkpoint and crosses the finish; see Car.ROAD_GROUP.
 	$RoadBody.add_to_group(Car.ROAD_GROUP)
 	$RailBody.add_to_group(Car.ROAD_GROUP)
+	# Passed out rather than reached in for: whoever is running the race holds
+	# a Track, not the furniture hanging off it, and the coins are rebuilt from
+	# nothing on every course - a listener that had to find them again after
+	# each one would miss the first coin of every race it forgot to.
+	_furniture.coin_taken.connect(func() -> void: coin_taken.emit())
 
 
 ## The curve is the source of truth for progress along the course and for
@@ -419,7 +445,16 @@ func lay_out(definition: TrackDefinition) -> void:
 	_features = TrackFeatures.adopt(definition.placements, {
 		"clear_lane": clear_lane,
 		"dodge_radius": dodge_radius,
+		"keep_out": _keep_out(),
+		"keep_out_radius": pad_keep_out,
+		"reserved": jump_spans(),
 	})
+	# Seeded off the track's own name rather than off the file it came in -
+	# a definition can be handed straight to this, with no file behind it at
+	# all - so a track always has its coins in the same places. A player who
+	# drove it yesterday and knows where they are is remembering the road,
+	# which is the whole point of a road worth learning.
+	_scatter_the_coins(hash(definition.track_name))
 	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
 	_build_branches(definition)
 	regenerated.emit()
@@ -637,20 +672,40 @@ func _build_the_road() -> void:
 	_build_rails()
 
 
+## Where nothing is built: the grid, the finish and every respawn.
+func _keep_out() -> PackedFloat32Array:
+	var marks := PackedFloat32Array([start_offset(), finish_offset()])
+	marks.append_array(checkpoint_offsets())
+	return marks
+
+
+## Scatter this course's coins, over whatever plan it ended up with.
+##
+## A pass of its own, after the plan rather than inside it, because it is the
+## same pass for a rolled course and a laid-out one - and because a high road
+## is not a course. Coins on one would be coins the course's own count knows
+## nothing about, and a player who took the kicker would be paid for it twice
+## over: once in the shortcut and once in the change.
+func _scatter_the_coins(coins_seed: int) -> void:
+	if _features == null or is_branch or not coins_enabled:
+		return
+	_features.coin_count = coin_count
+	_features.min_coin_spacing = min_coin_spacing
+	_features.scatter_coins(_layout, coins_seed)
+
+
 ## Plan the furniture for this course and put it on the road.
 ##
 ## The plan is seeded from the same seed the course was, so a given course
 ## always comes with the same pads on it - a seed describes a whole race,
 ## not just its shape.
 func _build_furniture(features_seed: int) -> void:
-	var keep_out := PackedFloat32Array([start_offset(), finish_offset()])
-	keep_out.append_array(checkpoint_offsets())
 	_features = TrackFeatures.build(_layout, features_seed, {
 		"pads_enabled": boost_pads_enabled,
 		"min_pad_straight": min_pad_straight,
 		"pad_chance": pad_chance,
 		"min_pad_spacing": min_pad_spacing,
-		"keep_out": keep_out,
+		"keep_out": _keep_out(),
 		"keep_out_radius": pad_keep_out,
 		"obstacles_enabled": obstacles_enabled,
 		"min_obstacle_straight": min_obstacle_straight,
@@ -667,6 +722,7 @@ func _build_furniture(features_seed: int) -> void:
 		"fork_divider": Vector2(fork_divider_min, fork_divider_max),
 		"reserved": jump_spans(),
 	})
+	_scatter_the_coins(features_seed)
 	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
 
 

@@ -60,6 +60,14 @@ extends Control
 ## circled. It is under PLAY rather than behind it because which car to drive
 ## is a choice made before a race, not one of the questions about it.
 ##
+## Over the buttons, small, sits what is in the purse: a disc and a number, and
+## nothing else. It is there because a player who has been picking coins up on
+## the road should be able to see what they have got without starting anything,
+## and it is against the column of buttons rather than off in a corner because
+## the shop that spends it belongs in that column. Above rather than below: the
+## column runs to the bottom of the screen already, and a total under it would
+## be a total nobody with a short window ever sees.
+##
 ## The title never sits perfectly still either. It rocks and bobs gently, which
 ## is what keeps a screen that is doing nothing from looking frozen.
 

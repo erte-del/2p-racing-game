@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" path="res://scenes/account.tscn" id="5_account"]
 [ext_resource type="PackedScene" path="res://scenes/leaderboard.tscn" id="6_board"]
 [ext_resource type="PackedScene" path="res://scenes/garage.tscn" id="7_garage"]
+[ext_resource type="Script" path="res://scripts/purse_tally.gd" id="8_purse"]
 
 [node name="Menu" type="Control"]
 anchors_preset = 15
@@ -106,6 +107,20 @@ offset_bottom = 262.0
 grow_horizontal = 2
 text = "ACCOUNT"
 theme_override_font_sizes/font_size = 28
+
+[node name="Purse" type="Control" parent="."]
+anchor_left = 0.5
+anchor_top = 0.6
+anchor_right = 0.5
+anchor_bottom = 0.6
+offset_left = -140.0
+offset_top = -48.0
+offset_right = 140.0
+offset_bottom = -8.0
+grow_horizontal = 2
+mouse_filter = 2
+script = ExtResource("8_purse")
+centred = true
 
 [node name="ModeChoice" type="Control" parent="."]
 visible = false

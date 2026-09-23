@@ -43,6 +43,12 @@ const PLATFORM := 5
 ## a car goes round it or up it, and the checks that ask whether a barrier can
 ## be dodged leave it alone.
 const WEDGE := 6
+## A coin standing a little above the road, taken by driving through it and
+## spent in the shop. It is the one piece of furniture that has no opinion
+## about how the course drives: it blocks nothing, it is landed on by nothing,
+## and nothing that asks whether a barrier can be dodged looks at one. That is
+## what lets it be planned last, on whatever road everything else left.
+const COIN := 7
 
 
 ## One piece of furniture, in course coordinates.
@@ -71,9 +77,10 @@ class Placement:
 	var travel := 0.0
 	## For a ring, how high its middle stands above the middle of the road at
 	## `centre()`, and the radius of the hole in it, both in metres. For a
-	## platform, `height` is how high its top stands above that same point. Metres
-	## rather than lane units because a car's height is not a fraction of
-	## anything.
+	## platform, `height` is how high its top stands above that same point. For
+	## a coin, the same two things about the disc: how high its middle floats
+	## and how far across it is. Metres rather than lane units because a car's
+	## height is not a fraction of anything.
 	var height := 0.0
 	var radius := 0.0
 	## For a lift: how far it rises above `height` and back, in metres, on the
@@ -300,6 +307,69 @@ var fork_divider_half_span := 0.07
 var fork_lane := 0.55
 var fork_block := Vector2(0.3, 0.6)
 
+## --- coins ---
+##
+## Coins scattered along the road, driven through and spent in the shop. They
+## go down after everything else and take no part in any of the rules above: a
+## coin blocks nothing, so nothing has to be checked against one. What it has
+## instead is a rule of its own - it may not be anywhere a car cannot get to,
+## or anywhere a car cannot help getting to.
+var coins_enabled := true
+## How many a course carries, rolled per course.
+##
+## The same roll under chaos as without it. Chaos rerolls where the coins are,
+## because it rerolls the road they are on; a chaos run that also paid better
+## would make it the efficient way to farm rather than a different race, and
+## the shop would end up priced against a mode rather than against a game.
+var coin_count := Vector2i(5, 15)
+## The disc: how far across it is and how high its middle floats above the
+## road, in metres. The car is 1.45 m tall and 2.06 m wide, so a coin at this
+## height is taken through the middle of the windscreen rather than run over.
+var coin_radius := 0.55
+var coin_height := 1.05
+## Metres along the course a coin takes up. Barely any: it is a disc standing
+## square across the road, and this is only what the box that notices a car is
+## built from.
+var coin_length := 1.2
+## Metres between one coin and the next. Far enough apart that a handful of
+## them reads as a scattering rather than as a pile.
+var min_coin_spacing := 18.0
+## How far a coin keeps from anything solid: across the road, and along it.
+## Enough that a coin is never inside a barrier or a kicker, and never so close
+## alongside one that taking it means scraping down it.
+var coin_clearance := 1.1
+var coin_room := 3.5
+## How much road a car needs after a coin before it meets the next row of
+## barriers, in metres. A coin lined up with a wall a few metres past it is not
+## an offer, it is bait: a car that went for it has already committed to the
+## line it is going to hit. So a coin has to sit somewhere a car could hold all
+## the way through whatever is standing just past it.
+var coin_run_up := 14.0
+## How far from the middle of the road a coin may be put when nothing more
+## interesting is deciding for it. Plus its own width this has to stay under
+## 1.0, or the coin hangs over the kerb.
+var coin_lane_limit := 0.66
+## Where the interesting road is, as weights on the draw.
+##
+## A coin in the middle of an empty straight is not a decision - it is a pickup
+## on the line the car was already on. A coin in the fast lane of the fork, on
+## the outside line of a corner, or in the gap just past a row of barriers is
+## worth something, because taking it costs a line. So the interesting places
+## are drawn from far more often than the quiet ones. Weights rather than
+## rules: the open road keeps a small share, so a course is not a dotted line
+## down the one racing line either.
+var coin_fork_weight := 5.0
+var coin_dodge_weight := 4.0
+var coin_corner_weight := 2.5
+var coin_open_weight := 0.6
+## How far past a row of barriers still counts as just past it, in metres. The
+## near end is far enough on that the coin is not part of the row to be dodged;
+## the far end is close enough that the car is still on the line the row put it.
+var coin_dodge_run := Vector2(5.0, 16.0)
+## How finely the course is walked looking for somewhere to put one.
+var coin_step := 4.0
+
+
 # --- results ------------------------------------------------------------
 
 ## How far a ring's rim reaches past its hole, for the check that it stands
@@ -366,9 +436,10 @@ func of_kind(kind: int) -> Array[Placement]:
 
 
 func summary() -> String:
-	return "%d boost pads, %d barriers, %d traps, %d forks, %d rings" % [
+	return "%d boost pads, %d barriers, %d traps, %d forks, %d rings, %d coins" % [
 		of_kind(BOOST_PAD).size(), of_kind(OBSTACLE).size(),
-		of_kind(TRAP).size(), of_kind(FORK).size(), of_kind(RING).size()] + (
+		of_kind(TRAP).size(), of_kind(FORK).size(), of_kind(RING).size(),
+		of_kind(COIN).size()] + (
 			", %d platforms" % of_kind(PLATFORM).size() if not of_kind(PLATFORM).is_empty() else "")
 
 
@@ -871,6 +942,273 @@ func _fill_the_fast_lane(
 		at = barrier.offset + obstacle_length + min_row_gap
 
 
+# --- coins --------------------------------------------------------------
+
+## Scatter the coins over a course that has already been planned.
+##
+## Asked for separately rather than done inside `build`, because a laid-out
+## track wants them too. What a track file says is on the road is what is on
+## it - that is what `adopt` is for - but a coin is not part of what a track
+## file describes: it is not a corner to be driven or a barrier to be got past,
+## it is loose change on somebody else's road. So both kinds of course get the
+## same pass over the same finished plan.
+##
+## Seeded separately from the course for the same reason it runs last: rolling
+## the coins out of the course's own generator would move every roll after it,
+## and every course in the game would come out different the day coins were
+## turned on.
+func scatter_coins(layout: TrackLayout, coins_seed: int) -> void:
+	if not coins_enabled or layout == null:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = coins_seed
+	var wanted := rng.randi_range(coin_count.x, coin_count.y)
+	# A course is asked for a handful of coins and has to produce them, so the
+	# spacing that keeps them apart is a preference rather than a rule: if a
+	# short course, or one that is mostly jump and checkpoint, cannot hold them
+	# that far apart, they are packed closer rather than left off. A course
+	# with four coins on it is a course the shop is quietly slower to reach,
+	# and nobody would ever know why.
+	var spacing := min_coin_spacing
+	while of_kind(COIN).size() < wanted and spacing >= 0.5:
+		_draw_coins(layout, rng, wanted, spacing)
+		spacing *= 0.5
+
+
+## Draw coins from the spots this course has, by weight, until it has as many
+## as it was asked for or has run out of anywhere to put them.
+func _draw_coins(
+	layout: TrackLayout, rng: RandomNumberGenerator, wanted: int, spacing: float
+) -> void:
+	var spots := _coin_spots(layout, rng, spacing)
+	while of_kind(COIN).size() < wanted and not spots.is_empty():
+		var total := 0.0
+		for spot in spots:
+			total += float(spot["weight"])
+		if total <= 0.0:
+			return
+		# Walk the weights until the roll runs out, which picks a spot with a
+		# probability that is its share of them.
+		var roll := rng.randf() * total
+		var picked := spots.size() - 1
+		for i in spots.size():
+			roll -= float(spots[i]["weight"])
+			if roll <= 0.0:
+				picked = i
+				break
+		var spot: Dictionary = spots[picked]
+		var at := float(spot["at"])
+		placements.append(_a_coin(layout, at, float(spot["lateral"])))
+		# Everything too close to what was just taken goes with it, so the
+		# spacing holds between the coins actually laid rather than between the
+		# spots they were drawn from.
+		var kept: Array[Dictionary] = []
+		for other in spots:
+			if absf(float(other["at"]) - at) >= spacing:
+				kept.append(other)
+		spots = kept
+
+
+func _a_coin(layout: TrackLayout, at: float, lateral: float) -> Placement:
+	var coin := Placement.new(COIN, at - coin_length * 0.5, coin_length)
+	coin.lateral = lateral
+	coin.half_span = coin_radius / maxf(layout.half_width_at(at), 0.001)
+	coin.radius = coin_radius
+	coin.height = coin_height
+	return coin
+
+
+## Every place on the course a coin could go, each with a weight saying how
+## much it is worth going there.
+func _coin_spots(
+	layout: TrackLayout, rng: RandomNumberGenerator, spacing: float
+) -> Array[Dictionary]:
+	var spots: Array[Dictionary] = []
+	var at := coin_step
+	var last := layout.length() - coin_step
+	while at <= last:
+		spots.append_array(_coin_spots_at(layout, rng, at, spacing))
+		at += coin_step
+	return spots
+
+
+## What one offset along the course offers, which is at most one spot: the most
+## interesting lane there, or the open road if nothing there is interesting.
+##
+## One rather than several so the draw is over offsets rather than over lanes -
+## an offset that happened to be interesting in two ways would otherwise be
+## twice as likely to be used as one that is interesting in one.
+func _coin_spots_at(
+	layout: TrackLayout, rng: RandomNumberGenerator, at: float, spacing: float
+) -> Array[Dictionary]:
+	var none: Array[Dictionary] = []
+	if _too_close_to_keep_out(at):
+		return none
+	if _too_near_a_coin(at, spacing):
+		return none
+
+	# The fast lane of a fork, and only the fast lane. A coin on the clear side
+	# would pay a player for giving the fork's choice a miss, which is the one
+	# thing the set piece is there to make cost something.
+	for fork in of_kind(FORK):
+		if at < fork.offset or at >= fork.offset + fork.length:
+			continue
+		var lane := fork.lateral * fork_lane
+		if _coin_fits(layout, at, lane):
+			return _one_spot(at, lane, coin_fork_weight)
+		return none
+
+	# The gap just past a row of barriers: the line a car that has got past the
+	# row is already on, a moment after it stopped having to think about it.
+	# Only rows that stand still - the way past a trap is somewhere else a
+	# second later, so a coin left in one is a coin in the middle of the road.
+	var row := _row_just_behind(at)
+	if row != null:
+		var lane := _widest_gap(layout, row)
+		if lane != INF and _coin_fits(layout, at, lane):
+			return _one_spot(at, lane, coin_dodge_weight)
+
+	# The outside line of a corner. Turn is positive to the right, so the
+	# outside of a right-hander is the left of the road: the long way round,
+	# which is the line nobody takes unless they are paid to.
+	var piece := _piece_at(layout, at)
+	if (piece != null and piece.kind == TrackLayout.CORNER
+			and not is_zero_approx(piece.turn)):
+		var lane := -signf(piece.turn) * coin_lane_limit
+		if _coin_fits(layout, at, lane):
+			return _one_spot(at, lane, coin_corner_weight)
+
+	# Open road, somewhere across it. Worth little, but not nothing: a course
+	# whose coins were only ever in the three places above would be a course
+	# where a player stops looking at the road and starts looking for the set
+	# pieces.
+	var lateral := rng.randf_range(-coin_lane_limit, coin_lane_limit)
+	if _coin_fits(layout, at, lateral):
+		return _one_spot(at, lateral, coin_open_weight)
+	return none
+
+
+func _one_spot(at: float, lateral: float, weight: float) -> Array[Dictionary]:
+	var spots: Array[Dictionary] = []
+	spots.append({"at": at, "lateral": lateral, "weight": weight})
+	return spots
+
+
+## Whether a coin at this place on the road would be somewhere a car can get
+## to, and nowhere it cannot help going.
+##
+## Three things, and all three are about the car rather than about the plan.
+## It has to be over road - not hanging in the hole of a jump, and not over the
+## kerb. It has to be clear of everything solid, in every place that thing
+## passes through, so a coin is never buried in a barrier and never swept
+## through by a trap. And it has to sit inside one of the ways past whatever
+## stands at that offset, or it is a coin behind a wall.
+func _coin_fits(layout: TrackLayout, at: float, lateral: float) -> bool:
+	var half_width := maxf(layout.half_width_at(at), 0.001)
+	var span := coin_radius / half_width
+	if absf(lateral) + span > 1.0:
+		return false
+	if not _over_road(layout, at):
+		return false
+
+	var clear := coin_clearance / half_width
+	for placement in placements:
+		# Pads and forks are paint and bookkeeping; a coin over either is a
+		# coin on the road. Rings are kept off by the keep-out rule instead -
+		# a ring is a checkpoint, and every checkpoint is already in it - which
+		# is the only rule here that knows about how high a thing stands.
+		if (placement.kind != OBSTACLE and placement.kind != TRAP
+				and placement.kind != WEDGE and placement.kind != PLATFORM):
+			continue
+		if (at + coin_room < placement.offset
+				or at - coin_room > placement.offset + placement.length):
+			continue
+		for pose in placement.sweep(sweep_step / half_width):
+			if absf(lateral - pose) < span + clear + placement.half_span:
+				return false
+
+	# And a car that lined itself up for the coin has to be able to hold that
+	# line through whatever is standing a moment further on. Rows that stand
+	# still only: a trap is somewhere else by the time the car gets there, and
+	# a coin is already kept out of everywhere one passes through.
+	for row in rows():
+		if row.moves():
+			continue
+		var run := row.centre() - at
+		if run <= 0.0 or run > coin_run_up:
+			continue
+		if not _inside_a_gap(gaps_at(layout, row.centre()), lateral, span):
+			return false
+
+	return _inside_a_gap(gaps_at(layout, at), lateral, span)
+
+
+## Whether a coin at `lateral`, reaching `span` either side of it, sits wholly
+## inside one of these ways past.
+func _inside_a_gap(gaps: Array[Vector2], lateral: float, span: float) -> bool:
+	for gap in gaps:
+		if lateral - span >= gap.x and lateral + span <= gap.y:
+			return true
+	return false
+
+
+## Whether there is road under an offset at all: past the end of a course, or
+## over the hole in a jump, there is not.
+func _over_road(layout: TrackLayout, at: float) -> bool:
+	if at < 0.0 or at > layout.length():
+		return false
+	for span in reserved:
+		if at > span.x and at < span.y:
+			return false
+	if layout.road_present.is_empty():
+		return true
+	var sample := clampi(
+		int(round(at / layout.step)), 0, layout.road_present.size() - 1)
+	return layout.road_present[sample] != 0
+
+
+func _too_near_a_coin(at: float, spacing: float) -> bool:
+	for coin in of_kind(COIN):
+		if absf(at - coin.centre()) < spacing:
+			return true
+	return false
+
+
+## The row of barriers a car at this offset has just got past, if it got past
+## one recently enough to still be on the line it took.
+func _row_just_behind(at: float) -> Placement:
+	var nearest: Placement = null
+	var least := INF
+	for row in rows():
+		if row.moves():
+			continue
+		var behind := at - (row.offset + row.length)
+		if behind < coin_dodge_run.x or behind > coin_dodge_run.y:
+			continue
+		if behind < least:
+			least = behind
+			nearest = row
+	return nearest
+
+
+## The middle of the widest way past a row, or INF if it leaves none.
+func _widest_gap(layout: TrackLayout, row: Placement) -> float:
+	var widest := INF
+	var most := 0.0
+	for gap in gaps_past(layout, row):
+		if gap.y - gap.x > most:
+			most = gap.y - gap.x
+			widest = (gap.x + gap.y) * 0.5
+	return widest
+
+
+func _piece_at(layout: TrackLayout, at: float) -> TrackLayout.Piece:
+	for piece in layout.pieces:
+		if at >= piece.start_offset and at < piece.end_offset:
+			return piece
+	return null
+
+
 # --- checking the plan --------------------------------------------------
 
 ## The stretches of road left open across the course at one offset, after
@@ -985,6 +1323,33 @@ func faults(layout: TrackLayout) -> PackedStringArray:
 		found.append_array(_check_the_way_past(layout, inside, "the fast lane of ", side))
 		found.append_array(_check_the_dodges(layout, inside, "the fast lane of ", side))
 	found.append_array(_check_the_rings(layout))
+	found.append_array(_check_the_coins(layout))
+	return found
+
+
+## What a coin can get wrong where it stands.
+##
+## The same question `_coin_fits` asks when one is being placed, asked again of
+## the finished plan - which is how a coin written into a track file by hand is
+## held to what a rolled one is held to, and how a coin the planner put down
+## before something else moved is caught.
+##
+## How many coins a course carries is not asked here. A course with none is not
+## a course that cannot be driven, which is what this function is for; it is a
+## course that pays nothing, and `tools/checks/coins.gd` is where that is
+## counted, over a hundred of them at a time.
+func _check_the_coins(layout: TrackLayout) -> PackedStringArray:
+	var found := PackedStringArray()
+	for coin in of_kind(COIN):
+		var at := "coin at %.0f m, lane %+.2f" % [coin.centre(), coin.lateral]
+		if _too_close_to_keep_out(coin.centre()):
+			found.append("%s: it is on the grid, the finish or a respawn" % at)
+		if not _over_road(layout, coin.centre()):
+			found.append("%s: there is no road under it" % at)
+		elif absf(coin.lateral) + coin.half_span > 1.0:
+			found.append("%s: it hangs over the kerb" % at)
+		elif not _coin_fits(layout, coin.centre(), coin.lateral):
+			found.append("%s: it is inside something, or behind it" % at)
 	return found
 
 

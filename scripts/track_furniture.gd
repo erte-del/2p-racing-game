@@ -1,6 +1,10 @@
 class_name TrackFurniture
 extends Node3D
 
+## Emitted when a car drives through a coin, once per coin, so a tally in the
+## corner of a race can flash without having to watch the purse itself.
+signal coin_taken
+
 ## Turns a TrackFeatures plan into things that exist in the world: the pad
 ## meshes and the areas that notice a car driving over one, and the barriers
 ## with the solid bodies that stop one.
@@ -86,6 +90,46 @@ const CAR_WIDTH := 2.06
 ## enough at a third of a metre thick that nothing sees the corners.
 @export var ring_segments := 20
 
+@export_group("Coins")
+## Gold, and lit hard, because a coin is a small thing a long way off that a
+## player has to decide about while there is still time to move. Its own gold
+## rather than the rings' - a ring is a checkpoint and has to be taken, a coin
+## is an offer - and the two never stand on the same stretch of road anyway,
+## because a ring is a checkpoint and nothing is built near one.
+@export var coin_color := Color(1.0, 0.82, 0.24)
+@export var coin_glow := 2.2
+## How thick the disc is, in metres. Thin enough to read as a coin, thick
+## enough that it does not disappear when it turns edge on.
+@export var coin_thickness := 0.14
+## Turns a second, on the race clock. Slow: a coin is spinning to catch the
+## light, not to be a hazard.
+@export var coin_spin := 0.45
+## How far the disc leans out of upright, in degrees, so that the axis it turns
+## about is a cone rather than the upright itself.
+##
+## Without this a coin turning past square is edge on to the driver, and edge
+## on it is a line a tenth of a metre wide - invisible, for about a third of a
+## second, which at thirty metres a second is ten metres of road. Leaned over,
+## the worst it ever shows is an ellipse this far off the full face, and a coin
+## is a thing that can always be seen and decided about.
+@export var coin_lean := 26.0
+## How far up the box that notices a car reaches, past the coin either way.
+## Generous, because a coin is taken by driving through it and a car that
+## clipped the edge of one and got nothing would read as a bug.
+@export var coin_trigger_margin := 0.5
+## What taking one looks like: the coin lifting this far and fading out over
+## this long, with a small number going up with it. Short - it is a reward,
+## not an event - but not so short that a player doing thirty metres a second
+## has already looked away.
+@export var coin_take_rise := 1.7
+@export var coin_take_seconds := 0.5
+## How tall the number over a taken coin is drawn, in metres, and where it sits
+## beside the coin. Off to one side rather than over it, because a coin lifting
+## and a number drawn through the middle of it are two things fighting for the
+## same handful of pixels.
+@export var coin_number_size := 0.9
+@export var coin_number_at := Vector2(0.55, 0.6)
+
 @export_group("Platforms")
 ## A slab of road hanging in the air, so dark like the road, with a lit trim
 ## round its top edge in a colour nothing else on the course uses. Violet: the
@@ -128,6 +172,14 @@ var _rings: Array[Node3D] = []
 ## the middle of the road under it, lifted to its height - which way is across,
 ## and how far the kerb is.
 var _movers: Array[Dictionary] = []
+## Every coin: the area that notices a car, the node inside it that turns, the
+## phase its turn starts at, and whether it has been taken. A taken coin stays
+## in here with its flag set rather than being dropped, because dropping it
+## would renumber the rest.
+var _coins: Array[Dictionary] = []
+## Where the coins go, found off the tree the first time one is taken. See
+## `_the_purse`.
+var _purse: Node
 
 
 ## Lay out the furniture for a course.
@@ -161,6 +213,10 @@ func build(
 		_build_platform(platform, points, rights, half_widths, step)
 	for kicker in features.of_kind(TrackFeatures.WEDGE):
 		_build_kicker(kicker, points, rights, half_widths, step)
+	# Last, because a coin is the one thing here that is laid on top of the
+	# road rather than being part of it.
+	for coin in features.of_kind(TrackFeatures.COIN):
+		_build_coin(coin, points, rights, half_widths, step)
 
 
 ## The rings, in the order a car meets them. What a race reads to know whether
@@ -183,6 +239,15 @@ func show_ring(index: int, spent: bool) -> void:
 ## says it is: held at GO through the countdown, stopped when the race stops,
 ## and back at the start when the race goes back to the line.
 func run_traps(seconds: float) -> void:
+	# The coins turn on the same clock, for the same reason: two players on a
+	# split screen should be looking at the same coin at the same angle, and a
+	# race put back on the line should put them back where they were. Each one
+	# starts at its own angle, taken from where it sits on the course, so a
+	# course does not flash all over at once like a row of indicators.
+	for coin in _coins:
+		var spin: Node3D = coin["spin"]
+		if is_instance_valid(spin):
+			spin.rotation.y = seconds * TAU * coin_spin + float(coin["phase"])
 	for mover in _movers:
 		var moving: Node3D = mover["body"]
 		if not is_instance_valid(moving):
@@ -263,6 +328,7 @@ func _clear() -> void:
 	_traps.clear()
 	_rings.clear()
 	_movers.clear()
+	_coins.clear()
 
 
 ## One pad: a dark slab with glowing chevrons pointing the way, and a box over
@@ -442,6 +508,188 @@ func _build_trap(
 		"forward": forward.normalized(),
 	})
 
+
+## One coin: a gold disc standing square across the road, turning slowly, with
+## a box round it that notices a car.
+##
+## The disc faces the way a car arrives from rather than lying flat on the
+## road, because a coin is picked up by driving through it, and a thing to be
+## driven through has to be seen from the run up. It turns about the upright,
+## so it flashes from a full face to an edge and back - which is what makes a
+## small still thing at the side of the road catch the eye at all.
+##
+## An Area3D rather than a body: a coin is taken, not hit. Nothing about
+## driving through one may cost the car anything, and the one way to be sure of
+## that is for there to be nothing solid there.
+func _build_coin(
+	coin: TrackFeatures.Placement, points: PackedVector3Array,
+	rights: PackedVector3Array, half_widths: PackedFloat32Array, step: float
+) -> void:
+	var a := _frame(points, rights, half_widths, step, coin.offset)
+	var b := _frame(points, rights, half_widths, step, coin.offset + coin.length)
+	var middle := _frame(points, rights, half_widths, step, coin.centre())
+	var right: Vector3 = middle[1]
+	var forward: Vector3 = b[0] - a[0]
+	forward.y = 0.0
+	if forward.length_squared() < 0.000001:
+		forward = Vector3.FORWARD
+	var radius: float = maxf(coin.radius, 0.1)
+
+	var area := Area3D.new()
+	area.name = "Coin"
+	area.monitoring = true
+	area.transform = Transform3D(
+		Basis(right, Vector3.UP, -forward.normalized()),
+		middle[0] + right * (coin.lateral * float(middle[2]))
+			+ Vector3.UP * coin.height)
+
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	# Across and up by the coin itself plus a margin; along the road by
+	# whatever the placement takes, which is enough that a car doing thirty
+	# metres a second cannot step over it between two physics frames.
+	box.size = Vector3(
+		radius * 2.0 + coin_trigger_margin * 2.0,
+		radius * 2.0 + coin_trigger_margin * 2.0,
+		maxf(coin.length, 1.0))
+	shape.shape = box
+	area.add_child(shape)
+
+	# Two nodes rather than one: the outer turns about the upright, and the
+	# inner stands the cylinder on its side so its axis points down the road.
+	# Written as one node's rotation the two would be read back in Godot's own
+	# order and come out as a wobble.
+	var spin := Node3D.new()
+	spin.name = "Spin"
+	var disc := MeshInstance3D.new()
+	disc.name = "Disc"
+	var cylinder := CylinderMesh.new()
+	cylinder.top_radius = radius
+	cylinder.bottom_radius = radius
+	cylinder.height = coin_thickness
+	cylinder.radial_segments = 24
+	cylinder.rings = 1
+	disc.mesh = cylinder
+	# A material of its own, not the shared one: taking a coin fades that coin,
+	# and a shared material would fade every coin on the course with it.
+	disc.material_override = _a_coin_material()
+	# One axis, written on its own, so there is no question of what order
+	# Godot reads a pair of angles back in: the disc is stood on its side, and
+	# leaned back out of that by however much `coin_lean` asks for.
+	disc.rotation.x = PI * 0.5 - deg_to_rad(coin_lean)
+	spin.add_child(disc)
+	area.add_child(spin)
+
+	add_child(area)
+	_built.append(area)
+	var index := _coins.size()
+	_coins.append({
+		"area": area, "spin": spin, "disc": disc, "taken": false,
+		# Its own starting angle, off where it sits on the course, so no two
+		# coins near each other turn in step. Taken from the offset rather than
+		# rolled, so a course always looks the same way it did.
+		"phase": fmod(coin.centre(), 4.0) * TAU * 0.25,
+	})
+	area.body_entered.connect(func(body: Node3D) -> void:
+		_on_coin_entered(body, index))
+
+
+## Take a coin: bank it, say so, and play the pickup.
+##
+## Banked here, at the moment a car drives through it, rather than handed to
+## whichever scene is running the race. Two scenes run races today and there
+## will be more, and a coin that paid in one of them and quietly did not in
+## another is the kind of bug nobody reports because nobody can see it. It also
+## settles what happens to a run that is given up halfway: the coins are
+## already in the purse, because there was never anywhere else for them to be.
+##
+## Once per coin, for both players. It is one coin: whoever reaches it first
+## has it, and what the other one sees is an empty piece of road, which is
+## exactly what it is.
+func _on_coin_entered(body: Node3D, index: int) -> void:
+	var car := body as Car
+	if car == null:
+		return
+	if index < 0 or index >= _coins.size():
+		return
+	var coin := _coins[index]
+	if bool(coin["taken"]):
+		return
+	coin["taken"] = true
+	var purse := _the_purse()
+	if purse != null:
+		purse.bank()
+	coin_taken.emit()
+	_play_the_pickup(coin)
+
+
+## The purse, found off the tree rather than named.
+##
+## `Purse` is an autoload and this is a `class_name` script, and the two do not
+## mix: every check under `tools/` is a `--script` run, which compiles this file
+## and everything it depends on before the autoloads exist, and a bare `Purse`
+## in here fails to compile every one of them. Looked up once and kept, because
+## it is asked for in the middle of a physics callback.
+func _the_purse() -> Node:
+	if not is_instance_valid(_purse):
+		_purse = get_tree().root.get_node_or_null(^"/root/Purse")
+	return _purse
+
+
+## The coin lifting and fading, with a small number going up with it.
+##
+## A pickup with no feedback reads as a bug - a thing that was there is
+## suddenly not there - so something has to happen where the coin was, in the
+## world, as well as in the corner of the screen where the purse is.
+func _play_the_pickup(coin: Dictionary) -> void:
+	var area: Area3D = coin["area"]
+	if not is_instance_valid(area):
+		return
+	# Nothing may take it twice. The flag above is what actually settles that;
+	# this is the area itself going quiet, deferred because a body is inside
+	# one of its own callbacks at this moment and Godot will not have the
+	# physics rewritten from in there.
+	area.set_deferred("monitoring", false)
+
+	var number := Label3D.new()
+	number.text = "+1"
+	number.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	number.no_depth_test = true
+	number.pixel_size = coin_number_size / 64.0
+	number.modulate = coin_color
+	number.outline_modulate = Color(0.0, 0.0, 0.0, 0.7)
+	number.outline_size = 10
+	number.position = Vector3(coin_number_at.x, coin_number_at.y, 0.0)
+	area.add_child(number)
+
+	var disc: MeshInstance3D = coin["disc"]
+	var material := disc.material_override as StandardMaterial3D
+	# Bound to the coin itself, so a course rebuilt mid-fade takes its tweens
+	# with it rather than leaving them running on freed nodes.
+	var lift := area.create_tween()
+	lift.set_parallel(true)
+	lift.tween_property(area, "position:y",
+		area.position.y + coin_take_rise, coin_take_seconds)
+	lift.tween_property(material, "albedo_color:a", 0.0, coin_take_seconds)
+	lift.tween_property(material, "emission_energy_multiplier", 0.0,
+		coin_take_seconds)
+	lift.tween_property(number, "modulate:a", 0.0, coin_take_seconds)
+	lift.chain().tween_callback(area.hide)
+
+
+## One coin's own material. Transparent from the start rather than switched
+## over when it fades: a material that changes how it is drawn halfway through
+## a fade pops as it crosses over.
+func _a_coin_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = coin_color
+	material.metallic = 0.8
+	material.roughness = 0.25
+	material.emission_enabled = true
+	material.emission = coin_color
+	material.emission_energy_multiplier = coin_glow
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	return material
 
 ## One stripe of a barrier: a box between two road frames, open at the bottom
 ## where it meets the road.

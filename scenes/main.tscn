@@ -13,6 +13,7 @@
 [ext_resource type="PackedScene" path="res://scenes/pause.tscn" id="10_pause"]
 [ext_resource type="Script" path="res://scripts/condition_bar.gd" id="11_condition"]
 [ext_resource type="Script" path="res://scripts/lost_prompt.gd" id="12_lost"]
+[ext_resource type="Script" path="res://scripts/purse_tally.gd" id="14_purse"]
 
 [sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
 
@@ -177,6 +178,18 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 10
 theme_override_font_sizes/font_size = 46
 
+[node name="Coins" type="MarginContainer" parent="Hud/Top/Box"]
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+theme_override_constants/margin_top = 8
+
+[node name="Purse" type="Control" parent="Hud/Top/Box/Coins"]
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+script = ExtResource("14_purse")
+
 [node name="Condition" type="MarginContainer" parent="Hud/Top/Box"]
 layout_mode = 2
 size_flags_horizontal = 0
@@ -220,6 +233,18 @@ theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 10
 theme_override_font_sizes/font_size = 46
+
+[node name="Coins" type="MarginContainer" parent="Hud/Bottom/Box"]
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+theme_override_constants/margin_top = 8
+
+[node name="Purse" type="Control" parent="Hud/Bottom/Box/Coins"]
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+script = ExtResource("14_purse")
 
 [node name="Condition" type="MarginContainer" parent="Hud/Bottom/Box"]
 layout_mode = 2

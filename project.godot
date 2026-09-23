@@ -23,6 +23,7 @@ Backend="*res://scripts/backend.gd"
 Leaderboard="*res://scripts/leaderboard.gd"
 Garage="*res://scripts/garage.gd"
 CarLibrary="*res://scripts/car_library.gd"
+Purse="*res://scripts/purse.gd"
 
 [display]
 
