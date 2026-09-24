@@ -4,7 +4,8 @@ Five things to add to the game, written out properly: what each one is, why it
 is worth having, the rules it has to obey, and the files it lands in. Damage
 mode and traps are built (2026-09-16), the acrobatic tracks with them
 (2026-09-18), the bot and the medal gate after those (2026-09-22), and the
-coins after those (2026-09-23); the shop and car customisation are not.
+coins, the shop and car customisation after those (2026-09-23). **All of it is
+built.**
 
 The order below is the order they should be built in, and that order is not
 arbitrary - damage needs nothing, traps need nothing, but the bot needs a
@@ -24,934 +25,18 @@ worth, whether chaos actually rerolls anything - has a headless script that
 drives it and says so, and none of the five below is an exception.
 
 ## Contents
-
-1. [Damage mode](#1-damage-mode) - **done**
-2. [Traps](#2-traps) - **done**
-3. [Acrobatic tracks](#3-acrobatic-tracks) - **done**
-4. [The bot, and the medal gate](#4-the-bot-and-the-medal-gate) - **done**
-5. [Coins](#5-coins) - **done**
 6. [The shop](#6-the-shop)
 7. [Car customisation](#7-car-customisation)
 8. [What all of this touches](#what-all-of-this-touches)
 9. [Questions worth settling first](#questions-worth-settling-first)
 
----
-
-## 1. Damage mode
-
-> **Done, 2026-09-16.** Built to the spec below, with the damage questions
-> settled as follows:
->
-> - Hitting the other car costs nothing.
-> - Damage and chaos can both be on. Hits scale against the car's own
->   `max_speed`, so three flat-out hits break any car, chaos or not.
-> - A boosted hit is not capped: a square hit on a pad costs about 53.
-> - A broken car in solo sets no time.
->
-> Differences from the spec:
->
-> - The endless course does not roll on after a break.
-> - The warning bar flashes red to white, not just red, because a red car's
->   bar is already red.
->
-> What it does and why is in the README under **Damage**. The check is
-> `tools/checks/damage.gd`. Everything below is the original spec, kept for
-> the reasoning.
-
-### What it is
-
-A setting, off when the game is first opened, that gives each car a condition
-as well as a speed. Hitting things wears the car down; wear it down far enough
-and the car is finished and the run has to be started again.
-
-Off by default is the important half of that sentence. The game as it stands
-has one punishment for a mistake and it is time: you hit a barrier, you lose
-speed, you carry on. That is what makes the endless course and the twenty
-tracks bearable to practise on. Damage is a second punishment on top, and a
-player who never asked for it should never meet it - so it is a setting, it
-starts off, and a game opened for the first time drives exactly the way it
-drives today.
-
-### The rule
-
-A hit costs condition in proportion to how hard it was. The hit the game
-already measures is the right one to charge against: `Car._hit_obstacle` (the
-block around [scripts/car.gd:860](scripts/car.gd:860)) already works out
-`head_on`, how square the hit was, from the contact normal and where the car
-was going, and already uses it to scale how much speed the hit costs. Damage
-uses the same two numbers and nothing new:
-
-```
-damage = full_hit * head_on * (speed_into_it / max_speed)
-```
-
-- A square hit at the car's top speed costs `full_hit`.
-- A square hit at half speed costs half of that.
-- A glancing hit at any speed costs almost nothing, which is right: a scrape
-  down the side of a barrier is not a crash.
-
-Set `full_hit` so that **three full-speed square hits break the car**. With
-condition kept as 100, `full_hit` is 34: three of them is 102, and the third
-one finishes it. Every softer hit is a fraction of that, so a run can carry
-five or six clumsy moments or three bad ones, which is the feel being aimed
-at.
-
-### What counts as a hit
-
-Only bodies in the `obstacle` group, which is the same line the speed cost
-already draws ([scripts/car.gd:15](scripts/car.gd:15)). That means:
-
-- **Barriers damage.** They are the hazard.
-- **Traps damage** (see below), because a trap is a barrier that moves.
-- **The rails at the edge of the road do not.** A car scraping down a rail is
-  already being pushed back where it belongs and is already losing the time
-  that costs. Charging condition as well is punishing the same mistake twice
-  while the player is in the middle of recovering from it - which is the exact
-  reason the rails do not cost speed today, and the reason holds here.
-- **Grass does not.** Being off the road is slow and that is what it is.
-- **Landing from a jump does not, by default.** See the acrobatic section: if
-  hard landings are ever to cost condition it should be a separate, later
-  decision, because the same landing that is fine on track twelve is the whole
-  point of an acrobatic track.
-- **The other car** - open question, see the end.
-
-`obstacle_recovery` (0.4 s) already stops a car held against a barrier being
-charged every frame, and damage sits behind the same gate: one hit, one
-charge, however many frames the car spends touching the face. Without that a
-single mistake takes a car from full condition to broken in under a second,
-which reads as the game breaking rather than the car.
-
-### Breaking
-
-When condition reaches zero the car is out. What that means depends on which
-mode is being driven, and the two are genuinely different:
-
-**Solo** (`scripts/solo.gd`): the run is over. Not a reset to the last
-checkpoint - the whole point of damage is that it is a thing checkpoints do
-not fix. The finish panel is replaced by a broken panel: the time the car got
-to, how far it got, and Enter to run again. `_restart()` already puts the car
-back on the line and runs the countdown without rebuilding the track
-([scripts/solo.gd:252](scripts/solo.gd:252)), so the retry costs nothing and
-is the same instant retry the mode already has.
-
-**Two players** (`scripts/main.gd`): the broken car is out and the other one
-wins the course, announced the same way a finish is announced through
-`_finish_course`. A race where both players break within the pause between
-them is a draw, not a crash - handle it.
-
-**A broken car sets no time.** It never finished, so there is nothing to
-record and nothing to send to a board.
-
-### Showing it
-
-The player has to be able to see this coming or it is not a mechanic, it is a
-surprise. A bar per player in the HUD, beside the clock, in the car's own
-paint - so on a split screen each player reads their own condition where they
-are already reading their own time. It should be readable without being
-counted: full is a full bar, and the last third goes red and pulses, which is
-the only warning a player driving at 30 m/s has time to take in.
-
-The stock HUD labels live at [scripts/main.gd:33](scripts/main.gd:33) as
-`_counts`, `_clocks`, `_places`, `_tallies`; the condition bar is one more of
-those arrays and one more node per half of the split.
-
-The car should show it too, not only the HUD. Three states is enough: clean,
-knocked about, and nearly finished. The cheapest honest version is smoke - a
-`GPUParticles3D` off the bonnet that starts thin at two thirds gone and
-thickens - because it works on a car the player did not model and the game
-has never seen. Anything that dents panels only works on the stock car, and
-the whole point of `CarShell` is that the game does not know what model it is
-dressing ([scripts/car_shell.gd:1](scripts/car_shell.gd:1)).
-
-### Where the setting lives
-
-`GameSettings`, beside `chaos` and `solo`
-([scripts/game_settings.gd:56](scripts/game_settings.gd:56)):
-
-```gdscript
-## Whether cars can be broken. Off until a player asks for it: the game has
-## one punishment for a mistake and it is time, and a player who never chose
-## this should never meet it.
-var damage := false:
-	set(value):
-		if value == damage:
-			return
-		damage = value
-		changed.emit()
-```
-
-Saved under `[race] damage` in `save_settings`/`load_settings`, read back with
-the same `bool(...)` guard the other two use, and shown as a toggle on the
-settings screen ([scripts/settings_menu.gd](scripts/settings_menu.gd)) under
-the sky row. It needs a line of text under it saying what it does, because
-"Damage" alone does not tell anyone that it ends runs.
-
-### Numbers to start from
-
-| Name | Value | What it is |
-| --- | --- | --- |
-| `max_condition` | 100.0 | Full health, in the units below |
-| `full_hit` | 34.0 | What a square hit at top speed costs |
-| `damage_recovery` | 0.4 s | Reuses `obstacle_recovery`; no second gate |
-| `warning_at` | 0.33 | Fraction left when the bar goes red and smoke starts |
-
-These are a starting point and are meant to be driven and changed. The check
-below is what makes changing them safe.
-
-### The check
-
-`tools/checks/damage.gd`:
-
-```
-Godot --path . --headless --fixed-fps 60 --script tools/checks/damage.gd
-```
-
-It should show, from a car it drives itself:
-
-1. A square hit at top speed costs `full_hit`, within a small tolerance.
-2. A square hit at half speed costs about half of it.
-3. A glancing hit costs nearly nothing.
-4. A car held into a face at full throttle for two seconds is charged once
-   per `obstacle_recovery`, not once per frame - and say how many times, the
-   way `barrier_recovery.gd` reports its hit count.
-5. Three full-speed square hits break the car and a third-of-a-hit does not.
-6. Scraping a rail costs nothing.
-7. **With the setting off, nothing above happens at all** - the same shape as
-   `chaos_colour.gd`, which checks the things that are meant to move and then
-   checks that none of it happens in a race that is not chaotic.
-
-### Things that will go wrong
-
-- **Damage must not change how the car drives.** Not its grip, not its top
-  speed, not its steering. The moment condition affects handling, a time set
-  with damage on is a time set in a different car, and `TrackTimes.GEOMETRY`
-  ([scripts/track_times.gd:29](scripts/track_times.gd:29)) has to be bumped -
-  which throws away every time every player has ever set. Keep damage to
-  ending runs and nothing else, and every existing record still stands.
-- A car that breaks mid-jump, in the air, with nothing under it. It is still
-  broken; freeze it where it is, do not drop it through the hole.
-- Chaos rerolls the car's top speed. `full_hit` is scaled by
-  `speed / max_speed`, so it follows the roll on its own - but a chaos car at
-  1.7× speed hits things much harder than a tuned one. Check what that feels
-  like before deciding whether damage and chaos should be allowed together.
-- Being reset to a checkpoint does not repair the car. If it did, damage would
-  be a thing you undo by pressing R.
-
----
-
-## 2. Traps
-
-> **Done, 2026-09-16.** Built to the spec below, with these changes, all
-> written up under Traps in the README:
->
-> - Traps went onto existing tracks - Switchback, The Hook, Relentless,
->   Grinder, The Wringer and Last Light - and those six lost their times.
->   No `GEOMETRY` bump was needed: a time is kept against a fingerprint of its
->   own track file, so editing a track only ever costs that track.
-> - Traps are on chaos courses too, not laid-out tracks only. Chaos turns them
->   on and rolls how many rows are traps; every chaos course that has room
->   for one gets at least one. The endless course without chaos is unchanged.
-> - `trap(from, to, width := 0.6, dwell := 1.6, travel := 1.0)`: `from` and
->   `to` are where the middle of the row stands, and `width` is how much road
->   it covers.
-> - Checking every *phase* was not enough. A row sliding across the road is
->   usually narrowest halfway, so the checker follows each trap through every
->   place it passes, 5 cm at a time.
-> - A trap closing on the kerb with a car in the way lifted the car onto the
->   rail. Cars in a closing lane are now shoved along the road out of the row.
->
-> Not done: the medal targets on the six tracks were not re-measured with
-> `tools/lap_times.gd`, and their overhead thumbnails were not redrawn.
-
-### What it is
-
-Obstacles that move: barriers that switch which part of the road they block,
-on a loop, so a way past that was open when the car came over the rise is shut
-by the time it gets there. Not random, not reactive - a timed cycle a player
-can learn.
-
-### Why timed and not random
-
-Because the game has to stay fair to drive, and the only way a moving hazard
-is fair is if it is the same every lap. A trap that rolls a die as the car
-approaches is a trap that sometimes cannot be avoided, and a track where the
-gold time depends on which way the dice fell is a track with no gold time.
-Timed from the start of the run means a player who has driven it twice knows
-the rhythm, and driving the rhythm is the skill the feature is for.
-
-### How a trap works
-
-A trap is a row of barriers with two or more **phases**. Each phase says which
-part of the road the row blocks - exactly the `lateral` and `half_span` a
-barrier already has ([scripts/track_features.gd:29](scripts/track_features.gd:29)).
-It holds a phase for `dwell` seconds, moves to the next over `travel` seconds,
-and loops. The clock it moves on is the race clock, started at GO, so both
-players on a split screen see the same trap in the same place - which matters,
-because a two-player race where each car meets a different trap is not a race.
-
-Written in a track file, next to the corners, the way everything else is:
-
-```gdscript
-straight(60.0)
-trap(-0.7, 0.7)              # slides left edge to right edge and back
-straight(40.0)
-trap(-0.6, 0.6, 2.0, 1.2)    # same, holding 2 s and taking 1.2 s to cross
-```
-
-### The rule that cannot be broken
-
-**There is always a way past, in every phase, and the way past one trap can be
-reached from the way past whatever came before it.**
-
-Those are already the two rules barriers live under
-([README.md, Barriers](README.md)), and `TrackFeatures.faults()` already checks
-them - but it checks one arrangement, and a trap has several. The validator has
-to check every phase of every trap, and every combination of a trap's phase
-with the phase of the trap next to it, or a pair of traps that are each
-passable alone becomes a dead end at the one moment they are both across the
-same side.
-
-That is the single hardest part of this feature, and it is worth being blunt
-about it: a trap that closes the road is not a hard trap, it is a broken track,
-and nobody can tell the difference from inside the car. It has to be caught
-before it ships.
-
-Practically:
-
-- A trap's phases each get the same `clear_lane` (3.4 m) minimum the static
-  rows get, narrowed to fit rather than dropped.
-- The reachability spacing `√(4·dodge_radius·shift)·dodge_margin` is computed
-  against the **worst** pair of phases, not the resting one.
-- A trap near another trap or a static row is spaced for the worst case of
-  both.
-- If the worst case cannot be made to fit, the trap is cut back or the track
-  file is told it does not fit. Not silently dropped.
-
-### What to build
-
-- [x] `TrackFeatures.TRAP` - a new kind beside `BOOST_PAD`, `OBSTACLE`, `FORK`
-      ([scripts/track_features.gd:19](scripts/track_features.gd:19)).
-- [x] Phases on `Placement`: an array of `{lateral, half_span}`, plus `dwell`
-      and `travel`. Static barriers are the one-phase case and change nothing.
-- [x] `TrackDefinition.trap(from, to, dwell := 1.6, travel := 1.0)`
-      ([scripts/track_definition.gd:132](scripts/track_definition.gd:132)), as
-      a sibling of `barrier()`.
-- [x] `TrackFurniture` builds it as a moving body, not a static one: the same
-      striped panels `_build_barrier` already makes
-      ([scripts/track_furniture.gd:157](scripts/track_furniture.gd:157)), on
-      an `AnimatableBody3D` so `move_and_slide` pushes the car properly instead
-      of letting it through. It stays in the `obstacle` group, so it costs the
-      speed a barrier costs and the condition damage mode charges - no new
-      collision code at all.
-- [x] Drive it off the race clock, not `delta` accumulated per node, so a trap
-      reset with the race is where the race says it is.
-- [x] Extend `TrackFeatures.faults()` to the all-phases rule above.
-- [x] `traps_enabled`, a sibling of `obstacles_enabled`, off for the endless
-      course. *Changed: chaos turns it on, so rolled chaos courses have traps
-      as well as the laid-out tracks - see the note at the top of this
-      section.*
-
-### The check
-
-`tools/checks/trap_layout.gd`, modelled on `barrier_layout.gd`:
-
-- Every phase of every trap on the twenty tracks leaves at least `clear_lane`.
-- Every phase pair of neighbouring traps is reachable.
-- The validator is handed two deliberately broken plans and rejects both - a
-  validator that has never rejected anything is not obviously working.
-- A car is driven through a trap at the moment it is open, and into it at the
-  moment it is shut, and both do what they should.
-
-### Cost
-
-Moving traps make a track a different road to drive, so putting the first trap
-into an existing track means **bumping `TrackTimes.GEOMETRY`** and losing every
-time set on that track. Better: put traps only on new tracks, or accept the
-loss once and do all of it in one go.
-
----
-
-## 3. Acrobatic tracks
-
-> **Done, 2026-09-18.** Ten tracks behind ACROBATIC, built to the ground rules
-> below, all written up in the README under Rings, Platforms, Lifts, Floating
-> road, High roads and Acrobatic tracks. Differences from the spec:
->
-> - **`jump(scale)` was not built, and should not be.** The question this
->   section was written around - do acrobatic tracks size their own jumps -
->   turned out to be the wrong question. What the tracks actually needed was
->   jumps that land somewhere *else*: `jump(rise, landing)` sets how much
->   higher or lower the landing is and how far away, and the ramp and the gap
->   stay the game's. So a player still reads a ramp and knows what it asks,
->   and a track can still send them up a staircase. Scaling the gap would have
->   broken the first of those to get the second.
-> - **Rings are placed by measurement, not by rule.** The spec assumed a ring
->   over a scaled jump would need its height scaled with it. Instead the flight
->   was measured - 6.8 m at the ring - and every ring stands where a car taking
->   that jump actually flies.
-> - **Lifts, floating road, high roads and kickers** are not in the spec at
->   all. They came out of wanting variety: landing on a mover that carries you
->   onto road that climbs further, rather than ten tracks of jump-and-land.
-> - **The first three tracks were built twice.** Rings on otherwise empty road
->   were boring, which is a thing only driving them showed. The rebuilt ones
->   carry pads, barriers and traps alongside the new mechanics, which is now
->   the seventh ground rule.
-> - **A pad before a platform is not bait.** The spec said it was. Driving it
->   showed a boosted car reaches the lip at 43.8 m/s against 30 and clears the
->   platform onto the road beyond, so a pad there skips the timing rather than
->   punishing it. Pinball was redesigned around the truth.
->
-> Not done, and deliberately:
->
-> - **The medal times are the check driver's, scaled, not driven by hand.**
->   `tools/checks/acrobatic_drive.gd` finishes all ten, and Lift Off's ratios
->   set the ladder from those laps. Kept as they are for now; they are meant
->   to be replaced by a player's own times.
-> - **The jump-clearability check covers the acrobatic ten, not all thirty.**
->   `acrobatic_drive.gd` drives every ring and jump on those ten with a real
->   car and reports no retries; `tools/checks/jump_flight.gd` is still the
->   place to extend it to the other twenty.
-> - **A hard landing costs no condition under damage mode.** Settled as the
->   default the spec suggested: an exemption only some tracks had would be a
->   rule players could not learn.
->
-> Everything below is the original spec, kept for the reasoning.
-
-### What it is
-
-Tracks built around being in the air rather than around corners: runs of
-jumps, big drops, landings that come at you fast, climbs that launch. A
-different kind of track rather than a different mode - they sit in the same
-grid as the other twenty, with their own medal times.
-
-### What already exists
-
-Most of it. `jump()` gives a ramp, a hole and a landing run; `climb()` gives
-road that gains or loses height, eased so it meets the level road without a
-crease ([scripts/track_definition.gd:89](scripts/track_definition.gd:89)). The
-car already keeps its speed in the air, steers less there, pitches to the road,
-and squashes on landing.
-
-### What is missing
-
-**Every jump in the game is the same jump.** `ramp_length`, `jump_gap` and
-`landing_length` are set by `Track` before `describe()` is called and a track
-file never names them, deliberately: a player who has cleared one jump knows
-what the next one asks
-([scripts/track_definition.gd:51](scripts/track_definition.gd:51)).
-
-That is exactly right for the twenty tracks and exactly wrong for an acrobatic
-one, where the whole point is jumps of different sizes. So this feature is
-really one decision:
-
-> Do acrobatic tracks get to size their own jumps?
-
-The answer should be yes, but narrowly. Add an optional argument rather than
-opening the three fields up:
-
-```gdscript
-func jump(scale := 1.0) -> void:
-	_add(TrackLayout.JUMP, (ramp_length + jump_gap + landing_length) * scale)
-```
-
-with `scale` clamped to something like 0.7 to 1.6 and the gap scaled by it.
-A track can then ask for a small one or a big one, the shape of every jump is
-still the game's, and a player still reads a ramp and knows roughly what it
-means. Anything more than that and jumps stop being a language.
-
-`Chaos.jump_gap_scale(speed, gravity)`
-([scripts/chaos.gd:203](scripts/chaos.gd:203)) already scales a gap against
-what the car can actually clear; the same idea guards a hand-set scale, so a
-track cannot ask for a gap no car can cross.
-
-### What to build
-
-- [x] The way in: TRACKS slides NORMAL and ACROBATIC down from under itself.
-	  NORMAL opens the grid there is now; ACROBATIC is greyed until there are
-	  acrobatic tracks for it to open (2026-09-17).
-- [x] **Rings** (2026-09-17). On an acrobatic track the checkpoints are rings a
-	  car has to fly through. `ring_jump(lane)` and `ring(lane, height)` in a
-	  track file; `tools/checks/rings.gd`. What they do is under Rings in the
-	  README.
-- [x] **Not `jump(scale)`, but `jump(rise, landing)`** (2026-09-17). Settled
-	  the other way: the ramp and the gap stay the game's, and what a track
-	  gets to choose is where the landing is - how much higher or lower, and
-	  how far off. Rings are placed from measured flight (6.8 m at the ring)
-	  rather than by scaling a number, so there is nothing to multiply.
-- [x] Jumps proved clearable on the acrobatic ten (2026-09-18):
-	  `tools/checks/acrobatic_drive.gd` drives every one of them with a real
-	  car and finishes all ten with no retries at any ring. The other twenty
-	  are still not covered; `tools/checks/jump_flight.gd` is the place.
-- [x] The acrobatic grid: ACROBATIC opens ten slots of its own, slots 20-29
-	  in `TrackRoster` (2026-09-17).
-- [x] **Moving rings and platforms** (2026-09-17). `moving_ring_jump()` and
-	  `platform_jump()`; `tools/checks/platforms.gd`.
-- [x] Ten acrobatic tracks (2026-09-18), challenging, using the old mechanics -
-	  pads, barriers, traps - alongside the new ones. The first three were
-	  rebuilt after they turned out plain rings on empty road was boring. All
-	  ten have targets scaled from the check driver's lap, to be replaced by
-	  the best times a player drives:
-	  1. **Lift Off** (2026-09-17) - boost, barrier into a ring, a trap into a
-		 moving platform, a moving ring, barriers, a boost into a ring.
-	  2. **Sky Stairs** (2026-09-17) - a moving platform onto floating road,
-		 climbing jump by jump to 9.5 m over its own start, and back down.
-	  3. **Island Hopper** (2026-09-17) - floating islands with a moving
-		 platform in every gap, in chains of two and three.
-	  4. **Tightrope** (2026-09-17) - half-width floating road climbing to
-		 11.5 m, with barriers, narrow traps and off-centre rings.
-	  5. **Elevator** (2026-09-17) - two lifts to nearly 20 m, a sliding
-		 platform and a moving ring back down.
-	  6. **High Road, Low Road** (2026-09-17) - two splits: a high road with a
-		 platform, and one with a lift, over low roads with barriers and traps.
-	  7. **Freefall** (2026-09-17) - up to 26.5 m by grades and a lift, then
-		 three falls through moving rings onto trap-swept road.
-	  8. **Pinball** (2026-09-18) - barriers and traps the whole way round, four
-		 rings, and a pad that skips a platform.
-	  9. **Knot** (2026-09-18) - three 270 degree climbing turns, each crossing
-		 back over its own road with a ring after it.
-	  10. **Last Leap** (2026-09-18) - fast platforms, two moving rings back to
-		 back, a lift to twenty metres, and a 28 m drop through a ring.
-- [x] **High roads** (2026-09-17). `high_road()` and `high_road_end()`,
-	  kickers, `BranchDefinition`; `tools/checks/high_road.gd`.
-- [x] **Lifts** (2026-09-17). `lift_jump()`; `tools/checks/lifts.gd`.
-- [x] **Floating road and climbing jumps** (2026-09-17). `floating()`, a `rise`
-	  on every jump, overpasses; `tools/checks/floating.gd`.
-
-### The ten tracks
-
-What each is for, in the order they are driven. Built ones are marked. Where
-one needs something the game does not have yet, it says what.
-
-1. **Lift Off** - *built.* One of everything, low down: a barrier into a ring,
-   a trap into a slow moving platform, a moving ring, a boost into the last
-   ring.
-2. **Sky Stairs** - *built.* Off a moving platform onto floating road, and up:
-   ring jumps landing higher each time to 9.5 m, curling back over its own
-   start, then a faster platform and a drop to the ground.
-3. **Island Hopper** - *built.* A chain of floating islands, each a short slab
-   of road with its own ramp, and a moving platform in every gap between them,
-   sliding the other way from the last. No ground after the first ring.
-4. **Tightrope** - *built.* High, narrow floating road, half the usual width, with traps
-   sweeping it and barriers leaving a car-and-a-half gap, and rings off to the
-   side. The rail is right there the whole way.
-5. **Elevator** - *built.* Platforms that move up and down rather than across.
-   Land on one while it is low and it lifts the car to a floating road it could
-   never have jumped to; miss the moment and it is at the wrong height.
-6. **High Road, Low Road** - *built.* The road splits: a high route of climbing ring
-   jumps and platforms that is shorter and faster, and a ground route round the
-   outside that is safe and slow, meeting again before the finish.
-   Built as a kicker in one lane onto a straight floating road that drops back
-   onto the course where the low road comes back underneath it.
-7. **Freefall** - *built.* Starts by climbing floating road to the highest point in the
-   game, then comes down in a string of big drop jumps, each through a moving
-   ring, each landing on a trap-swept floating road lower than the last.
-8. **Pinball** - *built.* Dense: floating road packed with barriers and traps
-   between quick ring jumps, boost pads placed as bait in front of platforms,
-   and the only safe lines through them narrow.
-9. **Knot** - *built.* A figure of eight in the sky that crosses over itself three times
-   at three heights, with a ring over each crossing so the road below is always
-   in view.
-10. **Last Leap** - *built.* The finale: fast platforms that barely stop, two moving
-	rings back to back, a climb to the top, and one long drop through a ring
-	onto the finish straight.
-- [x] Medal times for each, driven rather than guessed (2026-09-18) - by the
-	  check driver, not by hand. The crude driver is worse than usual here, as
-	  expected, so `tools/checks/acrobatic_drive.gd` drives these instead: it
-	  aims at the next ring rather than at the centreline, and finishes all
-	  ten. The ladder is scaled off those laps by Lift Off's ratios
-	  ([README.md, Where the numbers come from](README.md)). **Kept for now,
-	  meant to be replaced by a player's own times** - a driver that steers
-	  perfectly with no reaction time can say whether a track is *drivable*,
-	  never how *hard* it is.
-- [x] Decided (2026-09-18): a hard landing costs no condition under damage
-	  mode. The default the spec suggested, for the reason it gave - an
-	  exemption only some tracks had would be a rule players could not learn.
-
-### Ground rules
-
-Settled 2026-09-17, while building the rings:
-
-- **Ten acrobatic tracks** for now, on their own grid behind ACROBATIC, not
-  mixed into the twenty.
-- **Rings are the checkpoints.** An acrobatic track has rings and no painted
-  checkpoints; a track never has both. Every ring is needed to finish.
-- **A ring banks by going through it** - forwards, the middle of the car inside
-  the hole. Not by landing past it, not by driving under it.
-- **The game sets the ring's height, the track sets its lane.** A ring over a
-  jump stands where a car taking that jump flies. A track makes a ring hard by
-  where across the road it puts it, never by hanging it where nobody can reach.
-- **The rim is solid but not an obstacle.** Clipping it knocks the car off its
-  line and costs no damage and no speed penalty.
-- **A reset after a ring puts the car past the hole,** on the landing.
-- **Acrobatic tracks use everything.** Pads, barriers and traps stay; moving
-  rings and platforms are added. Empty road between jumps is boring.
-- **A platform is always visible from the run up** - it carries a gate that
-  shows over the lip - because a jump nobody can see cannot be timed.
-- **A boosted car clears a platform** and lands on the road past it, so a pad
-  before one skips its timing rather than punishing it. A ring still catches a
-  boosted car.
-- **Medals come from a player's best time** where the test driver cannot finish
-  a track; where it can, its lap sets them until a player's time replaces them.
-
-### Where they go on the grid
-
-Not mixed in with the twenty. They are a different thing to drive and the
-select screen should say so - a second labelled section, or a row with a
-heading. A player looking for a normal track should not find track 22 is six
-jumps in a row.
-
----
-
-## 4. The bot, and the medal gate
-
-> **Done, 2026-09-22.** Built to the spec below, with the two open questions
-> settled as follows:
->
-> - **A bot race runs on its own road**, not on the tenth track again. There
->   are two, `tracks/bot/b1_the_gate.gd` and `b2_the_toll.gd`, and `BOT` is a
->   third kind of slot beside `NORMAL` and `ACROBATIC`. The tenth track is a
->   road the player has already learned, and a door should ask for all ten
->   rather than for one of them again.
-> - **Winning opens the next ten and marks the cell; losing costs nothing.**
->   The win is the only result in the game that is written down rather than
->   merely shown - `Progress.win()`, out of `Solo._won_the_race()`. A lost race
->   writes nothing, takes nothing away and may be driven again immediately; the
->   two ways off the panel are RACE AGAIN and BACK TO TRACKS. A gate that can
->   be failed permanently is a gate that ends somebody's game.
->
-> Differences from the spec:
->
-> - The gate counts golds but the *door* is what the golds open, and the ten
->   behind it wait on the race being won as well. The spec ran the two
->   together; they are two things in the way, in order.
-> - The door is a strip of its own between the blocks rather than a cell in the
->   grid, so the five-column alignment is untouched.
->
-> Still open, and not blocking: **the bot's condition bar is not on screen.**
-> With damage on the player can see how worn they are and not how worn the bot
-> is, where `Main` shows both.
->
-> What it does and why is in the README under **The bot**, **The bot race** and
-> **The medal gate**. The checks are `tools/checks/bot_race.gd`,
-> `bot_duel.gd`, `bot_road.gd`, `progress.gd` and `track_select.gd`. Everything
-> below is the original spec, kept for the reasoning.
-
-### What it is
-
-Two features that only make sense together:
-
-- Every tenth track is not a time trial but a race against a computer-driven
-  car that is hard to beat. Winning it opens the next ten.
-- You cannot start that race on having merely finished the ten before it. You
-  need **five gold medals** among them.
-
-### Why the gate
-
-Finishing ten tracks is not the same as being able to drive them. A player who
-scraped a bronze on all ten and walks into a race against a fast bot loses,
-repeatedly, with no idea what to change. Five golds out of ten is a
-qualification: it says you have driven half of these properly, and the bot is
-now a fair thing to be asked to beat. It also gives the medals somewhere to go
-- at the moment a gold is a colour on a bar, and nothing in the game ever asks
-for one.
-
-Five of ten, not ten of ten, on purpose. A player may simply hate track seven.
-
-### The bot
-
-There is already a driver. `tools/checks/solo_run.gd` drives a whole run from
-the line to the flag: flat out where the road ahead is straight, backing off as
-it bends, aimed through whatever `TrackFeatures.gaps_at()` says is open rather
-than down the middle ([README.md, Solo](README.md)). That is the skeleton. It
-lives in `tools/` because nothing shipped needed it; the bot needs it promoted
-to `scripts/bot_driver.gd` and made better:
-
-- [x] Move the driving logic out of the check and into a real script, so the
-	  check drives the same code the game does. Two copies of a driver drift.
-	  *`scripts/bot_driver.gd`; `solo_run.gd` now drives with it.
-	  `tools/lap_times.gd` and `acrobatic_drive.gd` still have their own.*
-- [x] Give it a **difficulty**, as one number: how far ahead it looks, how much
-	  it backs off for a bend, how hard it aims at a gap. One number rather
-	  than a table, so it can be tuned by feel.
-- [x] Make it use what a player uses - pads, the fork, slipstream - rather than
-	  driving a clean line past all of it. A bot that ignores boost pads is a
-	  bot you beat by taking them, once, forever.
-	  *Pads: done, from difficulty 0.25. Fork: done, 2026-09-22 - both lanes are
-	  planned and driven on a copy of the car and the quicker is kept, which
-	  comes out fifteen forks down the pad's lane and eleven down the clear one,
-	  and is worth about half a percent against gold. Slipstream and going round
-	  the other car: done the same day, and measured for the first time by
-	  `tools/checks/bot_duel.gd` - the tow collects 4.8 m/s of the 6.6 the car
-	  offers, and the 50 m the bot used to lose in a level race on The Gate is
-	  now about 5 m with five light contacts and no barrier hits. All three are
-	  written up in the README under The bot.*
-- [x] Decide what "hard to beat" is, in numbers: the bot should come in around
-	  the track's **gold** time. That is a target already tuned to be a little
-	  under the best the road allows, it already exists per track, and it means
-	  the gate and the race ask the same thing of the player. A player with five
-	  golds can beat it; a player with five bronzes cannot, which is the gate
-	  working.
-	  *At difficulty 1 it averages +3% against gold over the twenty tracks,
-	  from -2% (The Weave) to +8% (First Light, The Gauntlet), plus The Wringer
-	  at +30% because of the ramp wedge below. 0.5 is about +7%, 0 about +20%.*
-- [x] The bot must not cheat. No extra speed, no rubber band, no ignoring
-	  barriers. It drives the same car with the same tuning, and if it is too
-	  easy it gets a better line rather than a bigger engine. A bot that
-	  teleports when you get ahead is the fastest way there is to make a player
-	  stop trusting a game.
-	  *It only ever sets throttle and steering through `Car.driver`.*
-
-> **Bot driver built, 2026-09-18.** Written up in the README under The bot.
-> Still open before the race can use it:
->
-> - ~~**Planning takes 0.4-1.7 s**, all on the frame it is made.~~ *Done,
->   2026-09-21: `plan_a_little()` carries it on a few milliseconds a frame and
->   the bot race spends the countdown doing it. The worst single call anywhere is
->   4.9 ms at a 4 ms budget, and `bot_race.gd` prints it and faults over 8 ms.
->   Nearly all of the cost turned out to be the two relaxings rather than the
->   practice laps: 345 ms of First Light's 395, and 888 ms of Last Light's 1440.*
-> - **The golds were set by a driver that cheats.** `lap_times.gd` turns the
->   car's body at 3 rad/s whatever its speed. So on the slalom tracks
->   (The Gauntlet, First Light's fork) gold may be quicker than the real car
->   can go, and the bot sits at +8% there. Worth deciding whether the bot at
->   difficulty 1 should become the reference the golds are set from.
-> - ~~**The Wringer's first jump ramp wedges the car** at one arrival state,
->   with keyboard input as well as with the bot.~~ *Fixed, 2026-09-22, and it
->   was the ramp rather than either track. The road is sampled every 2.5 m and
->   the car's collision box is level, so climbing a ramp is a flat-bottomed box
->   pushed up a staircase of facets; above about 22 degrees on a facet the
->   box's front face is buried deep enough in the next that depenetration eats
->   the whole of the step's forward motion, and the car stops dead - on the
->   floor, one contact, velocity zero, still reading full speed at full
->   throttle. At `ramp_curve` 1.5 the top two facets were 25.6 and 23.4
->   degrees. It stayed hidden because most cars skip into the air at the foot
->   of a ramp and are gone before the steep part; a car that arrives glued to
->   the road stays on the surface the whole way up and meets it, which is the
->   "arrival state" below. `ramp_curve` is now 1.2, where no facet is over 21.3
->   degrees. The Wringer went from DNF-with-a-reset to 1:15.05 (+4.2%), Long
->   Haul to -1.1%, and the bot now needs putting back nowhere on any of the
->   twenty. `jump_flight.gd` still passes, so no hole got harder to clear.
->   **This is a change to the road rather than to a track file - see the
->   `GEOMETRY` note below before releasing it.*** The old note, kept because it
->   is what led to the cause:
->   *Long Haul now meets it too, at the jump at 1450 m: the car stops two metres
->   into the ramp, reading full speed and going nowhere, until the bot asks to
->   be put back. Nothing about the plan there changed - the line, the limits and
->   the room at that sample are the same numbers they always were - but taking
->   the quicker lane of the fork seven hundred metres earlier arrives at the
->   ramp in a different state, and that state is the one that wedges. It costs
->   the track six seconds and one reset, which is all of the difference between
->   the bot averaging +2.4% against gold and +3.0%. Worth doing before the
->   golds are looked at again.*
-
-### The race itself
-
-A bot race is `main.tscn`'s shape - two cars, two viewports, a leader, a winner
-- with one difference: the second car takes its input from `BotDriver` rather
-than from `p2_*`. Rather than a third scene, give `Car` a driver it asks for
-input instead of reading the input map directly (the actions are already
-indirected through `_accelerate`, `_brake` and friends at
-[scripts/car.gd:354](scripts/car.gd:354), so this is a small change), and let
-`Main` hand car two a bot instead of a keyboard.
-
-But the bot race is a **one-player** thing, and `main.tscn` splits the screen
-for two. Options, in order of preference:
-
-1. `Solo` with a second car and no split - one full-width view, the bot's car
-   on the road with you, the rival arrow already built to point at it
-   ([scripts/rival_arrow.gd](scripts/rival_arrow.gd)). This is the least new
-   code and reads best.
-2. `Main` with the split collapsed to one view. More plumbing, more branches on
-   a scene that is already about there being two of everything.
-
-Go with 1.
-
-> **Built, 2026-09-20.** `Solo` carries a second car on a bot road: built in
-> code in `_ready()` so nothing else pays for it, driven by `BotDriver` at
-> difficulty 1, told the race clock every step, put back at its own checkpoints
-> down the player's own `_back_to_checkpoint()`, painted one fixed amber in the
-> stock car, arrowed, contacted and drafted. The place readout runs on
-> `Places`, shared with `Main`. Written up in the README under The bot race, and
-> driven by `tools/checks/bot_road.gd`. Two new things came with it: one bot
-> road, [tracks/bot/b1_the_gate.gd](tracks/bot/b1_the_gate.gd), and
-> `TrackRoster.BOT_FILES`/`is_bot_road()` to say which roads are doors, because
-> there was no way to ask that before. Still open:
->
-> - ~~**The bot loses a level race by about 50 m on The Gate,**~~ *Done,
->   2026-09-22. It was three things: the bot decided whether the other car was
->   in its way by comparing that car against its own line rather than against
->   where its car actually was, so it never noticed it was about to run into
->   one it was drafting; it had no way to lift when there was nowhere to go
->   round, so it shoved instead - forty-five contacts in one race; and it would
->   tuck into a tow that led straight at a barrier row it had not chosen a lane
->   for. It is now about 5 m with five contacts and no barrier hits, and
->   `tools/checks/bot_duel.gd` holds it there.*
-> - **The player's condition bar is the only one on screen.** With damage on
->   there is nothing saying how worn the bot is, where `Main` shows both.
-
-### Unlocking
-
-Nothing in the game is locked today: `TrackRoster` knows tracks that exist and
-tracks that do not, and the select screen draws an empty frame for a slot with
-nothing in it ([scripts/menu.gd:326](scripts/menu.gd:326)). Locked is a third
-state and has to look different from both - a built track you may not drive yet
-is not the same as a track that does not exist, and showing them the same way
-tells a player the game is unfinished when actually they are.
-
-- [x] `scripts/progress.gd`, an autoload beside `TrackTimes`: which bot races
-	  have been won, and therefore which blocks of ten are open. Saved to
-	  `user://progress.cfg`.
-- [x] Medals are not stored and should stay that way. The gate counts them at
-	  the moment it is asked, from `TrackTimes.best()` and
-	  `TrackRoster.targets()` through `Medal.earned()` - so moving a target
-	  moves the gate with it, which is what you want while tracks are being
-	  tuned ([scripts/medal.gd:1](scripts/medal.gd:1)).
-- [x] Three states on a cell: **open**, **locked** (built, greyed, with a small
-	  lock and a tooltip saying exactly what is needed - "5 GOLD IN 1-10, you
-	  have 3"), **not built yet** (the existing empty frame).
-- [x] The bot race as its own cell at the end of each block of ten, marked out
-	  as different - it is not a track with a time, it is a door.
-- [x] A player who has the golds but has not won the bot race sees the bot cell
-	  open and the next ten locked. A player who wins it sees the next ten open
-	  immediately, without a restart.
-
-### The check
-
-`tools/checks/bot_duel.gd` is the driver's own check for the parts of it that a
-lap time cannot see: what the slipstream is worth, whether the bot gets past the
-car in front without going through it, what a level race costs the car that
-gives way, and which lane of each fork the timing kept. Two bots on one road,
-because a check has no hands.
-
-`tools/checks/progress.gd`: the gate opens on exactly five golds and not four;
-a gold lost to a retuned target closes it again; winning a bot race opens the
-next block and nothing else; a fresh profile has block one open and the rest
-shut. Plus `tools/checks/bot_race.gd`, which runs the bot over all twenty
-tracks headless and reports its time against each gold target - that is the one
-number that says whether "hard to beat" is true, and it will need rerunning
-every time the car is retuned.
-
----
-
-## 5. Coins
-
-> **Done, 2026-09-23.** Built to the spec below, with these additions:
->
-> - **Laid-out tracks get coins too.** The spec left it open by talking about
->   "a course", and `adopt` takes a track file at its word about what is on the
->   road. But a coin is not part of what a track file describes - it is not a
->   corner to be driven or a barrier to be got past, it is loose change on
->   somebody else's road - so the same pass runs over both, seeded off the
->   track's name so a track always has its coins in the same places. High roads
->   get none: one there would be change the course's own count knows nothing
->   about.
-> - **A coin also has to be clear of what stands just past it.** Keeping one
->   out of barriers is not enough. A coin lined up with a wall fourteen metres
->   on is not an offer, it is bait, so a coin has to sit in the way past every
->   standing row within `coin_run_up` of it as well as in the way past whatever
->   is beside it.
-> - **The disc leans 26 degrees out of upright.** Turning about the upright
->   itself, a coin a quarter turn from facing the driver is a line 14 cm wide -
->   invisible for about a third of a second, which at thirty metres a second is
->   ten metres of road. Leaned, the worst it ever shows is an ellipse.
-> - **Coins are banked in the furniture**, at the moment the car drives into
->   one, rather than by whichever scene is running the race. Two scenes run
->   races today and a coin that paid in one and quietly did not in the other is
->   a bug nobody can see. It is also what makes an abandoned run's coins count
->   without anything having to remember to let them.
->
-> Differences from the spec:
->
-> - **The purse is above the buttons on the title screen, not below.** The
->   column already runs to the bottom of a 720-high window, so a total under it
->   would be a total nobody ever sees. It is still against that column, which
->   is where the Shop button goes.
-> - `Purse` also holds `spend`, `buy` and `owns`, because the file has to hold
->   what has been bought and the purse is the only thing that knows what is
->   already in it. The shop itself is section 6 and is not built.
->
-> Found on the way, and **not fixed** because it is not this: `pad_layout.gd`
-> parks its car by `curve.sample_baked(offset)`, and a course offset is a
-> distance along the flat while the curve is a 3D line. On a course with climbs
-> the two are metres apart by the far end. It does not fail today because pads
-> are on flat straights early on; `coins.gd` and `coin_shot.gd` use
-> `Track.centre_at` instead.
->
-> What it does and why is in the README under **Coins**. The checks are
-> `tools/checks/coins.gd` and `coin_shot.gd`. Everything below is the original
-> spec, kept for the reasoning.
-
-### What it is
-
-Coins scattered along the road, picked up by driving through them, spent in the
-shop. Between **5 and 15** on a course, rolled per course.
-
-### Where they go
-
-A coin is furniture, so it is planned by the thing that plans furniture -
-`TrackFeatures` - and built by the thing that builds it - `TrackFurniture`. It
-is closest to a boost pad: an `Area3D` that fires once when a car enters it
-(`_build_trigger` / `_on_pad_entered`,
-[scripts/track_furniture.gd:296](scripts/track_furniture.gd:296)), just
-without the speed.
-
-- [x] `TrackFeatures.COIN`, a fourth kind.
-- [x] A `_place_coins` pass, after pads and obstacles so it knows what is
-	  already there. Count rolled in `[5, 15]`.
-- [x] Coins obey the same `keep_out` the pads do - not on the start line, not
-	  on the finish, not on a checkpoint
-	  ([scripts/track_features.gd:88](scripts/track_features.gd:88)). A free
-	  coin for being reset is not a coin anyone earned.
-- [x] Never inside a barrier, never in the hole of a jump, never on a trap's
-	  path in any phase.
-- [x] Put them where they are worth something. A coin in the middle of an empty
-	  straight is not a decision; a coin in the fast lane of the fork, or on the
-	  outside line of a corner, or just past a barrier, is. Weight the placement
-	  towards the interesting half of the road rather than rolling a lateral
-	  uniformly - that is the difference between a collectable and a pickup.
-
-### Picking one up
-
-- [x] Fires once per car per course. A coin taken by player one is gone, for
-	  both - it is one coin.
-- [x] Both players' coins go to the same purse. The shop is the game's, not a
-	  player's, and two people on one keyboard share a machine.
-- [x] Taking one shows something: the coin lifting and fading, a small number,
-	  the purse in the corner ticking up. A pickup with no feedback reads as a
-	  bug.
-- [x] **A coin taken on a run that is abandoned still counts.** Keeping a run's
-	  coins in escrow until the flag punishes exactly the players who are
-	  struggling, and the purse is not a score.
-
-### The purse
-
-- [x] `scripts/purse.gd`, an autoload, saved to `user://purse.cfg`: how many
-	  coins, and what has been bought. Kept apart from `GameSettings` for the
-	  same reason `TrackTimes` is - a coin is a thing that happened, not a
-	  preference.
-- [x] Shown on the title screen, small, near the Shop button.
-- [x] This is a single-player local game with no server behind the economy, so
-	  there is nothing to protect against: a player who wants to edit
-	  `purse.cfg` has bought the thing already. Do not build anti-cheat for
-	  it. (Unlike times, which go to a shared board and are constrained in the
-	  database - see [backend/schema.sql](backend/schema.sql).)
-
-### Chaos
-
-Chaos rerolls the course, so it rerolls where the coins are. It should not
-reroll how many are worth: a chaos run should not be the efficient way to
-farm. Keep the 5-15 roll the same under chaos.
-
-### The check
-
-`tools/checks/coins.gd`: a hundred courses, every one carrying between 5 and
-15; none on a keep-out; none unreachable; none inside anything; a car driven
-through one banks exactly one coin and a car driven through it twice still
-banks one.
-
----
-
 ## 6. The shop
+
+**Built 2026-09-23.** See [The shop](README.md) in the README for what landed
+and why. The screen, the button, the price table and the buying are all there,
+and the stock it opened with is paint - the other two kinds below are blocked
+on something other than this screen, and are noted as such where they are
+described.
 
 ### What it is
 
@@ -960,46 +45,89 @@ where coins buy things.
 
 ### What it sells
 
-- **Cars.** The game already has a garage that holds any number of models and
-  dresses a car from an id ([scripts/garage.gd:1](scripts/garage.gd:1)), and
-  `GameSettings.car_id` already picks per player. A bought car is a model in
-  the build that the garage lists once it has been paid for. This needs a few
-  models that do not exist yet - that is the real cost of this item, not the
-  code.
-- **The customisation slot**, at 50 coins - see the next section.
-- **Paints**, maybe. Twelve colours exist and are free
-  ([scripts/paints.gd:20](scripts/paints.gd:20)). Selling more is easy and
-  selling the existing twelve would be taking something away.
+- **Cars.** *Not built.* The game already has a garage that holds any number of
+  models and dresses a car from an id
+  ([scripts/garage.gd:1](scripts/garage.gd:1)), and `GameSettings.car_id`
+  already picks per player. A bought car is a model in the build that the
+  garage lists once it has been paid for. This needs a few models that do not
+  exist yet - that is the real cost of this item, not the code, and it is why
+  this was not the stock the shop opened with. A row in `Shop.stock()` is all
+  the screen, the purse and the check need to carry one.
+- **The customisation slot**, at 50 coins - see the next section. *Built.*
+  First in `Shop.stock()`, because a player reading down a price list should
+  meet the thing that changes what the game lets them do before they meet the
+  sixth shade of grey. It is the anchor the paint price was set against.
+- **Paints.** *Built.* Six at 20 coins - SAND, RUST, OLIVE, SLATE, PLUM, ICE -
+  appended after the free twelve in
+  ([scripts/paints.gd:20](scripts/paints.gd:20)) with `Paints.FREE` marking
+  where the halves meet. The twelve stay free, because selling those would be
+  taking something away. The six are deliberately not more of the same wheel
+  but the muted shades off it.
 - Not: speed, grip, acceleration, or anything else that changes how a car
   drives. Every time on every board was set in the same car, and the leaderboard
   means what it means because of that. A shop that sells a faster car ends the
   leaderboard.
 
-That last point is worth stating in the README when this is built, because it
-is the sort of thing that looks like an obvious next feature to whoever picks
-this up later.
+That last point is stated in the README and again at the top of
+`scripts/shop.gd`, because it is the sort of thing that looks like an obvious
+next feature to whoever picks this up later.
 
 ### What to build
 
-- [ ] `scenes/shop.tscn` and `scripts/shop_menu.gd`, following
+- [x] `scenes/shop.tscn` and `scripts/shop_menu.gd`, following
 	  `garage_menu.gd`: it lays over the title rather than replacing it, the
 	  backdrop keeps turning, `closed` is emitted so the caller takes focus
-	  back ([scripts/menu.gd:649](scripts/menu.gd:649) is the pattern for all
-	  four of these).
-- [ ] A Shop button on the title, stacked with the others. Note the stack is
-	  positioned from 60% down so that all of them clear the bottom of a
-	  720-tall window with Account showing - a fifth button needs that
-	  recalculated or the bottom one falls off the screen.
-- [ ] Prices in one table in one file, so balancing is one edit.
-- [ ] Buying is: enough coins, take them, write it to the purse, show it owned.
-	  Owned things never un-own.
-- [ ] An empty purse should be able to look at everything and see the prices.
-	  A shop that hides its stock until you can afford it gives a player no
-	  reason to collect.
+	  back.
+- [x] A Shop button on the title, stacked with the others. The stack moved from
+	  60% down to **54%**, which is what a fifth button costs; `screen_fit.gd`
+	  now measures the column itself, and Account lands at 732 of the 750 there
+	  is, so this can no longer go wrong quietly.
+- [x] Prices in one table in one file, so balancing is one edit -
+	  `scripts/shop.gd`, and the paints are read off `Paints` rather than
+	  written down a second time.
+- [x] Buying is: enough coins, take them, write it to the purse, show it owned.
+	  Owned things never un-own. `Purse.buy` already did all of this; the
+	  screen adds only the words a player reads.
+- [x] An empty purse can look at everything and see the prices. BUY stays
+	  pressable when it cannot be afforded, because a disabled button cannot
+	  take the keyboard and an empty purse would otherwise be a page the
+	  cursor cannot land on.
+- [x] `tools/checks/shop.gd` and `tools/checks/shop_shot.gd`, because a
+	  feature without its check is half a feature.
 
 ---
 
 ## 7. Car customisation
+
+**Built 2026-09-23.** See [Car customisation](README.md) in the README for what
+landed and why. Two decisions came out differently from the design below and
+are recorded there: it is **a tab inside the garage** rather than
+`scenes/customise.tscn`, because both halves of that screen are about the same
+car; and a stripe is worn as an **extra material pass** rather than as a
+texture composited into the paint, which keeps a brought-in model's own
+paintwork and makes the chaos cycle a property to set rather than a picture to
+draw again.
+
+**The tab was rebuilt on 2026-09-24**, and the part of the design below about
+placing things on a flat drawing of the side of a car is no longer what the
+game does. Everything is put on the model itself now: the car is turned and
+zoomed with the mouse, a sticker lands on whichever of its four panels is being
+looked at, and a word is written straight onto the paintwork a stroke at a
+time. See [The car is the page](README.md), [The four panels](README.md) and
+[The pen](README.md). The silhouette survives as the small picture on a livery's
+row, which is the job it was always better at. The tab also grew the car's own
+paint, in a row under the car - free, and nothing to do with the slot, but the
+same question about the same car, and until then the only place to ask it was
+the paint screen over a paused race. See [The car's own paint](README.md).
+
+**Liveries came after it, the same day**, and were not in this design at all: a
+decoration saved as a design in its own right, kept beside the cars in the
+garage, put on any car, and shared the way a car is. See
+[Liveries](README.md) and [Sharing a livery](README.md). The one thing worth
+knowing before reading either: a livery is a line of text rather than a file,
+so it needs no storage bucket - the row on the server *is* the livery - and
+`backend/schema.sql` has to be run again on a project set up before it
+existed.
 
 ### What it is
 
@@ -1051,6 +179,14 @@ are the one kind that has to follow the body's shape to look right, and the
 stock car - the car nearly everyone will decorate - has UVs. Write down which
 route each kind took; the next person will ask.
 
+*That is what was built, with one change to route 1: the stripe is not
+composited into the albedo but hung on the paint material as an extra
+transparent pass, one per stripe. The shape is in the mask's alpha and the
+colour is the pass's own `albedo_color`. So the body keeps whatever albedo it
+had - including a texture a model arrived with, which compositing would have
+eaten - and the chaos cycle costs a property set rather than an image redrawn.
+Written up under [Car customisation](README.md).*
+
 ### Where it is stored
 
 A decoration belongs to a car, not to a player, so it is keyed by garage id.
@@ -1058,13 +194,13 @@ Note the stock car's id is the empty string and it has no folder
 ([scripts/garage.gd:25](scripts/garage.gd:25)), so decorations cannot simply
 live in the car's folder - they need their own store:
 
-- [ ] `user://decals.cfg`, a section per car id, `stock` for the empty id -
+- [x] `user://decals.cfg`, a section per car id, `stock` for the empty id -
 	  the garage already uses that exact word for where the stock car's
 	  portrait goes, so reuse it rather than inventing a second name.
-- [ ] Hand-drawn strokes stored as points, not as a picture: it scales, it
+- [x] Hand-drawn strokes stored as points, not as a picture: it scales, it
 	  stays small, and it can be redrawn at whatever size the car needs.
-- [ ] A car deleted from the garage takes its decoration with it.
-- [ ] Two players in the same model both see that model's decoration. That is
+- [x] A car deleted from the garage takes its decoration with it.
+- [x] Two players in the same model both see that model's decoration. That is
 	  correct - it is one car - but it means the paint is the only thing
 	  telling them apart, so **the split-screen readability rule still holds**:
 	  the paint menu already refuses to let both players take one colour
@@ -1075,19 +211,23 @@ live in the car's folder - they need their own store:
 
 ### The drawing screen
 
-- [ ] `scenes/customise.tscn` / `scripts/customise_menu.gd`, opened from the
-	  garage on a car that has the slot paid for.
-- [ ] A live view of the car being decorated, turning, the way the garage
+*Built as a tab in the garage rather than a screen of its own - see the note at
+the top of this section.*
+
+- [x] ~~`scenes/customise.tscn` / `scripts/customise_menu.gd`, opened from the
+	  garage on a car that has the slot paid for.~~ `scripts/decoration_page.gd`,
+	  the garage's second tab, with `scripts/car_stage.gd` for the live car.
+- [x] A live view of the car being decorated, turning, the way the garage
 	  already shows a car ([scripts/car_portrait.gd](scripts/car_portrait.gd)).
 	  Applied as it is chosen, not on the way out - the paint screen made that
 	  choice for exactly the right reason and this is the same situation.
-- [ ] A drawing box for the handwriting: click and drag to draw, a colour from
+- [x] A drawing box for the handwriting: click and drag to draw, a colour from
 	  the twelve, undo, clear. Undo is not optional - a player drawing with a
 	  mouse will make a mess on the first stroke.
-- [ ] Sticker placement: pick one, then drag it around a flat view of the car's
+- [x] Sticker placement: pick one, then drag it around a flat view of the car's
 	  side with a size and rotation control. Do not try to make the player
 	  place a sticker on a rotating 3D model with a mouse.
-- [ ] Both players get to decorate their own car, which means the screen asks
+- [x] Both players get to decorate their own car, which means the screen asks
 	  whose car first when two are playing.
 
 ### In chaos
@@ -1108,15 +248,15 @@ field shimmers instead of pulsing as one ([README.md, What chaos looks like](REA
 Apply the same idea - each decal starts at its own place in the hue cycle and
 turns continuously.
 
-- [ ] The cycle runs on the decal material only. The body keeps its rolled
+- [x] The cycle runs on the decal material only. The body keeps its rolled
 	  colour.
-- [ ] Each decal gets its own phase, so a car with three stickers shimmers.
-- [ ] Like everything else chaotic, this is **told to the car by whatever built
+- [x] Each decal gets its own phase, so a car with three stickers shimmers.
+- [x] Like everything else chaotic, this is **told to the car by whatever built
 	  the race**, not read from `GameSettings.chaos` - because the title screen
 	  backdrop is a race scene too, and a strobing sticker behind the menu is
 	  not what the menu is for. `chaos_colour.gd` already checks exactly this
 	  distinction and should be extended to cover decals.
-- [ ] The readability rule again: a decal cycling through hues must never land
+- [x] The readability rule again: a decal cycling through hues must never land
 	  close enough to the other player's body colour to confuse a glance across
 	  a split screen. Keep decal value and saturation away from the body's.
 
@@ -1130,42 +270,7 @@ decoration survives; a decoration never covers more than the cap.
 
 ---
 
-## What all of this touches
 
-### `TrackTimes.GEOMETRY` - read this before changing anything
-
-[scripts/track_times.gd:29](scripts/track_times.gd:29) is a single number that
-means "the car and the road are as they were". Bumping it throws away **every
-local time every player has set**, and changes the signature times are posted
-to the leaderboard under, so old and new times stop sharing a board
-([backend/schema.sql](backend/schema.sql)).
-
-Of the features here:
-
-- **Damage** did not need a bump: it only ends runs, and `damage.gd` checks
-  that a hit drives the same with it on and off. *(done)*
-- **Traps** needed none. A time is kept against a fingerprint of its own track
-  file, so adding a trap to a track loses that track's times and nobody
-  else's. *(done)*
-- **Acrobatic tracks** need nothing - a new track has no old times.
-- **The bot** needs nothing - it is another car on the road, not a change to
-  the road.
-- **The ramp fix does.** `ramp_curve` went from 1.5 to 1.2 on 2026-09-22 to
-  stop the car jamming partway up a ramp, and that is exactly the kind of
-  change this number exists for: every jump on every track now has a different
-  surface under it, and a lap set over one was set on a different road. **This
-  has not been bumped, and it is a decision rather than an oversight** - the
-  bump throws away every local time every player has set and splits the
-  leaderboard, so it is the release's call and not the fix's. Two things to
-  weigh: the tracks worst affected are the ones with jumps, and The Wringer and
-  Long Haul were unfinishable-or-reset before, so their standing times were set
-  on a road nobody could drive properly anyway; but First Light moved from
-  +7.8% to +4.0% against the bot, which is a real shift on a track with a jump
-  on it. If it is bumped, bump it in the same release as anything else that
-  needs one.
-- **Coins** need nothing *provided* picking one up does not affect the car. A
-  coin that gave speed would be a change to what a lap is worth. Do not make
-  coins give speed.
 - **Customisation** needs nothing - it is paint.
 
 If more than one bump is unavoidable, do them in one release. Players forgive
@@ -1176,9 +281,10 @@ losing their times once.
 ```
 user://settings.cfg    GameSettings - volume, sky, solo, chaos, damage, paint, cars
 user://times.cfg       TrackTimes - a best per track, with its fingerprint
-user://progress.cfg    Progress - bot races won, blocks open          (new)
-user://purse.cfg       Purse - coins, and what has been bought        (new)
-user://decals.cfg      Decoration, a section per car id               (new)
+user://progress.cfg    Progress - bot races won, blocks open
+user://purse.cfg       Purse - coins, and what has been bought
+user://decals.cfg      Decals - decoration, a section per car id
+user://liveries.cfg    Liveries - designs saved on their own
 user://cars/<id>/      Garage - a folder per car the player added
 ```
 
@@ -1187,16 +293,13 @@ and can change back, and the rest are things that happened. `Sandbox.path()`
 must be used for every new one ([scripts/sandbox.gd](scripts/sandbox.gd)), or a
 headless check will write into a real player's purse.
 
-### The settings screen
-
-Gains a Damage toggle. It is getting full - volume, sky, damage, controls,
-close - and if anything else is added it wants sections.
 
 ### The title screen
 
-Gains a Shop button, making six: Play, Garage, Shop, Settings, Account, and the
-mode row. The stack is positioned from 60% down for five
-([README.md, Menu](README.md)); recheck it fits a 720-tall window.
+~~Gains a Shop button, making six: Play, Garage, Shop, Settings, Account, and
+the mode row.~~ Done. The stack moved from 60% to 54% to pay for it, and
+`tools/checks/screen_fit.gd` now measures the column as well as the panels, so
+the next button added to it fails a check rather than falling off a screen.
 
 ### README
 
@@ -1209,59 +312,12 @@ will re-decide from scratch.
 ### Build order
 
 1. ~~Damage - self-contained, nothing depends on it.~~ Done.
-2. Coins and the purse - the shop cannot exist without them.
-3. The shop - needs the purse.
-4. Customisation - needs the shop to be bought from, and chaos work.
+2. ~~Coins and the purse - the shop cannot exist without them.~~ Done.
+3. ~~The shop - needs the purse.~~ Done.
+4. ~~Customisation - needs the shop to be bought from, and chaos work.~~ Done.
 5. ~~Traps - needs the validator work, which is the riskiest part here.~~ Done.
 6. Acrobatic tracks - needs the jump scale, and wants traps to exist first.
 7. The bot driver - the biggest single piece of new code.
 8. Progress and the medal gate - needs the bot to be the thing it gates.
 
----
-
-## Questions worth settling first
-
-These change what gets built, so they are worth answering before starting
-rather than discovering halfway through.
-
-1. **Does hitting the other car cost condition?** There is a whole contact
-   system already ([scripts/car_contact.gd](scripts/car_contact.gd)) - bumps,
-   shoves, landing on a roof. If ramming damages, damage mode becomes a
-   two-player weapon and that is a real game, but a different one. Suggested
-   default: no, at first. **Settled: no.**
-2. **Can damage mode and chaos be on together?** Chaos rolls the car's top
-   speed up to 1.7×, so hits land much harder. Either allow it and accept that
-   chaos-with-damage is brutal, or grey one out while the other is on.
-   **Settled: allowed, scaled by each car's own top speed, so a chaos car hits
-   no harder at its top speed than a tuned one.**
-3. **Does a broken car in solo lose the time it had?** Suggested: yes, it never
-   finished. But a player who breaks on the last corner of a gold lap will
-   disagree loudly. **Settled: yes, no time.**
-4. **Where do acrobatic tracks sit** - tracks 21-24 in the same grid, or their
-   own section on the select screen? This changes `TrackRoster` and the grid
-   layout.
-5. **What does the bot race actually award** besides opening the next ten? A
-   medal? Coins? Nothing? **Settled: nothing but the opening, and the cell
-   marked WON.** No time is kept on a bot road and no medal is handed out -
-   `Solo` leaves its targets at zero rather than reading them - because the
-   only thing the race measures is which car crossed the line first, and a
-   medal is a statement about a lap. The door itself is the reward: it says
-   WON in green from then on, and the ten behind it are open.
-6. **Is there a penalty for losing to the bot,** or is it retry until you win?
-   **Settled: retry, always, and losing costs nothing.** A lost race writes
-   nothing at all - no attempt counted, no time kept, nothing taken away - and
-   the panel offers RACE AGAIN as its first button. A gate you can fail
-   permanently is a gate that ends someone's game.
-7. **How many cars does the shop need at launch** to be worth opening? One is
-   not a shop. Three or four is, and each is a model that has to be made.
-8. **Do the two players share a purse?** Suggested yes - one machine, one
-   keyboard, one purse - but it means one player can spend what the other
-   collected.
-9. **Do coins appear on laid-out tracks, or only the endless course?** Coins
-   on a timed track pull the player off the racing line, which is either an
-   interesting trade or a corruption of the time trial depending on taste. If
-   they appear on tracks, they must not move the racing line enough to change
-   what a lap is worth.
-10. **Does decoration apply to the stock car,** which every player starts in
-	and shares? It should, but it means two players in the stock car see the
-	same decoration, and that has to not break the split screen.
+-

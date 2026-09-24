@@ -61,17 +61,31 @@ nobody would cost as much as the menu itself. The rival arrows have their
 processing stopped rather than being hidden, because each decides for itself
 every frame whether it should be visible and would simply turn itself back on.
 
-Under Play sit Garage, Settings and Account, and Account is there only when
-there is a server to talk to. A build with no `backend.cfg` in it does not grow
-a button that cannot do anything - the same reason the Leaderboard button on
-the track page is not always there either. The four are stacked from 60% of the
-way down, so all of them are above the bottom edge of a 720-tall window when
-Account is showing.
+Under Play sit Garage, Shop, Settings and Account, and Account is there only
+when there is a server to talk to. A build with no `backend.cfg` in it does not
+grow a button that cannot do anything - the same reason the Leaderboard button
+on the track page is not always there either.
+
+The five are stacked from **54%** of the way down, not from 60% as the four
+were. A button is 52 pixels and the gap under it is ten, so the shop cost the
+column 62 pixels it did not have: at 60% the bottom of Account would land at
+777 in a page 750 tall, which is the shortest there is - 1600x900 laid out at
+the largest interface size a player can pick. Moving the anchor up six points buys
+back 45 of those and leaves Account at 732 of 750. That is the whole of the
+calculation, and it is the sort of thing that goes wrong silently, so
+`tools/checks/screen_fit.gd` now measures the column as well as the panels and
+prints how far down the lowest button landed. It measures Account even in a
+build that hides it, because a build with no server is exactly where this would
+otherwise go unnoticed until somebody with a server ran it.
 
 Garage opens the same garage the pause menu does, lying over the title. The
 title is the best place there is to look at a car: the two on the grid are
 dressed from the same setting a race reads, and the camera is already turning
 slowly round them, so picking a car changes the one being circled.
+
+Shop sits under Garage, in the order a player does the two things: a car is
+picked, and then it is spent on. It is on the title rather than inside the
+garage because what it sells is not only cars - see [The shop](#the-shop).
 
 A light shade sits between the world and the text. The backdrop is meant to
 show through, but a white title over a bright noon sky is a coin toss, and the
@@ -259,16 +273,24 @@ rolls how a car handles and what colour it is, never what it is.
 
 The garage screen opens from the pause menu, as GARAGE between PAINT and
 SETTINGS, and from the title, as GARAGE under PLAY. Unlike PAINT it is not
-refused under chaos, for the same reason chaos leaves the model alone. Like the
-paint screen a tile puts the player in its car the moment it is pressed,
+refused under chaos, for the same reason chaos leaves the model alone.
+
+It has **two tabs**. CARS is everything described below; DECORATION is what is
+drawn on the car a player is already in, and is its own section -
+[Car customisation](#car-customisation). It is a tab rather than a screen of
+its own because both halves are about the same car.
+
+Like the paint screen a tile puts the player in its car the moment it is pressed,
 because the car is right there on the road behind the panel and seeing it is
 the only way to know it is the one you wanted. The car each player is in is
 held down, with the same thick pale border the paint screen puts round a
 chosen paint.
 
 Each player has a row - player one above, player two below, and one row when
-driving alone - and each row is split by where a car came from. OFFICIAL, on
-the left, is the cars the game came with: one column wide, centred under its
+driving alone - and each row is in three halves. Two of them are cars, split by
+where the car came from; the third is that player's saved liveries, and is
+described under [Liveries](#liveries). OFFICIAL, on the left, is the cars the
+game came with: one column wide, centred under its
 heading, and built from a single `_official_listing()`, so a second shipped car
 is a second line there and nothing else changes. UNOFFICIAL, on the right, is
 every car anybody has added, whether it was picked off this disk or downloaded
@@ -278,13 +300,28 @@ can put a car on the official side. An unofficial half with nothing in it says
 nothing has been added yet, rather than sitting empty like a half that failed
 to draw.
 
-Two rows of tiles, the buttons and BACK all have to fit a 720-tall window, and
+Two rows of tiles, the tab row, the buttons and BACK all have to fit a 750-tall
+page - the laid-out space at the largest interface size a player can pick - and
 that is the whole budget the page is laid out to. The heading's two notes are
 one line, each half's heading and what it means are one line, and the tiles are
-134 tall.
+134 tall. The tab row cost about forty of those pixels when it arrived, which
+came back out of the space around the tiles: the scrolls went from 148 to 142
+and the panel's own gaps from 8 to 6.
+
+The width has a budget too, and the liveries spent it. A car tile was 236
+across while a row held two halves, because narrower tiles then left a third of
+the window dark on either side, on a screen whose whole job is showing pictures
+of cars. A row holds three halves now and that space is the liveries, so the
+tiles gave some of it back: **200 across**, with the gaps between the halves
+down from 24 to 14. The liveries' own heading is the bare word, because a half
+is as wide as its heading and `LIVERIES · designs you saved` was wider than the
+column under it.
+
+`tools/checks/screen_fit.gd` measures **both** tabs, because only one of them
+is up when the screen opens and the other is the taller of the two to build.
 
 The width was never the problem, and at first it went unspent: tiles 200 wide,
-two across, made a panel 750 wide on a 1280 screen, with a third of the window
+two across, made a panel 750 wide on a screen 1280 across, with a third of it
 dark on either side of a page whose whole job is showing pictures of cars. The
 unofficial half is three across now, in a 738 by 148 scroll, with tiles 236 wide
 and the official half beside it at 216 by 148. Three added cars sit on each
@@ -558,7 +595,7 @@ would fight over which is current.
 
 ## Screen sizes
 
-The whole interface is laid out once, in a 1280x720 space, and Godot scales
+The whole interface is laid out once, in a 1600x900 space, and Godot scales
 that to whatever window the game is in - `display/window/stretch/mode` is
 `canvas_items` and `stretch/aspect` is `expand`. A button therefore covers the
 same share of the screen on a laptop as it does on a big desktop monitor, and
@@ -569,12 +606,42 @@ laptop and a postage stamp on a 4K monitor, and a page opened while the window
 was a different size can end up centred on a rectangle that is no longer
 there.
 
+The reference is also the only place the size of the interface is decided.
+Nothing reads the resolution of the display and picks a font from it: the
+stretch already makes every size proportional to the screen, so reading the
+resolution as well would either do the same job twice or undo it. What the
+reference sets is the *proportion* - how much of the screen the interface
+takes - and that is one number for the whole game. It was 1280x720, which made
+everything on every screen a fifth bigger than it is now; the numbers written
+into the pages did not change when it moved, and neither did the code.
+
+`window/size/window_width_override` keeps the window itself opening at
+1280x720. The reference is what the game measures in, not the size it starts
+at, and a window that opened at 1600x900 would not fit a 1366-wide laptop.
+
 `expand` rather than `keep` means no black bars: a screen that is not 16:9
 gets the extra room as extra space rather than as borders, so a 4:3 monitor
-lays out as 1280x960 and an ultra-wide as 1706x720. The laid-out space is
-therefore never *smaller* than 1280x720 but may be larger in one direction,
-which is why nothing may be positioned from the bottom or right edge by a
-fixed number: the pages are centred and the title stack is placed by fraction.
+lays out as 1600x1200 and an ultra-wide as 2133x900. The laid-out space is
+therefore never *smaller* than the reference but may be larger in one
+direction, which is why nothing may be positioned from the bottom or right
+edge by a fixed number: the pages are centred and the title stack is placed by
+fraction.
+
+### The player's own size
+
+One setting rides on top of the stretch: `GameSettings.ui_scale`, between 0.75
+and 1.2, set from the slider on the settings page and applied as the window's
+`content_scale_factor`. It divides the laid-out space, so at 1.2 a page has
+1333x750 to fit in and at 0.75 it has 2133x1200. Being a scale on the space
+itself means no screen has to know about it - no font is recalculated and no
+page is rebuilt - and dragging the slider resizes the page the slider is on,
+which is the point: a player sees the size they are choosing as they choose
+it.
+
+The ceiling is what the guarantee is written against. Every page is checked at
+1.2 rather than at 1.0, because that is the tightest the screen ever gets and
+any smaller setting only hands a page more room. There is deliberately no
+setting that goes back to where 1280x720 had it; that size was the complaint.
 
 `tools/checks/screen_fit.gd` opens every page - modes, tracks, settings,
 account, garage, boards - at five window shapes and fails if any of them runs
@@ -584,7 +651,8 @@ off the edge of the laid-out space:
 Godot --path . --headless --script tools/checks/screen_fit.gd
 ```
 
-That is what caught the boards being 771 high in a 720-high space, with the
+That is what caught the boards being 771 high in what was then a 720-high
+space, with the
 heading and the way out both over the edge. The list of times there is the one
 thing on a page that can be any height, so it takes whatever is left once the
 rest of the page has had its share and scrolls the remainder
@@ -592,7 +660,7 @@ rest of the page has had its share and scrolls the remainder
 
 Scaling the interface would ordinarily take the race down with it: a
 `SubViewport` is sized by whatever holds it, and that is measured in the
-laid-out space, so each half of the split would be rendered 1280x358 and blown
+laid-out space, so each half of the split would be rendered 1600x448 and blown
 up soft on any screen bigger than that. So the halves are not
 `SubViewportContainer`s but plain `TextureRect`s running
 [scripts/sharp_view.gd](scripts/sharp_view.gd), which gives each viewport the
@@ -604,7 +672,7 @@ way the layout does, so they come out the same weight everywhere.
 The one thing left at a fixed size is the garage's car portraits, which are
 rendered once at 208x136 and kept beside the model (see Custom cars). They are
 drawn into a box that size in the laid-out space, so on a screen bigger than
-1280 wide they are scaled up with everything else.
+1600 wide they are scaled up with everything else.
 
 ## Smooth motion
 
@@ -3508,7 +3576,7 @@ Godot --path . --headless --script tools/checks/track_select.gd
 ## Coins
 
 Gold discs standing a metre above the road, taken by driving through them and
-spent in the shop. Every course carries between **5 and 15**, rolled per
+spent in [the shop](#the-shop). Every course carries between **5 and 15**, rolled per
 course.
 
 A coin is furniture, so it is planned by the thing that plans furniture and
@@ -3627,7 +3695,9 @@ flash all over at once like a row of indicators.
 ### The purse
 
 `Purse` is an autoload, saved to `user://purse.cfg`: how many coins there are
-and what has been bought. It is kept apart from `GameSettings` for the reason
+and what has been bought - the count in one section, and a section per item
+bought, so that what an item has to its name can grow without moving what is
+already written down. It is kept apart from `GameSettings` for the reason
 `TrackTimes` is - a setting is something a player chose and can change back,
 and a coin is something that happened - and apart from `TrackTimes` as well,
 because a time belongs to a track and a coin belongs to nobody in particular.
@@ -3699,6 +3769,844 @@ it has been taken:
 Godot --path . --script tools/checks/coin_shot.gd -- /tmp/shots
 ```
 
+## The shop
+
+`scenes/shop.tscn` over the title, reached from the Shop button under Garage.
+Every price is in one table in one file - `scripts/shop.gd` - so balancing the
+game is editing the numbers at the top of that and nothing else. The screen
+shows the table and `Purse` takes the coins; neither of them holds a price of
+its own.
+
+`Shop` is deliberately not an autoload. It is a table, it never changes while
+the game is running, and a check that wants to read a price should not have to
+stand half the game up first. `Purse` is an autoload because it is state; this
+is the opposite of state, which is also what lets `tools/checks/shop.gd` name
+it in a `--script` run where no autoload exists yet.
+
+### What it sells, and what it must never sell
+
+**Nothing that changes how a car drives.** Not speed, not grip, not
+acceleration, not damage. Every time on every board was set in the same car,
+and that is the only reason the leaderboard means anything - a shop that sold a
+faster car would end it. This is written down here and again at the top of
+`scripts/shop.gd` because selling an upgrade is the obvious next feature to
+whoever picks this up, and it is the one thing this shop must never do.
+
+What it sells today is **paint**: six colours at **20 coins** each, `SAND`,
+`RUST`, `OLIVE`, `SLATE`, `PLUM` and `ICE`.
+
+Twenty is priced against the customisation slot at 50 (see
+[Car customisation](#car-customisation)): a paint is a smaller thing than the
+whole slot, so it sits well under it. A course carries 5 to 15 coins, so
+twenty is two or three courses of picking them up - long enough that the first
+one is something a player saved for, short enough that it arrives on the first
+evening rather than the third.
+
+The six are appended to `Paints.COLOURS` after the free twelve, with `FREE`
+marking where the halves meet. They are appended rather than mixed in so that
+every colour keeps the slot it has always had - `Paints.DEFAULTS` is a slot
+number, and so is everything a check writes down.
+
+**The twelve that came with the game stay free.** Selling those would be taking
+something away rather than adding anything. And the six are deliberately not
+more of the same: the twelve are the wheel, picked to read against tarmac,
+grass and a night sky, and the six are the muted shades off it that no amount
+of going round a wheel arrives at. A player who buys one gets a colour the game
+did not have, not a thirteenth angle on one it did.
+
+A sold paint is written into the purse under its **name** - `bought_paint_sand`
+- rather than under its slot. `purse.cfg` has nothing in it worth protecting
+(see [The purse](#the-purse)), so it may as well be a file that reads. The cost
+is that renaming a paint gives it back to the shop: a player who owned SAND and
+finds it called SANDSTONE owns nothing. Rename a paint and the old name belongs
+to the old name for ever.
+
+It also sells **the customisation slot** at 50 coins, which is the anchor the
+paint price was set against and which opens the garage's decoration tab - see
+[Car customisation](#car-customisation). It sits first in the table, because a
+player reading down a price list should meet the thing that changes what the
+game lets them do before they meet the sixth shade of grey.
+
+One kind of stock is designed and not built. **Cars** need models that do not
+exist yet - that is the real cost of that item, not the code. It is a row added
+to `Shop.stock()`, and the screen, the purse and the check need no changes to
+carry it.
+
+### Reading it from an empty purse
+
+Everything is on the page, price and all, whether or not there are coins for
+it. A shop that hid its stock until a player could afford it would give them no
+reason to pick a coin up - **the price is the reason**, and it has to be
+readable from an empty purse. So nothing is hidden, nothing is greyed out of
+legibility, and the only thing the purse changes is whether pressing BUY works.
+
+BUY is pressable even with nothing in the purse. A disabled button in Godot
+cannot take keyboard focus, and both players are on one keyboard with nobody
+asked to find the mouse - disabling what cannot be afforded would leave a
+player with an empty purse unable to put the cursor on a single row. Pressing
+it says `SAND COSTS 20. THERE ARE 0 IN THE PURSE.`, which is the answer they
+were after anyway. What is already owned *is* disabled, because there the
+button genuinely has nothing left to do.
+
+The page is a fixed width, the way the garage's list of shared cars is. The
+status line says different lengths of thing, and a panel that grew to fit
+whatever it had just been told would resize under the player's hands every time
+they pressed BUY. The widest thing on it is the line under the heading, which
+never changes, and everything said below is said inside that. That line is also
+where "a paint goes on from the pause screen" lives, rather than in what is
+said after a purchase: it is worth knowing before spending twenty coins rather
+than after, which is what a permanent line does and a message that scrolls past
+cannot.
+
+Whatever the status line last said is cleared the moment the purse moves.
+`THERE ARE 0` is only true of the purse it was said about, and left standing
+over a tally that now reads 20 it is a page arguing with itself. The purse is
+watched rather than remembered, because a coin can be banked by the race
+running behind the title while the shop is open.
+
+### On the paint screen
+
+The paint screen grew a third row: the six that are sold. One that has not been
+bought is on the page anyway, faded, **with its price written across it in the
+coin's own gold** - for the same reason the shop shows a price to an empty
+purse. A locked swatch hidden until it was paid for would be a thing a player
+only discovers after spending on it, and the whole point of a price is that it
+is read first. Bought, the price comes off and it is a swatch like any other.
+
+The garage has the same eighteen in a row under the car, dressed the same way -
+see [The car's own paint](#the-cars-own-paint). Whether one may be worn is
+`Purse.owns_paint` for both of them, so there is one answer and not two.
+
+Locked and taken get the same faded face, and that is on purpose: the square
+can only say one thing in a colour, which is that this is not a paint you can
+have right now. Which of the two it is, is in the price written across it and
+in what it says when pointed at. Taken wins when a swatch is both - telling a
+player to go and buy a colour their rival is already sitting in would be
+sending them to spend coins on something that still would not be pickable.
+
+### Checking it
+
+`tools/checks/shop.gd` is the whole of it, and it is headless. Three things
+about a shop go wrong quietly: a price that is not what the purse charges,
+which is a shop that lies; something on sale that cannot be reached, or
+reachable that was never put on sale - a colour added to `Paints` and forgotten
+is free to everybody, and one sold under a name nothing hands out can never be
+bought at all; and an item that un-owns itself, which takes coins a player will
+not get back.
+
+A fourth thing goes wrong quietly now that a car is painted in two places: a
+second door to a sold paint. So the check drives the garage's row as well as
+the paint screen.
+
+So it holds the table to `Paints` in both directions, checks that every item
+name is something a config section can actually hold, and that both players
+start in a paint nobody has to buy. It buys through a real `Purse`: refused on
+empty, refused one coin short, bought with exactly enough, refused a second
+time, and still owned after a save and a load and after something else is
+bought. It opens the real screen with an empty purse and reads every name and
+every price off it, checks the keyboard landed on something, and presses BUY to
+see that the button charges the price beside it. Then it opens the paint screen
+to see a sold colour refused until bought and worn after.
+
+```
+Godot --path . --headless --script tools/checks/shop.gd
+```
+
+`tools/checks/shop_shot.gd` walks it with a camera for the half no assertion
+sees - whether a price is legible against the panel, whether a locked swatch
+reads as locked rather than as broken. The walk is deliberately the poor one:
+it opens the shop with nothing in the purse, presses BUY, earns exactly one
+paint, buys it, and goes to the pause screen to wear it.
+
+```
+Godot --path . --script tools/checks/shop_shot.gd -- /tmp/shots
+```
+
+## Car customisation
+
+For **50 coins** in the shop, a slot that lets a car be decorated as well as
+painted: stripes, stickers the game ships, and a word the player writes by
+hand. It is a **tab inside the garage** - `scripts/decoration_page.gd`, built
+in code and put in the garage's panel beside the cars - rather than a screen of
+its own. Decorating a car is a thing done to a car, and the car it is done to
+is the one the player picked on the other tab; putting it behind a button
+somewhere else would mean choosing a car in one place and drawing on it in
+another, with nothing on either page saying they were about the same thing.
+
+Everything is applied as it is chosen. The car on the left of the page is
+already wearing whatever has just been pressed, which is the same choice the
+paint screen made for the same reason: a decoration confirmed two presses after
+it was picked is a guess. `scripts/car_stage.gd` is that car - a bare
+`CarShell` in a world of its own, lit the way `CarPortrait` lights a tile, so
+the car in the tab and the car on the tile match.
+
+The slot is bought once for the whole game rather than once per car. A player
+who paid fifty to decorate one car and then brought in a second model would
+otherwise be asked for fifty more to draw on it, and what they bought was the
+ability to draw.
+
+### The car's own paint
+
+The eighteen paints are in a row under the car, and pressing one paints it on
+the spot. **It is not decoration and it costs nothing** - the fifty coins buy
+the drawing, not the painting - but it is the same question asked about the
+same car, and until now the only place in the game to ask it was the paint
+screen over a paused race. A player looking at their car in the garage and
+wanting it green should not have to start a race to say so. The tab is called
+PAINT AND DECORATION for the same reason: a player looking for paint has to be
+able to find it.
+
+It is under the car rather than over in the tools with the rest, because it is
+about the car and not about what is going on the car, and because a colour is
+chosen by looking at the thing wearing it. The tools column's own palette says
+`THE COLOUR IT ALL GOES ON IN`, which is the other half of keeping the two
+apart. The row costs the page no height: the car takes whatever is left over
+once the swatches have had theirs.
+
+The three rules are the paint screen's, unchanged, because they are rules about
+painting a car and not about a screen:
+
+- **the free twelve always, the six the shop sells once they are bought**, and
+  a locked swatch is faded with its price written across it in the coin's own
+  gold;
+- **the two players cannot both be one colour.** A split screen where the arrow
+  pointing at your rival is your own paint is a race nobody can read;
+- **taken beats locked** when a swatch is both, since sending a player to buy a
+  colour their rival is sitting in would be sending them to spend coins on
+  something that still would not be pickable.
+
+One thing differs, and it is the page it is on rather than the rule: these
+swatches are **not disabled**. Everything on this tab can be pressed and says
+why nothing happened, for the reason the shop keeps BUY pressable over an empty
+purse - a disabled button in Godot cannot take keyboard focus, and both players
+are on one keyboard. The faces are the same as the paint screen's either way,
+so the two rows still look alike; it is only that this one answers out loud.
+
+Whether a paint may be worn is `Purse.owns_paint`, one function, because there
+are two doors to it now and a paint that one of them would wear without it
+having been bought is a paint nobody buys. `tools/checks/shop.gd` drives the
+garage row as well as the paint screen, and drives it rather than reading it:
+these swatches are pressable, so the only way to find out whether one was
+refused is to press it and look at the car afterwards.
+
+### The car is the page
+
+Everything a player places is placed on the model. There used to be a flat
+drawing of the side of a car on this tab - a silhouette, with the stickers
+dragged about on it - and the model turned slowly on a plinth beside it,
+showing the result. Two pictures of one car, and the one being worked on was
+the one that was not real.
+
+That cost more than it looked. A silhouette has one side, so three quarters of
+a car could not be decorated at all: no roof, no bonnet, no nose, no tail. And
+nothing placed on it was quite where it had been put, because a drawing of a
+car is not the shape of anybody's car, least of all a model a player brought in
+themselves.
+
+The objection that put the silhouette there was a fair one, and it is answered
+rather than dropped: **do not ask anybody to hit a small moving target with a
+mouse.** So the car does not move any more unless it is moved. It is turned by
+dragging it and zoomed with the wheel, and it stays exactly where it was left.
+
+| | |
+| --- | --- |
+| Drag with the left button | turns the car, unless the press landed on something already on it |
+| Drag with the right button | always turns the car, even with the pen out |
+| The wheel, or a pinch on a trackpad | closer, or further off |
+| Press something on the car | picks it up; dragging then moves it anywhere on the body |
+| Arrow keys | turn the car, or move whatever is selected - see below |
+| `+` `-` `Home` | closer, further off, and back to the view the page opens on |
+
+**Two cameras**, picked with two boxes in the top left corner of the car -
+AUTOMATIC CAMERA and MANUAL CAMERA, one group, so ticking one unticks the other.
+The page opens on the automatic one, which is everything in this section: it
+looks at the middle of the car, fits all of it, and will not go under the sills
+or nearer than half a metre outside the bodywork. The manual one is the
+player's own:
+
+| | |
+| --- | --- |
+| The wheel, or a pinch | towards whatever is under the cursor, which stays under it - to a hand's width (12 cm) off the paint, or out to three times the distance the whole car fits at |
+| Drag with the middle button, or with Shift down | slides the car across the view |
+| `Shift` and the arrows | the same, from the keyboard, with nothing selected |
+| Dragging to turn it | turns about whatever it has been slid to, not about the middle of the car, and nearly straight down or straight up |
+| `Home` | back to the view the page opens on, still manual |
+
+It starts exactly where the automatic camera was, so ticking it moves nothing
+until the camera is moved, and ticking AUTOMATIC CAMERA again keeps the angle
+and fits the whole car from it. What it turns about is kept within half a car of
+the car, so the car cannot be slid off into the dark and lost. Everything else
+on the page is the same with either: a press is still a ray from wherever the
+camera is, so a sticker lands on the door handle a player has zoomed in to.
+
+The camera and the car in this view are **never smoothed between physics
+steps**. The camera moves when the mouse does, and a camera drawn a step behind
+where it was put is a camera asked where a press landed a step behind too - the
+manual camera's wheel, holding what is under the cursor still, showed it at
+once. The title screen and the pause menu turn smoothing off already, but that
+does not reach in through the view's own viewport, so the view says it for
+itself. `tools/checks/decals.gd` ticks the two boxes, zooms towards a point on
+the car and slides it, and holds that point under the cursor and the view back
+where it was.
+
+What the arrows do depends on whether anything is selected, and that is the
+whole of the rule: with a sticker in hand they move the sticker, and with
+nothing in hand they turn the car. A second set of keys for the second job
+would be a page that already shares one keyboard with two players asking for
+more of it.
+
+The camera orbits and the model stands still, rather than the other way about.
+That is what makes a press cheap to answer: a click is a ray in the world, the
+world is the shell's own space, and the shell can say where it meets the
+bodywork without anything having to be undone first.
+
+How far back the camera stands is worked out from the car and not written down,
+because it has to frame a model the game has never seen - a fixed number of
+metres is a wall in front of one car and a speck of another. Every corner of
+the box is asked how far away the camera would have to be for that corner to
+sit on the edge of the view, and the furthest answer wins. It is worked out for
+the angle the car is currently being looked at from, so a car in a view three
+times as wide as it is tall fills it instead of sitting in the middle of it
+with room all round for the one angle that needed it. The cost is that the
+camera steps back a little as the car is tipped up to show its roof, which is
+the right way round.
+
+### On the body
+
+A mark goes on **the bodywork, where it is put.** A press on the car is a ray,
+and the ray is asked of the model's own triangles - gathered from its meshes
+the first time the garage asks, since the model has no collision of its own
+and a model somebody brought in has none either. Where it meets them is where
+a sticker goes and where a stroke of the pen is drawn, and the way the body
+faces there is the way the decal is thrown back at it.
+
+Marks used to go on one of four faces of the box the model measures - the
+sides, the top, the nose, the tail - on the grounds that the box is the one
+thing every model has. It is, and it was the wrong thing to aim at. A bonnet is
+neither the top of the box nor the front of it, and it sits well under the
+roofline: a decal thrown down from the top of the box reached a quarter of the
+way into the car and stopped short of it, so a bonnet could not be drawn on at
+all, and a cursor near the top of a door was over the roof more often than it
+looked. Projecting still needs nothing from the model but its shape, so a car
+the game has never seen still wears a sticker; what changed is only which way,
+and from where.
+
+A mark on the body keeps where it is as a **spot** - fractions of the box, so it
+names the same place on a car of any size - and which way the body faces there,
+its **aim**. The decal is centred on the bodywork, as deep as the mark is wide
+to follow the curve under it, and never deeper than half the car, so a word on
+one door cannot come out backwards on the other. A sticker is aimed along the
+body the width of the sticker round the cursor rather than at the single
+triangle under it: a car is triangles, and one aimed square at each in turn
+would tip from facet to facet as it was dragged across a curve.
+
+**A mark on a door is on both doors**, the way a racing number is: two decals,
+mirror images in the world and the same picture to look at, so a word reads the
+right way round from whichever side you are standing. That is decided by which
+of the old faces a mark's aim is nearest - out of the side of the car, and it
+is worn on both - so it is the same rule it always was. Everything else is one
+decal, because a car has one bonnet.
+
+**MIRROR** turns that off. It is a box beside the colours, ticked to start with,
+so nothing is different until a player unticks it; unticked, what goes on a door
+next stays on that door. A mark keeps it - `"mirror": false`, written only when
+it is off, so every mark from before the box is the mark it was - and keeps it
+wherever it is dragged, because it is about the mark and not the panel: a
+sticker put on the bonnet with the box unticked and dragged onto a door is on
+that door alone. Ticking or unticking with a mark in hand changes that mark, the
+way a colour does, and picking a mark up ticks the box to match it, the way the
+sliders move to its size. A mark unticked by the copy on the far door stays on
+the far door, the one that was taken hold of. A mark still on one of the old
+faces is put on the body first, because a face is both doors or neither. The underside is still not somewhere to
+draw: a mark facing down is on whichever of the others it faces most.
+
+A sticker pressed off the tools lands on the body **in the middle of the view**,
+turned to stand the way up the car is being looked at, and selected, so the
+next thing a player does is drag it. Dragged, it follows the body anywhere -
+round from a door onto the bonnet and down the nose - facing whichever way the
+body faces under it and keeping the way up it had on the screen, so a number
+dragged over the edge of the bonnet does not spin round when it reaches the
+wing. The arrow keys move it across the screen the same way.
+
+The faces are still in `scripts/car_faces.gd`, for three things. A mark saved
+before this is on one and stays exactly where it was until it is moved, when it
+is put on the body. A design drawn flat, on a livery's tile, is drawn in faces.
+And every mark on the body also carries the face its aim is nearest and the
+place on that face it would be, so a copy of the game from before the body puts
+it near enough where it belongs instead of losing it (see
+[Liveries](#liveries)). A view zoomed in past the roofline, with nothing of the
+car in the middle of it, puts a pressed sticker in the middle of the face being
+looked at, the way every sticker used to go on.
+
+One thing is drawn over the car rather than in it: a ring round whichever mark
+is selected - the square the decal actually projects, turned the way it is
+turned, round the copy of it being looked at, so the ring is round the thing
+rather than near it.
+
+### The pen
+
+A word is written straight onto the paintwork. DRAW ON IT takes the pen out,
+and from then on the left button draws on the car and the right button still
+turns it; **every stroke is on the car the moment it is finished**, in the
+colour it will stay, at the size and the angle it was drawn. UNDO takes the
+last one back off, and DONE puts the pen down. Between them, while the pen is
+out, are four widths to draw in, each shown as the line it draws.
+
+That replaces a box of graph paper that opened over the garage: write the word
+in the square, press PUT IT ON, then drag it to where it was wanted. Two steps
+and a guess in between, and the guess was the problem - a word written big in a
+square box is a word that comes out somewhere else entirely on a door.
+
+A word is one mark, so the whole of it is put on again each time a stroke is
+finished rather than the stroke being added to what is there: the box is drawn
+round everything in it, so every stroke moves and resizes when a new one joins
+them. That is also the only way the cap can refuse a stroke, which it does by
+refusing the word the stroke would be part of - and then the stroke is dropped
+and the word is left exactly as it was.
+
+The box is worked out in **metres on the car** rather than in fractions of the
+panel, because a panel is not square: a door is three times as long as it is
+tall, and a word normalised against one would come out three times as wide as
+it was written. It is grown by the width of the nib as well, since the pen
+draws about the line it was dragged along and half of it would otherwise be
+shaved off at the edges.
+
+**A stroke comes out as thick as it was drawn.** The width is picked as a share
+of the car's length - 1%, 1.8%, 2.8% or 4% - because that is what a player is
+choosing: a line as thick on the door as the one they are watching. The word
+keeps it as a share of its own box, worked out from the box it ended up in,
+because that is the only width the decal's picture knows; and so a word made
+bigger with SIZE afterwards gets fatter lines with it, the way a sticker does.
+The pen used to be a fixed share of the box, which made the stroke in hand and
+the finished word two different widths: a short word came out much thinner
+than the line the player had just drawn, and a long one fatter. A word is one
+mark with one pen, the way it has one colour, so picking a width halfway
+through a word draws the whole of it again in that width - refused, as a
+stroke would be, if the fatter line takes the car over the cap.
+
+The pen draws on the body too. The first stroke of a word starts wherever it
+touches the car, and every point of every stroke after it is wherever the pen
+meets the body - a bonnet, a wing, a boot lid, whatever slope it is. A word is
+still one mark, so it is laid flat against the way the body faces under the
+whole of it, added up over every point the pen touched, and thrown back onto
+the car from there, along the screen's right as it was when the word was
+started, so it comes out the way up it was written. A letter that runs off the
+edge of the car, or onto a part of it facing well away from the word, carries
+on in the flat plane the word started on rather than stopping dead or jumping
+down onto the bumper. What that costs is a word written round a sharp corner -
+from the bonnet down the nose - which comes out stretched on the side it was not
+facing. Write one on each.
+
+### The three kinds, and how each is actually drawn
+
+The car's paint is one material by name, and that works on a model the game has
+never seen ([The shell](#the-shell)). Decoration cannot lean on the model
+having sensible UVs, because a player's model might have none worth using. So
+the two routes were split by what each kind needs, and this is the record of
+which took which:
+
+**Stripes - CENTRE, TWIN, FLASH, BONNET - are worn in the model's own texture
+space.** One mask per shape, hung on the paint material as an **extra pass**
+(`Material.next_pass`), with the shape in its alpha and the colour in the
+pass's own `albedo_color`. A stripe has to follow the body's curve to look like
+paint rather than like a sticker, and the only thing that knows where that
+curve is, is the model's own unwrap. The cost is that a model unwrapped by
+nobody gets a stripe somewhere arbitrary - it clips where it clips. That is a
+bargain taken knowingly: the stock car is the car nearly everyone will
+decorate, and its unwrap is fine.
+
+A pass rather than a texture written into the paint material, and that is the
+whole trick. The body keeps whatever albedo it had - a flat colour on the stock
+car, somebody's own texture on a model they brought - so a stripe never eats a
+model's paintwork. It also makes the chaos cycle free: the colour is a property
+to set, not a picture to draw again.
+
+**Stickers and hand-written words are projected**, as `Decal` nodes floated
+beside the car in its own space, aimed back at [the body](#on-the-body) where
+they were put. No unwrap needed at all, so they land where they were put on any
+model whatever. A mark on a door is **two** decals, one per side: a decal
+throws its picture one way only, and a number on a door is on both doors. They
+are mirror images in the world and the same picture to look at - image right is
+the car's tail on the left flank and its nose on the right - so a word reads
+the right way round from whichever side you are standing, which is how a name
+on a door works. Anything else is one decal.
+
+Where a mark is - which way it is thrown, which way up its picture goes and how
+deep its box may be - is `CarFaces.placements`, once. The shell puts decals
+where it says, the garage draws the ring round a selected mark from it, and a
+press works out whether it landed on a mark against it, so what a player
+pointed at and what the car wears cannot drift apart. `tools/checks/decals.gd`
+drags a sticker onto the bonnet and writes a word there the way the mouse
+would, and holds both to lying on the bonnet itself, because a mark landing
+somewhere other than where it was put is something nothing else in the game
+would say.
+
+**A decal must never reach the road.** This is the failure the feature was
+always most likely to ship with: a decal projects onto every surface whose
+visual layer its cull mask lets through, and the cars share layer one with the
+tarmac, the trees and everything else. So **each shell claims a visual layer of
+its own** - layers 4 to 11, since 1 is the world and 2 and 3 are the players'
+private arrows - puts its model on that as well as on the world's, and points
+its decals at nothing else. A layer each rather than one for all cars, because
+two cars touching is an ordinary part of a race and one car's sticker landing
+on the other's door is not. Eight is four more than there has ever been a car
+on a course at once; a ninth borrows the last rather than going bare.
+
+The boxes are centred on the bodywork and as deep as the mark is wide, and
+never deeper than half the car across whichever way the mark faces most - far
+enough to follow the curve of a door, never far enough to come out of the far
+side backwards - and `normal_fade` keeps them off the faces turned away. A mark
+saved on one of the old faces keeps the box it always had, centred on the face
+of the box round the car.
+
+### The shapes
+
+Eleven fixed pictures and one drawn per word, all in `scripts/decal_art.gd`,
+all **white with the shape in the alpha** and coloured somewhere else. That is
+what makes the chaos cycle a property being set rather than an image being
+rasterised sixty times a second.
+
+The three numbers are drawn as seven segments rather than set in the game's
+font, on purpose: a racing number is a shape, and the menu font is the game
+talking. The rest - a flame, a star, an arrow, a chequer - are polygons and
+grids. Everything that can be is drawn as whole rows at a time, because a band,
+a bar and a circle all come down to a left and a right edge per row; only the
+three polygons are asked a pixel at a time, and each of those is drawn once
+ever and kept.
+
+**A hand-written word is kept as the points the pen went through, not as a
+picture.** It is a few hundred numbers instead of a file, it can be drawn again
+at whatever size the car wants it, and a decoration saved on one machine means
+the same thing on another. A few hundred because the points are **thinned**
+as the word is made (`DecalArt.thinned`): the pen is read every time the mouse
+moves, and a word kept at every one of those is thousands of points a hair
+apart, far too long to be written down as a livery. Thinned to a pixel of the
+picture it is drawn into, a curve keeps the points that bend it and a straight
+line keeps its two ends. A car loaded from a build before that is thinned on
+the way in. Drawn rather than typed, on purpose: a name set in
+the game's font is the game's writing, and a scrawl is theirs. Undo is not
+optional - a player drawing with a mouse will make a mess of the first stroke,
+and a pen whose only way back is starting the word again is a pen nobody
+finishes a word with.
+
+Words are rasterised on demand and **kept**, up to 24 of them. That is not only
+to save the work: an `ImageTexture` built inside a `_draw` and handed straight
+to `draw_texture_rect` is a texture nothing holds a reference to, and it is
+freed before the frame it was drawn into reaches the screen. What arrives is a
+flat rectangle of the modulate colour, which is exactly what the board drew
+until the cache was put in.
+
+### Where it is kept
+
+`user://decals.cfg`, a section per car id, `stock` for the stock car - which is
+the word the garage already uses for where that car's portrait goes. A store of
+its own rather than the car's folder, because **the stock car has no folder**:
+its id is the empty string and it is part of the build.
+
+A mark is its kind, its shape, its colour, where on the body it is and which
+way the body faces there, how big it is and how far round it is turned - and,
+for a word, the path the pen took and the width of the pen. A mark saved before
+there was a body to put things on has a panel and a place on the panel instead,
+and is drawn there until it is moved. A file written before there were panels
+to choose has no panel in it either, and everything in one is read back onto
+the flanks, which is where it was.
+
+A decoration belongs to a car, not to a player. Two people driving the same
+model see the same stripes on both cars. That is correct - it is one car - and
+it is why the split-screen rule matters more here rather than less, since the
+paint is then the only thing telling the two apart.
+
+So **a car may be no more than 34% covered**, all three kinds added together,
+and carry no more than **8** things. The paint menu already refuses to let both
+players take one colour, and decoration must not undo that from the other side;
+a third leaves two thirds of every car still wearing the colour that says whose
+it is. The count is the second limit because the cap is about readability and
+eight is about not building four hundred decals for four hundred tiny stickers.
+
+The three kinds are measured in spaces that are not the same space - a stripe
+covers a fraction of the model's unwrap and a sticker a fraction of its flank -
+and they are added anyway. The number is a **budget rather than a measurement**:
+what it is for is stopping a car disappearing, and both fractions grow when
+that is happening. Pretending it was an area would be pretending the game knows
+the shape of a model it has never seen. A word is measured by how far the pen
+travelled, which over-counts a stroke drawn back over itself - the right way to
+be wrong, since a cap that guesses high refuses a decoration that would have
+been allowed and one that guesses low lets a car vanish.
+
+Going over is **refused whole, never trimmed**. A player who has just drawn one
+sticker too many should be told the car is full, not handed back a car with
+something else quietly missing off it.
+
+**A car removed from the garage takes its decoration with it.** A section left
+behind would be handed straight to whoever next added the same file, and that
+is not their drawing. Only free paints may be used, too: a stripe in one of the
+six the shop sells would be a way of wearing a bought colour without buying it.
+
+### Reading the tab from an empty purse
+
+Nothing on the page is hidden or disabled by the fifty coins. Every button is
+there and every button can be pressed. The line above BACK carries the price -
+`CUSTOMISING IS 50 COINS IN THE SHOP · until it is bought, nothing here goes on
+a car` - and pressing anything says the part that changes: `THAT NEEDS THE
+CUSTOMISING SLOT. THERE ARE 0 COINS IN THE PURSE.` The price is in one of them
+and not both, because two lines one over the other saying the same sentence is
+a page arguing with itself. That is the
+shop's own rule about an empty purse ([Reading it from an empty
+purse](#reading-it-from-an-empty-purse)) applied on this side of the counter -
+the price is the reason to pick a coin up, and a page that hid itself until it
+was paid for would give nobody that reason. It is also the practical answer: a
+disabled button in Godot cannot take keyboard focus, and both players are on
+one keyboard.
+
+Stripes are toggles and stickers are placed, because they are not the same kind
+of choice. There are four stripes, each on or off, worn in texture space where
+there is nothing to place. Everything else is put on the car itself - see [The
+car is the page](#the-car-is-the-page).
+
+### In chaos
+
+The requirement, and it is a good one: **the stripes, stickers and writing stay
+exactly as they were drawn, and their colour changes constantly.**
+
+That is the opposite of what chaos does to the bodies. Chaos repaints those
+once at the line and holds them there, deliberately, because telling your car
+from the other one is the one thing about a chaotic race not allowed to be
+chaotic ([What chaos looks like](#what-chaos-looks-like)). So the decoration is
+the part that cycles and the body is not.
+
+Each mark turns from **its own place in the cycle**, the way each kind of leaf
+does, so a car with three things on it shimmers instead of pulsing as one. The
+whole turn takes 7 seconds.
+
+The readability rule again, from the other direction: the cycle runs at **0.36
+saturation and full value**, and chaos paints a body somewhere from 0.6 to 1.0
+saturation. Pale on a strong colour reads as decoration at a glance across a
+split screen even when the hue happens to come round to the body's own.
+
+Like everything else chaotic, this is **told to the car by whatever built the
+race** rather than read from `GameSettings.chaos` - the title screen backdrop is
+a race scene too, and a strobing sticker behind the menu is not what the menu
+is for.
+
+### Liveries
+
+A design saved on its own, with no car under it: the same stripes, stickers and
+handwriting, kept as a thing in its own right so it can go on any car, sit
+beside the cars in the garage, and be handed to somebody else. SAVE AS A LIVERY
+on the decoration tab asks what it is called and keeps it; after that the
+button says `SAVED AS <name>` instead, because a design that is already a
+livery is not a question worth asking again.
+
+`Liveries` is the store, `user://liveries.cfg`, and it is to `LiveryLibrary`
+what `Garage` is to `CarLibrary`: the truth a livery is played against, saved,
+renamed, applied and thrown away with the network unplugged. One file rather
+than a folder each - a car has to keep its model exactly as it arrived and its
+portrait beside it, and a livery is a line of text.
+
+**The id is the design, hashed**, the same sixteen hex characters a car's id
+is. So the same design saved twice is one livery, a design has the same id on
+every machine it is copied to, and a livery from a stranger can be checked
+against the id it was asked for before anything is done with it. Saving a
+design you already saved keeps the first name: you have not made a second
+design, and renaming the one you had would lose the name you chose.
+
+That last promise is why the hash is spelled out in `scripts/livery.gd` rather
+than handed to `var_to_str`. Two machines have to agree on the string down to
+the last digit, and a float printed one way on one and another way on another
+is two machines that disagree about which livery they are holding. Every number
+goes in at **four decimals**, finer than any of them is read at - a mark's place
+on the car is a fraction of a car's length, and a ten thousandth of that is a
+tenth of a millimetre. A difference finer than that is not a difference.
+
+```
+stripe|1|10|0.5|0.5|1.0|0.0;sticker|4|2|0.4|0.45|0.2|0.0
+```
+
+That line is the whole livery: what is hashed, what is written into the file,
+and what goes to the server. Fields are split on `|` and marks on `;`, and
+nothing in a design can hold either character - every field is a number or one
+of four fixed words - so it comes apart exactly where it was joined.
+
+**The panel a mark is on is written only when it is not the flanks**, and the
+flanks are what everything drawn before there were panels to choose is on. So
+every design that already existed hashes to exactly the id it already had - the
+one in the file here, the one somebody else is holding, and the one a copy of
+this game from before the panels would work out. The two fields that can follow
+the seven are told apart by what they look like rather than by where they sit:
+a word's strokes are points and a point has a comma in it, and a panel is a
+lone digit. **A word's pen is written the same way**, only when it is not the
+width every word had before there was a choice, and it is the one field with a
+decimal point and no comma. It goes before the panel, so a copy of this game
+from before the pen reads it as a panel, gets nought - the flanks - and has the
+real panel written straight after it put that right: the word lands where it
+was put and only comes out at the old width. **A mark on the body** is written
+as it would be on the face it is nearest, followed by where it really is - the
+spot and the aim, six numbers run together with `:`, the one field with a colon
+in it. It goes before the panel for the pen's reason, so a copy of the game from
+before the body draws it on its nearest face, near enough where it was put. **A
+mark on one door only** has the word `single` straight after its body, and
+nothing when it is on both, which is every mark there was before MIRROR could be
+unticked. A copy of the game from before that reads the word as a panel, gets
+nought, and has the real panel after it put that right, so it puts the mark in
+the right place and only wears it on both doors. The
+face and the place on it are worked out from the spot and the aim as they are
+written, rounded, not as they were: worked out from the unrounded ones, they
+could round one way the first time and another every time after, and the
+design would change id on its way to somebody else. `tools/checks/liveries.gd` holds a flank-only design to its written
+line and its id in full, because that is the one promise in the game that
+reaches other people's machines and older copies of this one. The file
+keeps that form rather than the dictionaries the game draws from, so a livery
+that reads back wrong is wrong in one place; and a section edited by hand stops
+being that livery rather than quietly becoming a different one under its old
+id.
+
+**A livery is copied onto a car, never pointed at.** The car holds its own
+marks in `Decals`. So a livery put on and then tweaked is that car's design
+from the moment it is tweaked, and throwing the livery away leaves every car
+that ever wore it exactly as it is. That is the whole reason the two stores are
+separate.
+
+In the garage they get the third half of each player's row, beside the
+unofficial cars: a small picture of the design and its name. A **row** rather
+than a tile, which is the one thing that made a third half fit - a tile big
+enough to read is a tile two of which do not fit the 142 a half is tall, and a
+column showing one and a half designs is a column nobody can look through. The
+picture is `DecalArt.draw_side`: a schematic of a design rather than a picture
+of a car wearing one - the silhouette with the marks laid over it, and the
+three panels a flat side does not have drawn at the edge of the silhouette they
+belong to. It is the only drawing of a design that is not the car itself, and
+all it has to do is say which design this is. It is drawn **in that player's
+own paint**, because that is the car it would go on - the same design in the other
+row is the same design on a different colour, which is worth seeing before it
+is pressed.
+
+Pressing one puts it on that player's car at once, like everything else on this
+page, and the tile is held down while the car is wearing it. Which livery that
+is, is a lookup and not a search: the id is the design hashed, so the car's own
+marks say which one it is, and a car decorated by hand into exactly some saved
+design is wearing that design. It costs the same fifty coins the decoration tab
+does, and says so the same way when it has not been paid for.
+
+REMOVE throws a livery away when the cursor is on one, rather than taking a car
+out of the garage. TURN is refused: a livery has no model to turn.
+
+### Sharing a livery
+
+SHARE and BROWSE do liveries as well as cars, through `LiveryLibrary` over the
+same `Backend`, and the browse page grew a `CARS | LIVERIES` pair at the top.
+One list at a time and not one mixed list: a car and a design are not
+alternatives to each other, and a player looking for one is not half-interested
+in the other. The search is cleared when the list changes, because a search is
+about the list it was typed over.
+
+**There is no bucket.** `CarLibrary` puts a model in storage and the row points
+at it, and nearly all of that file - the two-request order, the path
+constraint, the 409 handling, the cleaning up after a share that fell over - is
+there because a row and a file can disagree. A livery is a column. Sharing is
+one insert, unsharing is one delete, and a livery cannot exist on the server
+with its design missing.
+
+One good thing falls out of that: **the request that lists what has been shared
+also carries every design**, so the browse page draws all of them. A page of
+shared cars can only show names, because showing a car would mean downloading
+every model on the list.
+
+A design that comes down is a stranger's and is treated as one. It is read mark
+by mark through `DecalArt.tidy`, hashed, and must come out as the id it was
+asked for; then it goes in through `Liveries.adopt`, the same door as one drawn
+here. A mark this build has no shape for is dropped and the rest arrives - a
+livery missing a sticker is something a player can see, where nothing at all is
+something they cannot work out the reason for - and a paint out of the six the
+shop sells is pulled back into the free twelve, so a shared design can never be
+a way of wearing a colour without buying it.
+
+The server side is the `liveries` table in `backend/schema.sql`. **A project set
+up before liveries existed needs that file running again**; until it has been,
+sharing a livery fails and the LIVERIES half of the browse page is empty, and
+nothing else changes.
+
+### Checking a livery
+
+`tools/checks/liveries.gd` is the headless half. A livery is the one thing in
+the game that is *meant* to travel as something this game wrote, rather than as
+bytes it can hash and hand on untouched - so the writing and the reading are
+code, and code that disagrees with itself is a design that arrives as a
+different design.
+
+It holds a design through writing, reading and hashing again; checks that the
+same design reached twice is one id and that moving a sticker is a different
+one, while a millionth of a car's length is not; holds a design worn on the
+flanks to the exact line and the exact id it had before there were panels to
+choose, and the same sticker on the roof to a different one; drives a real
+save, a real reload and a real save-the-same-thing-twice; brings a design in from outside
+with an unknown mark and a bought colour in it to see what survives; checks
+that throwing a livery away leaves the car wearing it alone; and opens the real
+garage to see a livery sitting beside the cars, going on when it is pressed,
+held down while it is worn, and refused until the slot is paid for.
+
+```
+Godot --path . --headless --script tools/checks/liveries.gd
+```
+
+`tools/checks/livery_shot.gd` walks it with a camera, for the half no assertion
+sees - whether a design is recognisable from the small picture on its row,
+whether two designs tell themselves apart at that size, and whether the same
+livery in the other player's row plainly reads as the same design on another
+colour.
+
+```
+Godot --path . --script tools/checks/livery_shot.gd -- /tmp/shots
+```
+
+### Checking it
+
+`tools/checks/decals.gd` is the headless half. Six things about decoration go
+wrong quietly and none of them shows up by looking at a car: a decoration that
+comes back different from the one that was saved, which is somebody's own
+handwriting lost; one that outlives its car; the stock car losing its own,
+being the one car with no folder to keep anything in; a car covered past the
+cap; a mark that lands somewhere other than where it was aimed; and a car that
+never hears the press at all.
+
+So it drives a real `Decals` through a real file, removes a real car out of a
+real garage, and opens the real tab to see the fifty coins gate it. It also
+counts what a decorated car actually carries - one pass per stripe, two decals
+for a mark on the flanks and one for a mark on any other panel, and exactly one
+of them aimed downwards - and checks that **no decal's cull mask names the
+world's layer**, which is the sticker-on-the-tarmac failure written as a number
+instead of left to a screenshot.
+
+The last two are what the tab now rests on, and they are checked as the two
+halves they are. **The arithmetic**: every panel is aimed at from several
+angles and the answer picked up again, and where a mark was put has to be where
+a ray finds it, or a sticker lands somewhere other than where a player put it
+and nothing else in the game says so. **The wiring**: a real mouse press is
+pushed at the window over a sticker on the car, and the page has to have picked
+that sticker up - because a view that never sees a press is a page where
+nothing happens at all, and no number anywhere would say why.
+
+```
+Godot --path . --headless --script tools/checks/decals.gd
+```
+
+`tools/checks/chaos_colour.gd` covers the cycle: the decoration moves in a
+chaotic race, holds still in an ordinary one, holds still on the title screen,
+each mark turns from its own phase, and the body underneath holds the colour it
+was rolled.
+
+`tools/checks/decorate_shot.gd` walks it with a camera, for the half no
+assertion sees - whether a stripe lands on the body rather than washing it,
+whether a sticker is the right way up on each of the panels, whether somebody's
+handwriting is still legible once it has been thrown at a curved door, whether
+the car is framed and the ring is round the thing rather than near it, and
+whether the road under the car is clean. It writes a word on the car with the
+pen, turns it up to its roof for one sticker and round behind it for another,
+and then goes out onto the road with the lot.
+
+```
+Godot --path . --script tools/checks/decorate_shot.gd -- /tmp/shots
+```
+
 ## Adding a track
 
 Everything a track needs is in place, so adding a twenty-first is three steps
@@ -3735,6 +4643,12 @@ that happens to be several colours.
 **The leaves never settle.** Each kind of tree turns from its own place in the
 cycle, so the field shimmers instead of the whole horizon pulsing as one.
 
+**Whatever is drawn on a car never settles either**, while the body under it
+holds perfectly still. The stripes, stickers and handwriting stay exactly as
+they were drawn and only their colour moves, each mark from its own place in
+the turn - see [In chaos](#in-chaos) under car customisation for why that is
+the way round it is, and how the cycle is kept clear of the body colours.
+
 Which surfaces of a tree are its leaves is asked of the colour rather than the
 name: the model calls its materials Material.001 through Material.007 and
 nothing in that says which is bark and which is a canopy. Every green surface
@@ -3749,8 +4663,8 @@ race, because the title screen backdrop is a race scene too, and a rainbow wood
 behind the menu is not what the menu is for.
 
 `tools/checks/chaos_colour.gd` checks the three that are meant to move and the
-one that is meant to hold still, and then that none of it happens in a race
-that is not chaotic:
+two that are meant to hold still, and then that none of it happens in a race
+that is not chaotic or on the title screen:
 
 ```
 Godot --path . --headless --fixed-fps 60 --script tools/checks/chaos_colour.gd

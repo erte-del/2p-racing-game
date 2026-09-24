@@ -60,11 +60,17 @@ extends Control
 ## circled. It is under PLAY rather than behind it because which car to drive
 ## is a choice made before a race, not one of the questions about it.
 ##
+## SHOP sits under GARAGE, for the same reason and in the same order a player
+## does the two things: a car is picked, and then it is spent on. It is on the
+## title rather than inside the garage because what it sells is not only cars,
+## and a shop reached through the garage would be a shop a player has to guess
+## the location of.
+##
 ## Over the buttons, small, sits what is in the purse: a disc and a number, and
 ## nothing else. It is there because a player who has been picking coins up on
 ## the road should be able to see what they have got without starting anything,
 ## and it is against the column of buttons rather than off in a corner because
-## the shop that spends it belongs in that column. Above rather than below: the
+## the shop that spends it is in that column. Above rather than below: the
 ## column runs to the bottom of the screen already, and a total under it would
 ## be a total nobody with a short window ever sees.
 ##
@@ -162,6 +168,8 @@ const WON_COLOUR := Color(0.44, 0.85, 0.52)
 @onready var _play: Button = $Play
 @onready var _garage_button: Button = $Garage
 @onready var _garage_screen: GarageMenu = $GarageScreen
+@onready var _shop_button: Button = $Shop
+@onready var _shop_screen: ShopMenu = $ShopScreen
 @onready var _settings_button: Button = $Settings
 @onready var _settings_screen: SettingsMenu = $SettingsScreen
 @onready var _account_button: Button = $Account
@@ -213,6 +221,8 @@ func _ready() -> void:
 	_play.pressed.connect(_on_play_pressed)
 	_garage_button.pressed.connect(_on_garage_pressed)
 	_garage_screen.closed.connect(_on_garage_closed)
+	_shop_button.pressed.connect(_on_shop_pressed)
+	_shop_screen.closed.connect(_on_shop_closed)
 	_settings_button.pressed.connect(_on_settings_pressed)
 	_settings_screen.closed.connect(_on_settings_closed)
 	_alone_button.pressed.connect(_choose_players.bind(true))
@@ -1038,6 +1048,8 @@ func _close_mode_choice() -> void:
 func _input(event: InputEvent) -> void:
 	if _settings_screen.visible or _account_screen.visible or _garage_screen.visible:
 		return
+	if _shop_screen.visible:
+		return
 	if _boards_screen.visible:
 		return
 	if not event.is_action_pressed("ui_cancel"):
@@ -1077,6 +1089,16 @@ func _on_garage_pressed() -> void:
 
 func _on_garage_closed() -> void:
 	_garage_button.grab_focus()
+
+
+## The shop lies over the title the way the garage does, and for the same
+## reason: what it sells goes on the cars parked on the grid behind it.
+func _on_shop_pressed() -> void:
+	_shop_screen.open()
+
+
+func _on_shop_closed() -> void:
+	_shop_button.grab_focus()
 
 
 ## The settings lie over the title screen rather than replacing it, so the

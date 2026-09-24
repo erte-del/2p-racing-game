@@ -255,13 +255,20 @@ func adopt(bytes: PackedByteArray, called: String) -> Dictionary:
 ## Anyone sitting in it is put back in the stock car first, through the same
 ## setting the garage screen writes, so the race swaps the model out from under
 ## them before the file it was read from is gone. Nobody is ever left driving
-## nothing.
+## nothing. Whatever the car was decorated with goes too; see
+## `Decals`.
 func remove(id: String) -> bool:
 	if not has(id):
 		return false
 	for player in GameSettings.car_ids.size():
 		if GameSettings.car_id(player) == id:
 			GameSettings.set_car_id(player, STOCK)
+	# Whatever was drawn on it goes with it. A decoration is kept against a car
+	# id rather than in the car's folder (the stock car has no folder), so
+	# throwing the folder away is not enough on its own - and a section left
+	# behind would be handed straight back to whoever added the same file
+	# again, which is not the same person's decoration.
+	Decals.forget(id)
 	_forget(id)
 	changed.emit()
 	return true

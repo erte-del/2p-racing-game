@@ -148,6 +148,11 @@ func _ready() -> void:
 	_lines1.wild = _chaos != null
 	_lines2.wild = _chaos != null
 	($Trees as Trees).wild = _chaos != null
+	# The decoration is the part of a car that cycles under chaos, and the body
+	# is not - see `_apply_paint`. Told the same way and for the same reason as
+	# the wood above it.
+	for car in _cars:
+		car.set_decals_wild(_chaos != null)
 	# Damage the same way, and for the same reason: parked cars behind the
 	# title are not being driven, and a bar under a clock nobody can see is
 	# not something the menu should be carrying.
@@ -187,9 +192,15 @@ func _ready() -> void:
 	# player is driving without changing which car they picked.
 	_apply_cars()
 	_apply_paint()
+	_apply_decoration()
 	GameSettings.changed.connect(_apply_cars)
 	GameSettings.changed.connect(_apply_paint)
+	GameSettings.changed.connect(_apply_decoration)
 	Garage.changed.connect(_apply_cars)
+	# A decoration belongs to a car rather than to a player, so it is watched
+	# on its own: a stripe put on in the garage over a paused race lands
+	# through the same path the saved one takes at the start of a run.
+	Decals.changed.connect(_on_decals_changed)
 
 	# Show everything except the rival's private layer. Subtracting one layer
 	# rather than listing the wanted ones means anything added to the world
@@ -375,6 +386,21 @@ func _apply_paint() -> void:
 	# nobody on the course is wearing.
 	_arrow1.recolour(_car2.body_color)
 	_arrow2.recolour(_car1.body_color)
+
+
+## Put whatever each player's car has been decorated with back on it.
+##
+## Chaos does not overrule this the way it overrules the paint. It turns the
+## decoration through the colours and leaves the shapes exactly as they were
+## drawn, which is the requirement: what a player made stays theirs, and only
+## what colour it is stops holding still.
+func _apply_decoration() -> void:
+	for i in _cars.size():
+		_cars[i].decorate(Decals.marks_on(GameSettings.car_id(i)))
+
+
+func _on_decals_changed(_id: String) -> void:
+	_apply_decoration()
 
 
 func _bit(layer: int) -> int:

@@ -57,9 +57,14 @@ create index if not exists times_board
 -- turns that into the rule the record actually has: returning the old row
 -- from a BEFORE UPDATE trigger leaves it exactly as it was, so a slower lap
 -- is accepted by the server and quietly changes nothing.
+-- `search_path` is pinned rather than inherited. This one is only ever reached
+-- as a trigger, so nothing can call it with a path of their choosing, but a
+-- function that resolves its own names against whatever the caller had set is
+-- a habit worth not having.
 create or replace function public.keep_the_better_time()
 returns trigger
 language plpgsql
+set search_path = pg_catalog, public
 as $$
 begin
   if new.seconds >= old.seconds then
@@ -92,21 +97,31 @@ create policy times_readable on public.times
 -- the racer column is checked against the signed-in user by the database, so
 -- a modified game cannot post a time under somebody else's name however it
 -- asks.
+--
+-- Why `(select auth.uid())` rather than `auth.uid()` throughout.
+--
+-- Written bare, the planner treats it as volatile and re-runs it for every row
+-- it tests. Wrapped in a select it becomes an initplan: worked out once and
+-- compared against. The policies mean exactly the same thing either way, and
+-- at three racers it makes no measurable difference - but it is the shape
+-- Postgres wants, the linter asks for it by name, and it costs nothing to get
+-- right once rather than to discover on a board with ten thousand rows on it.
+
 drop policy if exists racers_claim_own on public.racers;
 create policy racers_claim_own on public.racers
-  for insert with check (auth.uid() = id);
+  for insert with check ((select auth.uid()) = id);
 
 drop policy if exists racers_rename_own on public.racers;
 create policy racers_rename_own on public.racers
-  for update using (auth.uid() = id) with check (auth.uid() = id);
+  for update using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
 
 drop policy if exists times_write_own on public.times;
 create policy times_write_own on public.times
-  for insert with check (auth.uid() = racer);
+  for insert with check ((select auth.uid()) = racer);
 
 drop policy if exists times_improve_own on public.times;
 create policy times_improve_own on public.times
-  for update using (auth.uid() = racer) with check (auth.uid() = racer);
+  for update using ((select auth.uid()) = racer) with check ((select auth.uid()) = racer);
 
 -- Deliberately no delete policy on times. A record is something that
 -- happened; the only thing that may touch one is a better one.
@@ -162,6 +177,14 @@ alter table public.cars add constraint cars_model_is_its_own
 -- The one query the browse page runs: the newest first.
 create index if not exists cars_newest on public.cars (shared_at desc);
 
+-- An index on the owner as well as on the date.
+--
+-- Two things ask by owner and neither is the browse page: `?owner=eq.<id>` is
+-- how the game works out what this player has already shared, and the cascade
+-- from `racers` has to find every row belonging to an account being deleted.
+-- Without this both are a sequential scan.
+create index if not exists cars_by_owner on public.cars (owner);
+
 alter table public.cars enable row level security;
 
 -- Anyone may look, including somebody who has not made an account: browsing
@@ -172,15 +195,15 @@ create policy cars_readable on public.cars
 
 drop policy if exists cars_share_own on public.cars;
 create policy cars_share_own on public.cars
-  for insert with check (auth.uid() = owner);
+  for insert with check ((select auth.uid()) = owner);
 
 drop policy if exists cars_rename_own on public.cars;
 create policy cars_rename_own on public.cars
-  for update using (auth.uid() = owner) with check (auth.uid() = owner);
+  for update using ((select auth.uid()) = owner) with check ((select auth.uid()) = owner);
 
 drop policy if exists cars_unshare_own on public.cars;
 create policy cars_unshare_own on public.cars
-  for delete using (auth.uid() = owner);
+  for delete using ((select auth.uid()) = owner);
 
 grant select on public.cars to anon, authenticated;
 grant insert, delete on public.cars to authenticated;
@@ -189,6 +212,60 @@ grant insert, delete on public.cars to authenticated;
 -- away first, so a table an earlier run granted whole updates on ends up here.
 revoke update on public.cars from anon, authenticated;
 grant update (name) on public.cars to authenticated;
+
+-- A livery somebody has shared: a design, and nothing else.
+--
+-- No bucket and no second table. A car has to be a file, so `cars` keeps the
+-- model in storage and points at it, and every awkward thing about that table
+-- follows from the row and the file being able to disagree. A livery is one
+-- line of text a few hundred characters long, so it is a column - the row *is*
+-- the livery, a share is one insert, an unshare is one delete, and there is no
+-- state in between for anything to go wrong in.
+--
+-- The id is the first sixteen hex characters of the sha256 of that very text,
+-- which is what the game checks a downloaded design against. Nothing here can
+-- enforce that - the hash is the game's - so the game refuses a row whose
+-- marks do not come out as its own id, and what the database guarantees is
+-- only that a design is not empty and not enormous.
+create table if not exists public.liveries (
+  id text primary key check (id ~ '^[0-9a-f]{16}$'),
+  owner uuid not null references public.racers on delete cascade,
+  name text not null check (char_length(name) between 1 and 24),
+  marks text not null check (char_length(marks) between 1 and 8192),
+  shared_at timestamptz not null default now()
+);
+
+-- The one query the browse page runs: the newest first.
+create index if not exists liveries_newest on public.liveries (shared_at desc);
+
+-- And by owner, for the reason the cars are indexed by owner.
+create index if not exists liveries_by_owner on public.liveries (owner);
+
+alter table public.liveries enable row level security;
+
+-- Anyone may look, signed in or not, for the reason the cars are readable.
+drop policy if exists liveries_readable on public.liveries;
+create policy liveries_readable on public.liveries
+  for select using (true);
+
+drop policy if exists liveries_share_own on public.liveries;
+create policy liveries_share_own on public.liveries
+  for insert with check ((select auth.uid()) = owner);
+
+drop policy if exists liveries_rename_own on public.liveries;
+create policy liveries_rename_own on public.liveries
+  for update using ((select auth.uid()) = owner) with check ((select auth.uid()) = owner);
+
+drop policy if exists liveries_unshare_own on public.liveries;
+create policy liveries_unshare_own on public.liveries
+  for delete using ((select auth.uid()) = owner);
+
+grant select on public.liveries to anon, authenticated;
+grant insert, delete on public.liveries to authenticated;
+-- The name, and only the name. The id is the hash of the marks, so a design
+-- may never drift from the one that was shared under it.
+revoke update on public.liveries from anon, authenticated;
+grant update (name) on public.liveries to authenticated;
 
 -- Where the models are.
 --

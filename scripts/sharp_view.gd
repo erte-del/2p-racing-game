@@ -3,11 +3,11 @@ extends TextureRect
 
 ## One half of the split screen, drawn at the resolution of the display.
 ##
-## The interface is laid out in a fixed 1280x720 space and Godot scales that
-## up to fill whatever window the game is in, so a button covers the same
-## share of the screen on every machine. A SubViewport takes its size from
-## whatever holds it, and that is measured in the laid-out space - so a
-## SubViewportContainer would have each half of the race rendered at 1280x358
+## The interface is laid out in a fixed 1600x900 space and Godot scales that
+## to fill whatever window the game is in, so a button covers the same share
+## of the screen on every machine. A SubViewport takes its size from whatever
+## holds it, and that is measured in the laid-out space - so a
+## SubViewportContainer would have each half of the race rendered at 1600x448
 ## and blown up soft on any screen bigger than the one it was designed for.
 ##
 ## Hence a texture rather than a container. The viewport is given the size its

@@ -1,7 +1,7 @@
 # The server side
 
 Accounts and leaderboards, on Supabase. There is no server to run: the whole
-back end is the two tables in `schema.sql`, and the game talks to them
+back end is the four tables in `schema.sql`, and the game talks to them
 directly over HTTPS.
 
 Everything in the game works without any of this. A build with no
@@ -86,6 +86,29 @@ making an account. Only the owner may insert or delete a row, and the only
 column anybody may update is the name: the id is the hash of what was shared,
 and nothing may drift away from it.
 
+**`liveries`** is the designs players have shared - stripes, stickers and
+handwriting drawn in the garage. It works like `cars` with one difference that
+removes most of the complication: **there is no bucket.** A car has to be a
+file of a few megabytes, so `cars` keeps the model in storage and the row
+points at it, and the path constraint and the storage policies below all exist
+to keep those two honest. A livery is one line of text a few hundred characters
+long, so the design is a column and the row *is* the livery. Sharing is one
+insert, unsharing is one delete, and there is no half-shared state for anything
+to go wrong in.
+
+The id is the first sixteen hex characters of the sha256 of that very text.
+Nothing here can enforce that - the hash is the game's - so the game refuses
+any row whose marks do not come back out as its own id, and what the database
+promises is only that a design is not empty and not enormous. As with cars,
+anybody may read, only the owner may insert or delete, and the name is the one
+column anybody may update.
+
+One thing falls out of the design being a column rather than a file: the
+request that lists what has been shared also carries every design, so the
+browse page draws all of them at once off a single request. A page of shared
+cars can only show names, because showing a car would mean downloading every
+model on the list.
+
 **The `cars` bucket** holds the models: private, 8 MB a file, and nothing but
 `model/gltf-binary`. It is private because in a public bucket an object is
 readable by anyone with its path - before its row exists and after it has gone
@@ -112,6 +135,23 @@ If a project already has a `cars` table from an earlier version of this game's
 schema, running the file adds the constraint on the model path to it. That
 fails if any existing row points somewhere other than `<owner>/<id>.glb`;
 delete those rows first.
+
+Every policy on these tables says `(select auth.uid())` rather than
+`auth.uid()`. Written bare, the planner treats it as volatile and re-runs it
+for every row it tests; wrapped in a select it becomes an initplan, worked out
+once. The policies mean the same thing either way and the difference is
+invisible at this size, but it is what Supabase's own linter asks for by name
+and it costs nothing to write correctly the first time. Both tables are also
+indexed on `owner`, which is neither the primary key nor the browse order: the
+game asks `?owner=eq.<id>` to find out what this player has already shared, and
+the cascade from `racers` has to find every row belonging to a deleted account.
+
+**A project set up before liveries existed needs `schema.sql` running again.**
+Everything in it is `create ... if not exists` and `drop policy ... / create
+policy`, so running the whole file over a live project adds the `liveries`
+table and leaves the rest as it was. Until it has been run, sharing a livery
+fails and the LIVERIES half of the browse page comes up empty - the rest of the
+game, including sharing cars, carries on exactly as before.
 
 ## Sending your own email
 

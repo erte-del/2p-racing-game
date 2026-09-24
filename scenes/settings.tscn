@@ -79,6 +79,29 @@ text = "(there is no sound in the game yet)"
 theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
 theme_override_font_sizes/font_size = 18
 
+[node name="Interface" type="HBoxContainer" parent="SettingsPage/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Label" type="Label" parent="SettingsPage/Panel/Margin/Box/Interface"]
+layout_mode = 2
+text = "Interface size"
+
+[node name="Slider" type="HSlider" parent="SettingsPage/Panel/Margin/Box/Interface"]
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+min_value = 75.0
+max_value = 120.0
+value = 100.0
+
+[node name="Value" type="Label" parent="SettingsPage/Panel/Margin/Box/Interface"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "100%"
+horizontal_alignment = 2
+
 [node name="Sky" type="VBoxContainer" parent="SettingsPage/Panel/Margin/Box"]
 layout_mode = 2
 theme_override_constants/separation = 6

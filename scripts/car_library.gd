@@ -307,7 +307,7 @@ func _read(data: Array) -> Array:
 		var row: Dictionary = entry
 		var id := str(row.get("id", ""))
 		var owner := str(row.get("owner", ""))
-		if not Garage.is_id(id) or not _is_uuid(owner):
+		if not Garage.is_id(id) or not Backend.is_uuid(owner):
 			continue
 		var racer: Variant = row.get("racers")
 		var by := "—"
@@ -343,19 +343,6 @@ func _row(id: String) -> Dictionary:
 func _forget_the_list() -> void:
 	_fetched_at = -1.0
 	_own.clear()
-
-
-static func _is_uuid(text: String) -> bool:
-	if text.length() != 36:
-		return false
-	for i in text.length():
-		var character := text[i]
-		if i in [8, 13, 18, 23]:
-			if character != "-":
-				return false
-		elif not character in "0123456789abcdefABCDEF":
-			return false
-	return true
 
 
 func _fine(id: String) -> Dictionary:

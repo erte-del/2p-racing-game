@@ -34,26 +34,63 @@ extends Control
 ## browsed. Neither button exists without one: a build with no `backend.cfg`
 ## is a garage that works entirely on this machine, and a button that can only
 ## ever say "no server" is a button that should not be there.
+##
+## The page has two tabs. CARS is everything above: which car each player is
+## in, and bringing more in. DECORATION is what is drawn on the car they are
+## already in - stripes, stickers and a word in their own hand - and it is a
+## tab here rather than a screen of its own because it is about the same car.
+## Choosing a car in one place and drawing on it in another would be two pages
+## with nothing on either of them saying they were about the same thing. See
+## `DecorationPage`.
 
 ## Emitted when the screen closes, so whoever opened it can take focus back.
 signal closed
 
-## One tile: the portrait over the name. Two rows of players have to fit a
-## window 720 tall with BACK still on it, and this is the height that allows.
-## The width is what there was room for once the height was settled: at 1280
-## wide a panel of narrower tiles left a third of the window dark on either
-## side, on a screen whose whole job is showing pictures of cars.
-const TILE_SIZE := Vector2(236.0, 134.0)
+## One tile: the portrait over the name. Two rows of players have to fit the
+## shortest page there is - 750 tall, the laid-out space at the largest
+## interface size a player can pick - with BACK still on it, and this is the
+## height that allows.
+##
+## The width was 236 while a row held two halves, because narrower tiles then
+## left a third of the window dark on either side, on a screen whose whole job
+## is showing pictures of cars. A row holds three halves now, and the space
+## that would have been dark is the liveries - so the tiles give some of it
+## back rather than pushing the third half off the edge.
+const TILE_SIZE := Vector2(200.0, 134.0)
 ## How many tiles go across the unofficial half before it wraps. Three, so the
 ## cars a player has added sit on one line without a scroll bar until there are
 ## more than three of them. The official half is one wide: it is one car today,
 ## and the day there is a second it goes underneath.
 const UNOFFICIAL_COLUMNS := 3
 
+## One saved livery: a small picture of the design and its name beside it.
+##
+## A row rather than a tile, which is the one thing that made the third half of
+## this row work. A tile big enough to read is a tile two of which do not fit
+## the 142 a half is tall, and a column showing one and a half designs is a
+## column nobody can look through. Laid out the way the page of shared cars
+## is - a picture, then a name - three of them fit, and the design is seen
+## properly on the decoration tab anyway.
+const LIVERY_ROW := Vector2(240.0, 44.0)
+## The picture on it: the flat side of a car with the design on, the same
+## drawing the decoration tab puts up.
+const LIVERY_PICTURE := Vector2(66.0, 38.0)
+
 ## How wide a line on the page of shared cars is, always. A name is whatever
 ## somebody typed, and a line that grew to fit it would resize the whole page
 ## under the player's hands as a search narrowed down to it.
 const ROW_WIDTH := 760.0
+
+## The two tabs, in the order they sit in.
+const CARS := 0
+const DECORATION := 1
+
+## The two lists on the page of shared things, in the order they sit in.
+const SHARED_CARS := 0
+const SHARED_LIVERIES := 1
+
+## The coin's own gold, the same as in the shop and on the decoration tab.
+const PRICE_COLOUR := Color(1.0, 0.82, 0.24)
 
 const QUIET := Color(0.72, 0.76, 0.86)
 const WRONG := Color(0.98, 0.55, 0.5)
@@ -82,6 +119,19 @@ const RIGHT := Color(0.6, 0.9, 0.68)
 	$Page/Panel/Margin/Box/Rows/P1/Halves/Unofficial/Scroll/List/Nothing,
 	$Page/Panel/Margin/Box/Rows/P2/Halves/Unofficial/Scroll/List/Nothing,
 ]
+@onready var _livery_grids: Array[GridContainer] = [
+	$Page/Panel/Margin/Box/Rows/P1/Halves/Liveries/Scroll/List/Grid,
+	$Page/Panel/Margin/Box/Rows/P2/Halves/Liveries/Scroll/List/Grid,
+]
+@onready var _nothing_saved: Array[Label] = [
+	$Page/Panel/Margin/Box/Rows/P1/Halves/Liveries/Scroll/List/Nothing,
+	$Page/Panel/Margin/Box/Rows/P2/Halves/Liveries/Scroll/List/Nothing,
+]
+@onready var _tab_buttons: Array[Button] = [
+	$Page/Panel/Margin/Box/Tabs/Cars, $Page/Panel/Margin/Box/Tabs/Decoration,
+]
+@onready var _rows: VBoxContainer = $Page/Panel/Margin/Box/Rows
+@onready var _actions: HBoxContainer = $Page/Panel/Margin/Box/Actions
 @onready var _add_button: Button = $Page/Panel/Margin/Box/Actions/Add
 @onready var _turn_button: Button = $Page/Panel/Margin/Box/Actions/Turn
 @onready var _remove_button: Button = $Page/Panel/Margin/Box/Actions/Remove
@@ -93,9 +143,21 @@ const RIGHT := Color(0.6, 0.9, 0.68)
 
 ## How many cars are on the road: one column of tiles, or two.
 var _players := 1
+## Which tab is up: CARS or DECORATION.
+var _tab := CARS
+## The decoration tab's contents, built in code the way everything else on this
+## page that is not a fixed row is.
+var _decoration: DecorationPage
 ## The car the page is talking about: the tile the cursor or the keyboard was
 ## last on. Every action on the page means this car.
 var _subject := Garage.STOCK
+## The livery the page is talking about, when it is talking about one at all.
+##
+## Kept apart from `_subject` rather than folded into it, so that nothing has
+## to ask what kind of thing a string is before using it: an id is sixteen hex
+## characters either way, and a car and a livery could collide. Exactly one of
+## the two is set, which is what `_about_a_livery` answers.
+var _livery := ""
 ## True while a car is being brought in. Everything on the page is refused
 ## while it is, not just ADD: a second file would mean two Blenders writing over
 ## each other's output, and a car removed or a screen closed halfway through is
@@ -125,6 +187,10 @@ var _asked := 0
 var _search: LineEdit
 var _count: Label
 var _all_shared: Array = []
+## Which of the two lists the shared page is showing, and the buttons that say
+## so.
+var _shared_kind := SHARED_CARS
+var _shared_kinds: Array[Button] = []
 
 ## The panel SHARE opens first, and the car it is asking about.
 var _naming: Control
@@ -146,17 +212,29 @@ func _ready() -> void:
 		_official_grids[player].columns = 1
 		_unofficial_grids[player].columns = UNOFFICIAL_COLUMNS
 	# A car added, turned or removed from anywhere - this page, or a download
-	# landing while it is open - is a page showing the old garage.
+	# landing while it is open - is a page showing the old garage. A livery
+	# saved on the other tab is the same story in the other half of the row.
 	Garage.changed.connect(_on_garage_changed)
+	Liveries.changed.connect(_on_garage_changed)
+	# A livery is held down while the car is wearing it, so a decoration
+	# changed anywhere changes which of them that is.
+	Decals.changed.connect(_on_decals_changed)
+	# A livery's picture is drawn in the paint of the car it would go on, and
+	# that paint is now chosen on the other tab - so a car repainted while this
+	# page is open is a row of designs in last year's colour until they are
+	# told.
+	GameSettings.changed.connect(_on_settings_changed)
 	# Signing in or out changes whether SHARE can be pressed, and the list
 	# arriving changes whether it says SHARE or UNSHARE.
 	Backend.signed_in.connect(_update_actions)
 	Backend.signed_out.connect(_update_actions)
 	CarLibrary.catalogue_arrived.connect(_on_catalogue_arrived)
+	LiveryLibrary.catalogue_arrived.connect(_on_catalogue_arrived)
 	_build_the_file_picker()
 	_build_the_blender_picker()
 	_build_the_shared_cars_page()
 	_build_the_naming_panel()
+	_build_the_decoration_tab()
 	hide()
 
 
@@ -172,12 +250,17 @@ func open(players: int) -> void:
 	_find_blender_button.visible = not Blender.here()
 	_browse.hide()
 	_naming.hide()
+	# Always on the cars first. The other tab is about the car a player is
+	# already in, and a garage that opened on it would be answering a question
+	# nobody had asked yet.
+	_lay_out_the_tab(CARS)
 	if not _busy:
 		_say("", QUIET)
 	# Set going rather than waited on. It is what tells this page which cars
 	# the player has already shared, and the page is drawn either way.
 	if CarLibrary.can_share():
 		CarLibrary.catalogue()
+		LiveryLibrary.catalogue()
 	_subject = _driven(0)
 	_fill()
 	show()
@@ -207,12 +290,80 @@ func _input(event: InputEvent) -> void:
 	if not visible or not event.is_action_pressed("ui_cancel"):
 		return
 	get_viewport().set_input_as_handled()
+	if _decoration != null and _decoration.backed_out():
+		return
 	if _naming.visible:
 		_on_cancel_naming()
 	elif _browse.visible:
 		_close_the_shared_cars()
 	elif not _busy:
 		close()
+
+
+# --- the tabs -----------------------------------------------------------
+
+## Build the decoration tab and put it in the panel between the tab row and the
+## status line, so that it and the cars occupy the same space and only one of
+## them is ever in it.
+##
+## Built in code rather than written into the scene for the reason the shared
+## cars page is: almost none of it is a fixed row. Its swatches are however
+## many paints are free, its stickers are however many the game ships, and its
+## board is drawn rather than laid out.
+func _build_the_decoration_tab() -> void:
+	for tab in _tab_buttons.size():
+		_tab_buttons[tab].pressed.connect(_show_tab.bind(tab))
+	_decoration = DecorationPage.new()
+	_decoration.hide()
+	var box := _rows.get_parent()
+	box.add_child(_decoration)
+	box.move_child(_decoration, _actions.get_index() + 1)
+	# The page says things about a car, and there is already a line at the
+	# bottom of the panel for saying things about a car.
+	_decoration.said.connect(_say)
+	_decoration.setup(self)
+
+
+## Put one tab up and the other away.
+##
+## The status line is cleared on the way across. What was said on one tab is
+## about that tab - "Removed THE BLUE ONE" has nothing to do with a page of
+## stickers - and a line left standing over the other one is a page talking
+## about something the player cannot see.
+func _show_tab(which: int) -> void:
+	if _busy:
+		# Everything is refused while a car is coming in, tabs included: the
+		# conversion is reporting to this status line and the other tab would
+		# take it away from it.
+		_show_the_tabs()
+		return
+	_lay_out_the_tab(which)
+	_say("", QUIET)
+	if _tab == DECORATION:
+		_decoration.opened(_players)
+		_decoration.first_focus()
+	else:
+		_update_actions()
+		_focus_car(0, _driven(0))
+
+
+## Which half of the panel is in it, and nothing else. Split out from
+## `_show_tab` because opening the screen sets the tab before it has laid the
+## tiles out, and putting the keyboard on a tile that is about to be built
+## again is putting it nowhere.
+func _lay_out_the_tab(which: int) -> void:
+	_tab = clampi(which, CARS, DECORATION)
+	_rows.visible = _tab == CARS
+	_actions.visible = _tab == CARS
+	_decoration.visible = _tab == DECORATION
+	_show_the_tabs()
+
+
+## Hold down whichever tab is up.
+func _show_the_tabs() -> void:
+	for tab in _tab_buttons.size():
+		_tab_buttons[tab].set_pressed_no_signal(tab == _tab)
+		_tab_buttons[tab].disabled = _busy
 
 
 # --- the tiles ----------------------------------------------------------
@@ -238,6 +389,7 @@ func _listing() -> Array:
 func _fill() -> void:
 	var focused := _focused_tile()
 	var added := Garage.cars()
+	var kept := Liveries.all()
 	# Read off the disk and built once a car rather than once a tile. Every
 	# player's row shows the same pictures in the same frames, and nothing ever
 	# changes one on a single tile.
@@ -246,7 +398,7 @@ func _fill() -> void:
 	for car: Dictionary in _official_listing() + added:
 		portraits[car.id] = Garage.portrait(car.id)
 	for player in _player_rows.size():
-		for grid in _grids_of(player):
+		for grid in _grids_of(player) + [_livery_grids[player]]:
 			for tile in grid.get_children():
 				grid.remove_child(tile)
 				tile.queue_free()
@@ -259,8 +411,15 @@ func _fill() -> void:
 		# An empty half says so. Left blank, it reads as a half that failed to
 		# draw rather than a garage nobody has put anything in yet.
 		_nothing_added[player].visible = added.is_empty()
+		for saved: Dictionary in kept:
+			_livery_grids[player].add_child(
+				_livery_tile(player, saved.id, saved.name))
+		_nothing_saved[player].visible = kept.is_empty()
 	if not Garage.known(_subject):
 		_subject = Garage.STOCK
+	if not _livery.is_empty() and not Liveries.has(_livery):
+		_livery = ""
+		_subject = _driven(0)
 	_show_the_choices()
 	if not focused.is_empty() and visible:
 		_focus_car(focused[0], focused[1] if Garage.known(focused[1])
@@ -294,6 +453,108 @@ func _tile(player: int, id: String, called: String, picture: Texture2D,
 	tile.focus_entered.connect(_talk_about.bind(id))
 	tile.mouse_entered.connect(_talk_about.bind(id))
 	return tile
+
+
+## One livery: a picture of the design over its name.
+##
+## The picture is the design itself, drawn on the flat side of a car by
+## `DecalArt.draw_side`, which is a schematic of a design rather than a picture
+## of a car wearing it. A livery has no model and no portrait to take, and
+## something that says what the design actually looks like is the only thing
+## that tells one row of names from another.
+##
+## Drawn in the player's own paint, because that is the car it would go on.
+## The same design in the other player's row is the same design on a different
+## colour, which is worth seeing before it is pressed.
+func _livery_tile(player: int, id: String, called: String) -> Button:
+	var tile := Button.new()
+	tile.custom_minimum_size = LIVERY_ROW
+	tile.toggle_mode = true
+	tile.focus_mode = Control.FOCUS_ALL
+	tile.tooltip_text = "Put %s on %s." % [called, Garage.name_of(_driven(player))]
+	tile.disabled = _busy
+	var faces := _tile_faces()
+	for state in faces:
+		tile.add_theme_stylebox_override(state, faces[state])
+	tile.set_meta("livery", id)
+
+	# The name is a label of its own rather than the button's own text, because
+	# the button centres its text over the whole row and the picture is sitting
+	# in the middle of it.
+	var line := HBoxContainer.new()
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	line.set_anchors_preset(Control.PRESET_FULL_RECT)
+	line.offset_left = 8.0
+	line.offset_right = -8.0
+	line.add_theme_constant_override("separation", 10)
+	tile.add_child(line)
+
+	var picture := Control.new()
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	picture.custom_minimum_size = LIVERY_PICTURE
+	picture.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	picture.draw.connect(_draw_a_livery.bind(picture, player, id))
+	line.add_child(picture)
+
+	var name := Label.new()
+	name.text = called
+	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name.clip_text = true
+	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name.add_theme_font_size_override("font_size", 16)
+	line.add_child(name)
+
+	tile.pressed.connect(_wear_the_livery.bind(player, id))
+	tile.focus_entered.connect(_talk_about_a_livery.bind(id))
+	tile.mouse_entered.connect(_talk_about_a_livery.bind(id))
+	return tile
+
+
+## The design, on the paint of the car it would go on. The same design in the
+## other player's row is the same design on a different colour, which is worth
+## seeing before it is pressed.
+func _draw_a_livery(into: Control, player: int, id: String) -> void:
+	DecalArt.draw_side(into, into.size, GameSettings.car_colour(player),
+		Liveries.marks_of(id))
+
+
+## Put a livery on the car this player is driving.
+##
+## Copied onto the car rather than pointed at. A car holds its own marks in
+## `Decals`, so a livery put on and then tweaked on the decoration tab is the
+## car's design from that moment, and throwing the livery away later leaves
+## every car that ever wore it exactly as it is.
+##
+## It goes on immediately, like everything else on this page: the car is right
+## there behind the panel, and seeing the design on it is the only way to know
+## it is the one you wanted.
+func _wear_the_livery(player: int, id: String) -> void:
+	_talk_about_a_livery(id)
+	if not Purse.owns(Shop.SLOT_ITEM):
+		_say("CUSTOMISING IS %d COINS IN THE SHOP. THERE ARE %d IN THE PURSE."
+			% [Shop.SLOT_COST, Purse.coins()], PRICE_COLOUR)
+		_show_the_choices()
+		return
+	var car := _driven(player)
+	if not Decals.set_marks(car, Liveries.marks_of(id)):
+		_say("%s WOULD NOT GO ON %s."
+			% [Liveries.name_of(id), Garage.name_of(car)], WRONG)
+		return
+	_say("%s on %s." % [Liveries.name_of(id), Garage.name_of(car)], RIGHT)
+	_show_the_choices()
+
+
+func _talk_about_a_livery(id: String) -> void:
+	_livery = id
+	_subject = Garage.STOCK
+	_update_actions()
+
+
+## Whether the page is currently talking about a livery rather than a car.
+func _about_a_livery() -> bool:
+	return not _livery.is_empty() and Liveries.has(_livery)
 
 
 ## Every face a tile wears, one per state, to be shared by all of them.
@@ -345,12 +606,20 @@ func _choose(player: int, id: String) -> void:
 		_say("You are in %s." % Garage.name_of(id), QUIET)
 
 
-## Hold down the tile each player is sitting in, and let every other one up.
+## Hold down the tile each player is sitting in and the livery their car is
+## wearing, and let every other one up.
+##
+## Which livery a car is wearing is a lookup rather than a search: a livery's
+## id is its design hashed, so the car's own marks say which one it is, and a
+## car decorated by hand into exactly some saved design is wearing that design.
 func _show_the_choices() -> void:
 	for player in _player_rows.size():
 		var driven := _driven(player)
 		for tile in _tiles_of(player):
 			(tile as Button).set_pressed_no_signal(tile.get_meta("car") == driven)
+		var worn := Liveries.which(Decals.marks_on(driven))
+		for tile in _livery_grids[player].get_children():
+			(tile as Button).set_pressed_no_signal(tile.get_meta("livery") == worn)
 	_update_actions()
 
 
@@ -373,6 +642,7 @@ func _driven(player: int) -> String:
 
 func _talk_about(id: String) -> void:
 	_subject = id
+	_livery = ""
 	_update_actions()
 
 
@@ -381,20 +651,26 @@ func _talk_about(id: String) -> void:
 ## garage would leave the fallback for every other car with nothing to fall
 ## back on.
 func _update_actions() -> void:
+	var livery := _about_a_livery()
 	var theirs := Garage.has(_subject)
 	_add_button.disabled = _busy
 	_find_blender_button.disabled = _busy
 	_back_button.disabled = _busy
-	_turn_button.disabled = _busy or not theirs
-	_remove_button.disabled = _busy or not theirs
+	_show_the_tabs()
+	# Turning is a thing done to a model, and a livery has none.
+	_turn_button.disabled = _busy or livery or not theirs
+	_remove_button.disabled = _busy or not (theirs or livery)
 	for player in _player_rows.size():
-		for tile in _tiles_of(player):
+		for tile in _tiles_of(player) + _livery_grids[player].get_children():
 			(tile as Button).disabled = _busy
-	var named := Garage.name_of(_subject)
-	_turn_button.tooltip_text = ("Turn %s a quarter of the way round." % named
-		if theirs else "The stock car already faces the right way.")
-	_remove_button.tooltip_text = ("Take %s out of the garage." % named
-		if theirs else "The stock car cannot be taken out.")
+	var named := Liveries.name_of(_livery) if livery else Garage.name_of(_subject)
+	_turn_button.tooltip_text = ("A livery has no model to turn." if livery
+		else "Turn %s a quarter of the way round." % named if theirs
+		else "The stock car already faces the right way.")
+	_remove_button.tooltip_text = ("Throw %s away. Cars already wearing it keep it."
+		% named if livery
+		else "Take %s out of the garage." % named if theirs
+		else "The stock car cannot be taken out.")
 
 	var server := CarLibrary.available()
 	_share_button.visible = server
@@ -402,17 +678,22 @@ func _update_actions() -> void:
 	_browse_button.disabled = _busy
 	if not server:
 		return
-	# UNSHARE only on a car this player put up. Somebody else sharing the same
-	# file does not make it theirs to take down.
-	_share_button.text = "UNSHARE" if CarLibrary.is_mine(_subject) else "SHARE"
-	_share_button.disabled = _busy or _sending or not theirs or not CarLibrary.can_share()
-	if not theirs:
+	# UNSHARE only on something this player put up. Somebody else sharing the
+	# same file, or drawing the same design, does not make it theirs to take
+	# down.
+	var mine := (LiveryLibrary.is_mine(_livery) if livery
+		else CarLibrary.is_mine(_subject))
+	var sharable := livery or theirs
+	_share_button.text = "UNSHARE" if mine else "SHARE"
+	_share_button.disabled = (_busy or _sending or not sharable
+		or not CarLibrary.can_share())
+	if not sharable:
 		_share_button.tooltip_text = "The stock car is already everybody's."
 	elif not CarLibrary.can_share():
 		# Still there, and saying why it cannot be pressed, rather than gone -
 		# a button that appears on signing in is one nobody knew to look for.
 		_share_button.tooltip_text = "Sign in to share"
-	elif CarLibrary.is_mine(_subject):
+	elif mine:
 		_share_button.tooltip_text = "Stop sharing %s." % named
 	else:
 		_share_button.tooltip_text = "Put %s up for anybody to get." % named
@@ -486,7 +767,15 @@ func _on_turn_pressed() -> void:
 
 
 func _on_remove_pressed() -> void:
-	if _busy or not Garage.has(_subject):
+	if _busy:
+		return
+	if _about_a_livery():
+		var livery := _livery
+		var called := Liveries.name_of(livery)
+		Liveries.remove(livery)
+		_say("Threw %s away. Any car wearing it keeps it." % called, QUIET)
+		return
+	if not Garage.has(_subject):
 		return
 	var named := Garage.name_of(_subject)
 	Garage.remove(_subject)
@@ -497,9 +786,35 @@ func _on_remove_pressed() -> void:
 	_say("Removed %s." % named, QUIET)
 
 
-func _on_garage_changed() -> void:
+func _on_decals_changed(_id: String) -> void:
+	if visible and _tab == CARS:
+		_show_the_choices()
+		_redraw_the_liveries()
+
+
+## The paint changed. Not guarded on the tab the way a decoration is, because
+## the tab it is changed on is the other one: a redraw asked for while these
+## rows are hidden is a redraw that happens when they are shown again.
+func _on_settings_changed() -> void:
 	if visible:
-		_fill()
+		_redraw_the_liveries()
+
+
+func _redraw_the_liveries() -> void:
+	for player in _player_rows.size():
+		for tile in _livery_grids[player].get_children():
+			for part in tile.get_child(0).get_children():
+				(part as Control).queue_redraw()
+
+
+func _on_garage_changed() -> void:
+	if not visible:
+		return
+	_fill()
+	# A car arriving or going while the other tab is up is a page drawing a
+	# car that may not be there any more.
+	if _tab == DECORATION:
+		_decoration.refresh()
 
 
 ## Share the car being talked about, or take it back down.
@@ -510,12 +825,44 @@ func _on_garage_changed() -> void:
 ## question standing in the way of taking something down is a question standing
 ## in the way of changing your mind.
 func _on_share_pressed() -> void:
-	if _busy or _sending or not Garage.has(_subject) or not CarLibrary.can_share():
+	if _busy or _sending or not CarLibrary.can_share():
+		return
+	# A livery is not asked what it should be called. It was named when it was
+	# saved, and that name is already on a tile the player has been looking at;
+	# a car is asked because its name is whatever a file on somebody's desktop
+	# happened to be called.
+	if _about_a_livery():
+		_send_the_livery(_livery, LiveryLibrary.is_mine(_livery))
+		return
+	if not Garage.has(_subject):
 		return
 	if CarLibrary.is_mine(_subject):
 		_send(_subject, true)
 	else:
 		_ask_for_a_name(_subject)
+
+
+## Put a livery up or take it down, and say how it went. The car's own `_send`
+## with a different library behind it; only sharing waits on the server, for
+## the reason that one gives.
+func _send_the_livery(id: String, taking_down: bool) -> void:
+	var named := Liveries.name_of(id)
+	_sending = true
+	_update_actions()
+	_say(("Taking %s down…" if taking_down else "Sharing %s…") % named, QUIET)
+	var answer: Dictionary
+	if taking_down:
+		answer = await LiveryLibrary.unpublish(id)
+	else:
+		answer = await LiveryLibrary.publish(id)
+	_sending = false
+	_update_actions()
+	if not answer.ok:
+		_say(str(answer.error), WRONG)
+	elif taking_down:
+		_say("%s is not shared any more." % named, QUIET)
+	else:
+		_say("Shared %s. Anybody can get it now." % named, RIGHT)
 
 
 ## Put a car up or take it down, and say how it went.
@@ -733,6 +1080,24 @@ func _build_the_shared_cars_page() -> void:
 	subline.add_theme_color_override("font_color", QUIET)
 	title.add_child(subline)
 
+	# Two kinds of thing get shared now, and they are not mixed into one list:
+	# a car and a design are not alternatives to each other, and a player
+	# looking for one is not half-interested in the other. One list at a time,
+	# with the same search over whichever it is.
+	var kinds := HBoxContainer.new()
+	kinds.alignment = BoxContainer.ALIGNMENT_CENTER
+	kinds.add_theme_constant_override("separation", 8)
+	box.add_child(kinds)
+	for kind in ["CARS", "LIVERIES"]:
+		var button := Button.new()
+		button.text = kind
+		button.toggle_mode = true
+		button.custom_minimum_size.x = 200.0
+		button.add_theme_font_size_override("font_size", 18)
+		button.pressed.connect(_browse_kind.bind(_shared_kinds.size()))
+		kinds.add_child(button)
+		_shared_kinds.append(button)
+
 	var looking := HBoxContainer.new()
 	looking.add_theme_constant_override("separation", 12)
 	box.add_child(looking)
@@ -782,11 +1147,30 @@ func _open_the_shared_cars() -> void:
 	if _busy:
 		return
 	_search.text = ""
+	# Opened on whichever kind the player was last talking about, because they
+	# have almost certainly just been looking at one of the two.
+	_shared_kind = SHARED_LIVERIES if _about_a_livery() else SHARED_CARS
+	_show_the_shared_kinds()
 	_browse.show()
 	# On the search box, so a player looking for something types it straight
 	# in. Down from there is the list, and Escape still backs out.
 	_search.grab_focus()
 	_fetch_the_shared_cars(false)
+
+
+## Swap which list is up. The search is cleared with it: a search is about the
+## list it was typed over, and "banana" carried across to the liveries would be
+## an empty page a player has to work out the reason for.
+func _browse_kind(which: int) -> void:
+	_shared_kind = clampi(which, SHARED_CARS, SHARED_LIVERIES)
+	_search.text = ""
+	_show_the_shared_kinds()
+	_fetch_the_shared_cars(false)
+
+
+func _show_the_shared_kinds() -> void:
+	for kind in _shared_kinds.size():
+		_shared_kinds[kind].set_pressed_no_signal(kind == _shared_kind)
 
 
 func _close_the_shared_cars() -> void:
@@ -805,7 +1189,14 @@ func _fetch_the_shared_cars(force: bool) -> void:
 		_show_the_shared_cars([])
 		return
 	_shared_note.text = "Loading…"
-	var rows: Array = await CarLibrary.catalogue(force)
+	var asking := _shared_kind
+	var rows: Array
+	if asking == SHARED_LIVERIES:
+		rows = await LiveryLibrary.catalogue(force)
+	else:
+		rows = await CarLibrary.catalogue(force)
+	if asking != _shared_kind:
+		return
 	if asked != _asked or not _browse.visible:
 		return
 	_show_the_shared_cars(rows)
@@ -821,11 +1212,13 @@ func _show_the_shared_cars(rows: Array) -> void:
 	_count.text = ""
 	if not CarLibrary.available():
 		_shared_note.text = ("This copy of the game has no server set up, so there "
-			+ "are no shared cars. Your own garage works as it always did.")
+			+ "is nothing shared to look at. Your own garage works as it always did.")
 		return
-	if rows.is_empty() and not CarLibrary.answered():
-		_shared_note.text = ("The server did not answer, so the shared cars cannot "
-			+ "be shown. Every car in your garage is still here.")
+	var answered := (LiveryLibrary.answered() if _shared_kind == SHARED_LIVERIES
+		else CarLibrary.answered())
+	if rows.is_empty() and not answered:
+		_shared_note.text = ("The server did not answer, so what other people have "
+			+ "shared cannot be shown. Everything in your garage is still here.")
 		return
 	_list_the_shared_cars(rows)
 
@@ -853,11 +1246,15 @@ func _filter() -> void:
 				or str(row.by).to_lower().contains(query):
 			shown.append(row)
 	for row: Dictionary in shown:
-		_shared_rows.add_child(_shared_line(row))
+		_shared_rows.add_child(_shared_livery_line(row)
+			if _shared_kind == SHARED_LIVERIES else _shared_line(row))
 
+	var answered := (LiveryLibrary.answered() if _shared_kind == SHARED_LIVERIES
+		else CarLibrary.answered())
 	if _all_shared.is_empty():
 		_count.text = ""
-		_shared_note.text = "Nobody has shared a car yet."
+		_shared_note.text = ("Nobody has shared a livery yet."
+			if _shared_kind == SHARED_LIVERIES else "Nobody has shared a car yet.")
 		return
 	var total := str(_all_shared.size())
 	if _all_shared.size() >= CarLibrary.CATALOGUE_SIZE:
@@ -867,7 +1264,7 @@ func _filter() -> void:
 		# Its own sentence. "Nobody has shared a car yet" would be a lie about
 		# the server, told because of something the player typed.
 		_shared_note.text = "Nothing matches that."
-	elif CarLibrary.available() and not CarLibrary.answered():
+	elif CarLibrary.available() and not answered:
 		_shared_note.text = "The server did not answer. This is the list as it was."
 
 
@@ -914,6 +1311,85 @@ func _shared_line(row: Dictionary) -> Control:
 		get_it.pressed.connect(_on_get_pressed.bind(str(row.id), get_it))
 		line.add_child(get_it)
 	return line
+
+
+## One shared livery: a picture of the design, its name, who put it up, and
+## GET - or a word saying it is already here.
+##
+## The design is drawn straight onto the line, because it came down with the
+## list. That is what a livery being a column rather than a file buys: a whole
+## page of other people's designs, all of them visible, off one request. A page
+## of shared cars can only show names, because showing a car would mean
+## downloading every model on the list to look at it.
+func _shared_livery_line(row: Dictionary) -> Control:
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 14)
+	line.custom_minimum_size.x = ROW_WIDTH
+	line.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	line.clip_contents = true
+	line.set_meta("livery", row.id)
+
+	var marks := Livery.read(str(row.marks))
+	var picture := Control.new()
+	picture.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	picture.custom_minimum_size = Vector2(96.0, 54.0)
+	picture.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	# On this player's own paint, which is the car it would go on.
+	picture.draw.connect(func() -> void:
+		DecalArt.draw_side(picture, picture.size,
+			GameSettings.car_colour(0), marks))
+	line.add_child(picture)
+
+	var name := Label.new()
+	name.text = str(row.name)
+	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name.clip_text = true
+	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name.add_theme_font_size_override("font_size", 24)
+	line.add_child(name)
+
+	var by := Label.new()
+	by.text = "by %s" % row.by
+	by.clip_text = true
+	by.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	by.custom_minimum_size.x = 180.0
+	by.add_theme_font_size_override("font_size", 18)
+	by.add_theme_color_override("font_color", QUIET)
+	line.add_child(by)
+
+	if bool(row.get("here", false)):
+		var here := Label.new()
+		here.text = "IN YOUR GARAGE"
+		here.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		here.custom_minimum_size.x = 170.0
+		here.add_theme_font_size_override("font_size", 16)
+		here.add_theme_color_override("font_color", RIGHT)
+		line.add_child(here)
+	else:
+		var get_it := Button.new()
+		get_it.text = "GET"
+		get_it.custom_minimum_size.x = 170.0
+		get_it.add_theme_font_size_override("font_size", 20)
+		get_it.pressed.connect(_on_get_livery_pressed.bind(str(row.id), get_it))
+		line.add_child(get_it)
+	return line
+
+
+## Keeping a shared livery asks the server nothing: the design came down with
+## the list. So there is no "GETTING…" worth showing - it is kept or it is
+## refused, on the frame the button went down.
+func _on_get_livery_pressed(id: String, button: Button) -> void:
+	var answer: Dictionary = LiveryLibrary.fetch(id)
+	if not _browse.visible:
+		return
+	if not answer.ok:
+		_shared_note.add_theme_color_override("font_color", WRONG)
+		_shared_note.text = str(answer.error)
+		return
+	button.disabled = true
+	_shared_note.add_theme_color_override("font_color", RIGHT)
+	_shared_note.text = "Got %s. It is in your garage now." % Liveries.name_of(id)
+	_show_the_shared_cars(await LiveryLibrary.catalogue())
 
 
 func _on_get_pressed(id: String, button: Button) -> void:

@@ -41,6 +41,23 @@ const LAMP_MATERIAL := "Lamp"
 const FRONT_WHEELS := ["Wheel_FL", "Wheel_FR"]
 const REAR_WHEELS := ["Wheel_BL", "Wheel_BR"]
 
+## The visual layers kept for decoration to land on, and how many there are.
+##
+## A `Decal` projects onto every surface whose layer it is told to look at, and
+## the cars share layer one with the road, the trees and everything else - so a
+## sticker told to look at the world would be a sticker smeared across the
+## tarmac under the car. Each shell therefore claims a layer of its own, puts
+## its own model on it as well as on the world layer, and points its decals at
+## nothing else. A layer each rather than one for all cars, because two cars
+## touching is an ordinary part of a race and one car's sticker landing on the
+## other's door is not.
+##
+## Eight is four more than there has ever been a car on a course at once, and
+## layers 4 to 11 are free: 1 is the world and 2 and 3 are the two players'
+## private arrows (see `Main`).
+const DECAL_LAYER_FIRST := 4
+const DECAL_LAYERS := 8
+
 @export_group("Cockpit")
 ## Where the driver's eye sits, in the car's own space. The car is right hand
 ## drive, so this sits over on the +X side behind the wheel.
@@ -84,6 +101,23 @@ const REAR_WHEELS := ["Wheel_BL", "Wheel_BR"]
 @export_group("Wheels")
 @export var max_wheel_steer := 0.5     ## rad the front wheels visually turn
 
+@export_group("Chaos")
+## Under chaos the decoration will not hold still: the stripes, the stickers
+## and the writing stay exactly as they were drawn and turn through the colours
+## over this many seconds, each from its own place in the turn, so a car with
+## three stickers shimmers instead of flashing as one. The body underneath
+## keeps the colour chaos rolled for it - telling your car from the other one
+## is the one thing about a chaotic race that is not allowed to be chaotic.
+@export var decal_cycle_seconds := 7.0
+## How the turning decoration is kept clear of the bodies it is drawn on.
+##
+## Chaos paints a body somewhere from 0.6 to 1.0 saturation, so decoration is
+## held well under that and at full brightness: pale on a strong colour reads
+## as decoration at a glance across a split screen even when the hue happens to
+## come round to the body's own.
+@export_range(0.0, 1.0) var decal_saturation := 0.36
+@export_range(0.0, 1.0) var decal_value := 1.0
+
 ## The model itself, and whether it is the one the game ships with.
 ##
 ## Being the stock model decides three things: that there is an interior for
@@ -125,6 +159,8 @@ var _wheel_roll := 0.0
 ## from outside needs this - it is what its headlights are placed off - but it
 ## is measured either way, because phase two has to be able to ask.
 var _bounds := AABB()
+## The model's triangles, for `surface`. Gathered when first asked for.
+var _surface: TriangleMesh
 
 ## The paint and the light level the shell is currently wearing. Remembered
 ## rather than merely applied, so a model swapped in halfway through a race
@@ -139,12 +175,53 @@ var _light_level := 0.0
 var _smoke: GPUParticles3D
 var _smoke_level := 0.0
 
+## What the car is decorated with, as `Decals` keeps it. Remembered for the
+## reason the paint is: a model swapped in mid-race has to arrive wearing it.
+var _marks: Array = []
+## The extra passes hung on the paint material, one per stripe, and the decal
+## nodes projected onto the body - two for a sticker or a word on the flanks,
+## one for one on any other face. Kept flat and in no particular order: this is
+## what a rebuild tears down, and what wears which is in `_worn`.
+var _stripe_passes: Array[StandardMaterial3D] = []
+var _stamps: Array[Decal] = []
+## Every decorated thing in the order it is worn, as
+## `{colour: Color, phase: float, wears: Array}` - the colour it is wearing
+## *now*, where in the chaos cycle it starts, and the material or the decals
+## that actually carry the colour.
+##
+## What it wears is written down beside it rather than worked out from its
+## place in the list, because a mark is not always the same number of things: a
+## stripe is one material, a sticker on the flanks is two decals and one on the
+## boot is one. Counting from an index would mean knowing all of that in the
+## one function that exists so nothing else has to.
+##
+## The colour is the one on the car rather than the one it was drawn in, which
+## is in `_marks` and is what a rebuild reads. So asking what the decoration
+## looks like gets this frame's answer, which under chaos is not last frame's.
+var _worn: Array = []
+## Which visual layer this shell's decals are allowed to land on, 0 before one
+## has been claimed, and whether it is this shell's to give back.
+var _decal_layer := 0
+var _layer_is_mine := false
+## Set by whatever built the race, never read off the settings - the title
+## screen backdrop is a race scene too, and a strobing sticker behind the menu
+## is not what the menu is for.
+var wild := false
+var _decal_time := 0.0
+
 
 func _ready() -> void:
+	_claim_a_decal_layer()
 	_build_headlights()
 	# Whatever the scene was authored with is the car the game ships with.
 	_model = get_node_or_null(^"Model")
 	_take_up_the_model(true)
+
+
+## Given back on the way out, so a session that opens and closes the garage a
+## hundred times does not run out of layers to hand cars.
+func _exit_tree() -> void:
+	_release_the_decal_layer()
 
 
 ## Put a different model in the shell.
@@ -396,13 +473,20 @@ func _take_up_the_model(stock: bool) -> void:
 		_wheel_rest_basis = _steering_wheel.transform.basis
 	else:
 		_wheel_rest_basis = Basis.IDENTITY
-		if _stock:
+		if _stock and _model != null:
 			push_warning("CarShell: no SteeringWheel in the model")
 
 	_bounds = _measure()
+	_surface = null
+	_mark_the_body()
 	_prepare_materials()
 	_place_headlights()
 	repaint(_paint)
+	# Rebuilt from what the shell was already wearing rather than dropped. A
+	# model swapped in halfway through - a car picked in the garage while the
+	# race is paused - arrives already decorated, the same way it arrives
+	# already painted.
+	_dress_the_decoration()
 	# Put on outright rather than through set_headlights, which would see the
 	# level has not changed and skip the fresh lamp material.
 	_light_the_lamps()
@@ -420,14 +504,16 @@ func _find(name: String) -> Node3D:
 
 
 ## A model that came from outside is not expected to have any of these, so it
-## is not complained at for going without.
+## is not complained at for going without. Neither is a shell with no model at
+## all: that is a shell waiting to be handed one, which is how the garage's
+## decoration tab stands its car up.
 func _collect_wheels(names: Array) -> Array[Node3D]:
 	var found: Array[Node3D] = []
 	for name in names:
 		var wheel := _find(name)
 		if wheel:
 			found.append(wheel)
-		elif _stock:
+		elif _stock and _model != null:
 			push_warning("CarShell: wheel '%s' not found in the model" % name)
 	return found
 
@@ -645,3 +731,282 @@ func _home_of(wheel: Node3D) -> Transform3D:
 		home = node.transform * home
 		node = node.get_parent() as Node3D
 	return home
+
+
+# --- decoration ---------------------------------------------------------
+
+## Put a decoration on the car: stripes into the paint, stickers and writing
+## projected onto the body.
+##
+## Handed the marks rather than a car id, for the reason `repaint` is handed a
+## colour: the shell is the thing that is looked at, and where the decoration
+## was kept is the business of whoever read it out of `Decals`.
+func decorate(marks: Array) -> void:
+	_marks = marks.duplicate(true)
+	_dress_the_decoration()
+
+
+## What the decoration is wearing right now, in the order it was put on. Only
+## a check asks - it is how the chaos cycle is watched from outside without
+## reaching into a material or a decal.
+func decal_colours() -> PackedColorArray:
+	var out := PackedColorArray()
+	for thing: Dictionary in _worn:
+		out.append(thing.colour)
+	return out
+
+
+
+## Turn the decoration through the colours, if this is a chaotic race. The body
+## is not touched: chaos rolled that once at the line and it holds.
+func _process(delta: float) -> void:
+	if not wild or _worn.is_empty():
+		return
+	_decal_time += delta
+	for i in _worn.size():
+		var thing: Dictionary = _worn[i]
+		_wear(i, Color.from_hsv(
+			fmod(_decal_time / decal_cycle_seconds + float(thing.phase), 1.0),
+			decal_saturation, decal_value))
+
+
+## Build the whole decoration again from `_marks`.
+##
+## Rebuilt whole rather than patched, the way the garage rebuilds its tiles: a
+## mark moved, recoloured or taken off changes which decals there are and which
+## passes hang off the paint, and working out which is which is more code than
+## making a handful of nodes again. It happens when a player presses something
+## in the garage, or when a model is swapped - never while anyone is driving.
+func _dress_the_decoration() -> void:
+	for stamp in _stamps:
+		remove_child(stamp)
+		stamp.queue_free()
+	_stamps.clear()
+	_stripe_passes.clear()
+	_worn.clear()
+	if _paint_material != null:
+		_paint_material.next_pass = null
+	if _model == null:
+		return
+
+	# Stripes first, so the order the passes chain in is the order they were
+	# put on, and a later stripe is drawn over an earlier one.
+	var stripes := []
+	var stamps := []
+	for mark: Dictionary in _marks:
+		if str(mark.get("kind", "")) == DecalArt.STRIPE:
+			stripes.append(mark)
+		else:
+			stamps.append(mark)
+	var count: int = maxi(stripes.size() + stamps.size(), 1)
+
+	var last: BaseMaterial3D = _paint_material
+	for mark: Dictionary in stripes:
+		if last == null:
+			# A model with no material at all to paint has nowhere to hang a
+			# stripe either. The stickers still land on it, which is most of
+			# why they are projected rather than painted on.
+			break
+		var worn := _stripe_pass(mark, _stripe_passes.size())
+		last.next_pass = worn
+		last = worn
+		_stripe_passes.append(worn)
+		_remember(mark, count, [worn])
+	for mark: Dictionary in stamps:
+		_remember(mark, count, _add_stamp(mark))
+	# Put the drawn colours on straight away. Under chaos the next frame moves
+	# them, but a car has to be right on the frame it is dressed as well -
+	# that is the frame the garage's own view of it is drawn on.
+	for i in _worn.size():
+		_wear(i, (_worn[i] as Dictionary).colour)
+
+
+## Write down what a mark is wearing and where in the cycle it starts.
+##
+## Its own place in the turn per mark, so a car with three stickers shimmers -
+## the same idea as the wood, where each kind of leaf turns from a different
+## point and the field never pulses as one.
+func _remember(mark: Dictionary, count: int, wears: Array) -> void:
+	_worn.append({
+		"colour": Paints.colour(int(mark.get("colour", 0))),
+		"phase": float(_worn.size()) / float(count),
+		"wears": wears,
+	})
+
+
+## Put a colour on the nth thing worn, whatever that thing turned out to be
+## made of - one material for a stripe, one decal per side of the car for a
+## sticker or a word.
+##
+## Written down as well as put on, because what a thing is wearing is a
+## question worth being able to answer: the alternative is reading a colour
+## back off a material or a decal, which means knowing which of the two this
+## index was, which is exactly what this function exists to hide.
+func _wear(at: int, colour: Color) -> void:
+	if at < 0 or at >= _worn.size():
+		return
+	var thing: Dictionary = _worn[at]
+	thing.colour = colour
+	for wears in thing.wears:
+		if wears is StandardMaterial3D:
+			(wears as StandardMaterial3D).albedo_color = colour
+		elif wears is Decal:
+			(wears as Decal).modulate = colour
+
+
+## One stripe, as an extra pass over the paint.
+##
+## A pass rather than a texture on the paint material itself, and that is the
+## whole trick: the body keeps whatever albedo it had - a flat colour on the
+## stock car, somebody's own texture on a model they brought - and the stripe
+## is a transparent sheet of one colour over it with the shape in its alpha. So
+## a stripe never eats a model's paintwork, and its colour is a property that
+## can be set every frame rather than a picture that has to be drawn again.
+func _stripe_pass(mark: Dictionary, order: int) -> StandardMaterial3D:
+	var worn := StandardMaterial3D.new()
+	worn.albedo_texture = DecalArt.stripe_mask(int(mark.get("shape", 0)))
+	worn.albedo_color = Paints.colour(int(mark.get("colour", 0)))
+	worn.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	# Drawn after the body it sits on, and after any stripe put on before it.
+	worn.render_priority = order + 1
+	return worn
+
+
+## One sticker or one hand-written word, projected onto the car where it was
+## put. The decals it turned out to be, for the cycle to colour.
+##
+## Where it is, and which way up its picture goes, is
+## [scripts/car_faces.gd](car_faces.gd)'s `placements` - the same answer the
+## garage draws the ring round a selected mark from and works out a press
+## against, so what a player pointed at and what the car wears cannot drift
+## apart.
+##
+## A mark on the flanks is two decals rather than one, because a decal projects
+## one way only and a number on a door is on both doors. They are mirror images
+## in the world and the same picture to look at - image right is the car's tail
+## on the left flank and its nose on the right - so a word reads the right way
+## round whichever side of the car a player is on, which is how a name on a
+## door works. Anything else is one decal, because a car has one bonnet.
+func _add_stamp(mark: Dictionary) -> Array:
+	var picture: Texture2D
+	if str(mark.get("kind", "")) == DecalArt.SCRAWL:
+		picture = DecalArt.scrawl_stamp(mark.get("strokes", []),
+			float(mark.get("pen", DecalArt.PEN)))
+	else:
+		picture = DecalArt.sticker_stamp(int(mark.get("shape", 0)))
+
+	var made := []
+	for placement: Dictionary in CarFaces.placements(_bounds, mark):
+		var out: Vector3 = placement.out
+		var right: Vector3 = placement.right
+		var span := float(placement.half) * 2.0
+		var stamp := Decal.new()
+		stamp.texture_albedo = picture
+		# Deep enough to follow the curve of the body and no deeper, so a
+		# decal thrown at one side of the car cannot reach through it and come
+		# out backwards on the other.
+		stamp.size = Vector3(span, float(placement.depth), span)
+		# The one thing that keeps a sticker off the road: it is told to look
+		# at this shell's own layer and at nothing else at all.
+		stamp.cull_mask = _decal_bit()
+		# Kept off the faces that are turned away from it, so a sticker thrown
+		# at a flank does not also print itself on the roof.
+		stamp.normal_fade = 0.5
+		stamp.upper_fade = 0.1
+		stamp.lower_fade = 0.1
+		# A decal throws its picture along its own -Y, so the way the mark is
+		# thrown is the decal's up, and its right is already turned.
+		stamp.transform = Transform3D(Basis(right, out, right.cross(out)),
+			placement.point as Vector3)
+		add_child(stamp)
+		_stamps.append(stamp)
+		made.append(stamp)
+	return made
+
+
+## Where a ray meets the model itself, in the shell's own space, as `{point,
+## normal}` with the normal turned to face the ray - or nothing, for a ray that
+## misses it. `from` and `along` are in the shell's own space too.
+##
+## The bodywork and not the box round it, which is the difference between a
+## sticker landing on the bonnet and one landing in the air over it. Asked of
+## the model's own triangles rather than of the physics, because the model has
+## no collision - the car's collision is a box on `Car` - and a model somebody
+## brought in has nothing of the kind either. The triangles are gathered the
+## first time they are asked for and kept until the model changes: only the
+## garage ever asks, and a car on a course never pays for it.
+func surface(from: Vector3, along: Vector3) -> Dictionary:
+	if _surface == null:
+		_surface = _gather_the_surface()
+	if _surface == null:
+		return {}
+	var found := _surface.intersect_ray(from, along)
+	if found.is_empty():
+		return {}
+	var normal: Vector3 = (found.normal as Vector3).normalized()
+	if normal.dot(along) > 0.0:
+		normal = -normal
+	return {"point": found.position, "normal": normal}
+
+
+func _gather_the_surface() -> TriangleMesh:
+	if _model == null or not is_inside_tree():
+		return null
+	var into := global_transform.affine_inverse()
+	var faces := PackedVector3Array()
+	for node in _model.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh == null or not mesh_instance.is_visible_in_tree():
+			continue
+		var there := into * mesh_instance.global_transform
+		for corner in mesh_instance.mesh.get_faces():
+			faces.append(there * corner)
+	if faces.is_empty():
+		return null
+	var gathered := TriangleMesh.new()
+	return gathered if gathered.create_from_faces(faces) else null
+
+
+func _decal_bit() -> int:
+	return 1 << (maxi(_decal_layer, DECAL_LAYER_FIRST) - 1)
+
+
+## Put the model on this shell's own visual layer as well as on the world's, so
+## this shell's decals have something to land on and nothing else does.
+func _mark_the_body() -> void:
+	if _model == null:
+		return
+	for node in _model.find_children("*", "VisualInstance3D", true, false):
+		var drawn := node as VisualInstance3D
+		drawn.layers = drawn.layers | _decal_bit()
+
+
+# --- a layer of its own -------------------------------------------------
+
+## Which layers are spoken for. Static, because the point of it is that two
+## shells standing in the same world do not take the same one.
+static var _layers_taken := {}
+
+
+func _claim_a_decal_layer() -> void:
+	for step in DECAL_LAYERS:
+		var layer := DECAL_LAYER_FIRST + step
+		if not _layers_taken.has(layer):
+			_layers_taken[layer] = true
+			_decal_layer = layer
+			_layer_is_mine = true
+			return
+	# More cars at once than there are layers. Sharing the last one is a
+	# sticker that can land on the wrong car in a pile-up, which is a great
+	# deal better than a car with no decoration and a warning nobody reads.
+	# Borrowed rather than claimed, so leaving does not take it off the shell
+	# that owns it.
+	_decal_layer = DECAL_LAYER_FIRST + DECAL_LAYERS - 1
+	_layer_is_mine = false
+
+
+func _release_the_decal_layer() -> void:
+	if _layer_is_mine:
+		_layers_taken.erase(_decal_layer)
+	_decal_layer = 0
+	_layer_is_mine = false
