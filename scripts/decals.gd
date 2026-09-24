@@ -187,7 +187,11 @@ func load_decals() -> void:
 		for mark in kept:
 			if not (mark is Dictionary):
 				continue
-			var clean := DecalArt.tidy(mark)
+			# Thinned on the way in too, which is what puts right a word
+			# drawn by a build that kept every point the pen was read at -
+			# one too long to save as a livery. It takes nothing out of a
+			# word that is thin already. See `DecalArt.thinned`.
+			var clean := DecalArt.thinned_word(DecalArt.tidy(mark))
 			if not clean.is_empty():
 				marks.append(clean)
 		# The cap is applied on the way in as well as on the way out. A file

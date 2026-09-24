@@ -12,7 +12,10 @@ extends SceneTree
 #     to everybody, and one sold under a name nothing hands out can never be
 #     bought at all;
 #   - an item that un-owns itself, which takes coins a player will not get
-#     back.
+#     back;
+#   - a second door to a sold paint. A car is painted in two places now - the
+#     paint screen over a paused race, and the garage - and a paint that one of
+#     them would wear without it having been bought is a paint nobody buys.
 #
 # So this holds the table to `Paints`, drives a real purchase through a real
 # `Purse`, and opens the real screen to see that an empty purse can still read
@@ -43,6 +46,7 @@ func _init() -> void:
 	_check_buying(purse)
 	await _check_the_screen(purse)
 	await _check_the_paint_screen(purse)
+	await _check_the_garage_paints(purse)
 	purse.forget()
 
 	print("%d faults" % _faults)
@@ -303,6 +307,94 @@ func _check_the_paint_screen(purse: Node) -> void:
 		await process_frame
 	paint.queue_free()
 	print("a sold paint is shown with its price, refused until bought, and worn after")
+
+
+## The other place a car is painted: the row under the car in the garage.
+##
+## The same three rules as the screen above, driven rather than read, because
+## these swatches are not disabled - everything on that page can be pressed and
+## says why nothing happened - so the only way to find out whether a paint was
+## refused is to press it and look at the car afterwards. A locked swatch that
+## quietly painted the car would be the shop's six colours given away.
+func _check_the_garage_paints(purse: Node) -> void:
+	purse.forget()
+	var settings: Node = root.get_node_or_null(^"/root/GameSettings")
+	if settings == null:
+		_fault("there are no settings: the autoload is missing")
+		return
+	var garage: Control = (load("res://scenes/garage.tscn") as PackedScene).instantiate()
+	root.add_child(garage)
+	for i in 10:
+		await process_frame
+	# Two cars on the road, because one of the three rules is about the other
+	# player's paint and there is no other player with one car.
+	garage.call("open", 2)
+	for i in 10:
+		await process_frame
+	garage.call("_show_tab", 1)
+	for i in 10:
+		await process_frame
+	var page: Node = garage.get("_decoration")
+	var swatches: Array = page.get("_paints")
+	if swatches.size() != Paints.COLOURS.size():
+		_fault("the garage shows %d of %d paints"
+			% [swatches.size(), Paints.COLOURS.size()])
+		garage.call("close")
+		garage.queue_free()
+		return
+
+	# A free one goes on. Player one is in red to start with, so green is a
+	# colour neither car is wearing.
+	var free_index := 4
+	page.call("_choose_paint", free_index)
+	await process_frame
+	if not settings.car_colour(0).is_equal_approx(Paints.colour(free_index)):
+		_fault("%s came with the game and would not go on the car"
+			% Paints.name_of(free_index))
+
+	# A sold one does not, and says what it costs on its face.
+	var sold_index := Paints.FREE
+	var item := Paints.item_for(sold_index)
+	if (swatches[sold_index] as Button).text != str(Shop.cost_of(item)):
+		_fault("%s does not have its price on it, it says '%s'"
+			% [Paints.name_of(sold_index), (swatches[sold_index] as Button).text])
+	page.call("_choose_paint", sold_index)
+	await process_frame
+	if settings.car_colour(0).is_equal_approx(Paints.colour(sold_index)):
+		_fault("%s went on a car without being bought" % Paints.name_of(sold_index))
+
+	# And the paint the other player is in does not either, whatever the shop
+	# thinks of it: two cars in one colour is a split screen nobody can read.
+	var theirs := Paints.index_of(settings.car_colour(1))
+	page.call("_choose_paint", theirs)
+	await process_frame
+	if settings.car_colour(0).is_equal_approx(settings.car_colour(1)):
+		_fault("both cars were painted %s" % Paints.name_of(theirs))
+
+	# Bought, and the same swatch is a paint like any other, with nothing left
+	# written across it.
+	purse.bank(Shop.cost_of(item))
+	purse.buy(item, Shop.cost_of(item))
+	for i in 2:
+		await process_frame
+	page.call("_choose_paint", sold_index)
+	await process_frame
+	if not settings.car_colour(0).is_equal_approx(Paints.colour(sold_index)):
+		_fault("%s was bought and still would not go on the car"
+			% Paints.name_of(sold_index))
+	if not (swatches[sold_index] as Button).text.is_empty():
+		_fault("%s was bought and still has '%s' written on it"
+			% [Paints.name_of(sold_index), (swatches[sold_index] as Button).text])
+
+	# Put back where it was found. The next thing to open the garage in this
+	# run should not be looking at whatever this pressed.
+	settings.set_car_colour(0, Paints.default_for(0))
+	garage.call("close")
+	for i in 2:
+		await process_frame
+	garage.queue_free()
+	print("the garage paints a car with the free twelve, refuses a sold paint "
+		+ "until it is bought, and refuses the colour the other car is in")
 
 
 ## Every word written anywhere on a page, as a set, so a check can ask whether

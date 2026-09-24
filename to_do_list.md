@@ -108,6 +108,18 @@ texture composited into the paint, which keeps a brought-in model's own
 paintwork and makes the chaos cycle a property to set rather than a picture to
 draw again.
 
+**The tab was rebuilt on 2026-09-24**, and the part of the design below about
+placing things on a flat drawing of the side of a car is no longer what the
+game does. Everything is put on the model itself now: the car is turned and
+zoomed with the mouse, a sticker lands on whichever of its four panels is being
+looked at, and a word is written straight onto the paintwork a stroke at a
+time. See [The car is the page](README.md), [The four panels](README.md) and
+[The pen](README.md). The silhouette survives as the small picture on a livery's
+row, which is the job it was always better at. The tab also grew the car's own
+paint, in a row under the car - free, and nothing to do with the slot, but the
+same question about the same car, and until then the only place to ask it was
+the paint screen over a paused race. See [The car's own paint](README.md).
+
 **Liveries came after it, the same day**, and were not in this design at all: a
 decoration saved as a design in its own right, kept beside the cars in the
 garage, put on any car, and shared the way a car is. See

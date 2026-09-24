@@ -219,6 +219,11 @@ func _ready() -> void:
 	# A livery is held down while the car is wearing it, so a decoration
 	# changed anywhere changes which of them that is.
 	Decals.changed.connect(_on_decals_changed)
+	# A livery's picture is drawn in the paint of the car it would go on, and
+	# that paint is now chosen on the other tab - so a car repainted while this
+	# page is open is a row of designs in last year's colour until they are
+	# told.
+	GameSettings.changed.connect(_on_settings_changed)
 	# Signing in or out changes whether SHARE can be pressed, and the list
 	# arriving changes whether it says SHARE or UNSHARE.
 	Backend.signed_in.connect(_update_actions)
@@ -453,10 +458,10 @@ func _tile(player: int, id: String, called: String, picture: Texture2D,
 ## One livery: a picture of the design over its name.
 ##
 ## The picture is the design itself, drawn on the flat side of a car by
-## `DecalArt.draw_side` - the same drawing the decoration tab puts up to drag
-## stickers about on. A livery has no model and no portrait to take, and a
-## picture of what it actually looks like is the only thing that tells one row
-## of names from another.
+## `DecalArt.draw_side`, which is a schematic of a design rather than a picture
+## of a car wearing it. A livery has no model and no portrait to take, and
+## something that says what the design actually looks like is the only thing
+## that tells one row of names from another.
 ##
 ## Drawn in the player's own paint, because that is the car it would go on.
 ## The same design in the other player's row is the same design on a different
@@ -784,10 +789,22 @@ func _on_remove_pressed() -> void:
 func _on_decals_changed(_id: String) -> void:
 	if visible and _tab == CARS:
 		_show_the_choices()
-		for player in _player_rows.size():
-			for tile in _livery_grids[player].get_children():
-				for part in tile.get_child(0).get_children():
-					(part as Control).queue_redraw()
+		_redraw_the_liveries()
+
+
+## The paint changed. Not guarded on the tab the way a decoration is, because
+## the tab it is changed on is the other one: a redraw asked for while these
+## rows are hidden is a redraw that happens when they are shown again.
+func _on_settings_changed() -> void:
+	if visible:
+		_redraw_the_liveries()
+
+
+func _redraw_the_liveries() -> void:
+	for player in _player_rows.size():
+		for tile in _livery_grids[player].get_children():
+			for part in tile.get_child(0).get_children():
+				(part as Control).queue_redraw()
 
 
 func _on_garage_changed() -> void:

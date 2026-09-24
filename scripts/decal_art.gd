@@ -52,12 +52,24 @@ const STICKERS: Array[String] = [
 ## across on a door and 128 is already more than a decal projection resolves.
 const STRIPE_SIZE := 256
 const STAMP_SIZE := 128
-const SCRAWL_SIZE := 192
+const SCRAWL_SIZE := 256
 
-## How wide the pen draws, as a fraction of the drawing box. Fat enough that a
-## single quick stroke with a mouse still reads from across a split screen,
-## which is the only size a scrawl is ever seen at.
+## How wide the pen draws, as a fraction of the word's own box, for a word
+## that does not say. Every word written before the pen had a choice of widths
+## says nothing, and is drawn with this - so it comes out exactly as it did.
+##
+## A word written now carries its own `pen`, worked out from the width the
+## player picked and the size of the box the word ended up in. The width is
+## picked as a fraction of the car and kept as a fraction of the box because
+## the first is what a player chooses - a line as thick on the door as the one
+## they were drawing - and the second is what a mark is: made bigger with the
+## SIZE slider, its lines get thicker with it, the way a sticker's do.
 const PEN := 0.035
+## The thinnest and fattest a word's pen may be, as a fraction of its box. Wide
+## enough apart for every width the page offers on every size of word, and
+## there so that a pen read from a file somebody wrote by hand is still a line.
+const PEN_LEAST := 0.004
+const PEN_MOST := 0.45
 
 ## How much of a car may be covered, all three kinds added together.
 ##
@@ -140,13 +152,15 @@ static func sticker_stamp(shape: int) -> ImageTexture:
 ## Drawn from the points rather than stored as a picture, because that is how
 ## a scrawl is kept: a few hundred numbers that can be drawn again at whatever
 ## size the car wants. What is kept here is the drawing, against the points it
-## came from - see `_scrawls`.
-static func scrawl_stamp(strokes: Array) -> ImageTexture:
-	var key := var_to_str(strokes)
+## came from and the width of the pen - see `_scrawls`.
+static func scrawl_stamp(strokes: Array, pen: float = PEN) -> ImageTexture:
+	pen = clampf(pen, PEN_LEAST, PEN_MOST)
+	var key := var_to_str([strokes, pen])
 	if _scrawls.has(key):
 		return _scrawls[key]
 	var image := _blank(SCRAWL_SIZE)
-	var radius := PEN * float(SCRAWL_SIZE) * 0.5
+	# Never under a pixel across, which is a line the filtering loses.
+	var radius := maxf(pen * float(SCRAWL_SIZE) * 0.5, 1.0)
 	for stroke in strokes:
 		var points: PackedVector2Array = stroke
 		if points.size() == 1:
@@ -162,6 +176,82 @@ static func scrawl_stamp(strokes: Array) -> ImageTexture:
 		_scrawls.erase(_scrawls.keys()[0])
 	_scrawls[key] = drawn
 	return drawn
+
+
+## A stroke with the points taken out that the line would be drawn through
+## anyway: none of what is left is further than `tolerance` from the line the
+## pen actually took, and what goes is everything that only said "and on in
+## the same direction".
+##
+## The pen is read once per movement of the mouse, so a word as it comes off
+## the car is hundreds of points a hair apart, the same point twice when the
+## mouse did not move, and a whole straight line spelled out a pixel at a time.
+## Kept like that, one word is too long to be written down as a livery at all
+## (`Livery.TEXT_LIMIT`). Thinned to a pixel of the picture it is drawn into
+## (`SCRAWL_SIZE`), a curve keeps the points that bend it and a straight keeps
+## its two ends: a word of five hundred points comes down to a few dozen, and
+## the only pixels that change are the soft ones along the edge of the line.
+##
+## Thinning what is already thin takes nothing more out - every point it kept
+## is still the furthest from the line between its neighbours - so a word can
+## be put through here every time it is loaded without wearing away.
+static func thinned(points: PackedVector2Array, tolerance: float) -> PackedVector2Array:
+	if points.size() < 3:
+		return points
+	var keep := PackedByteArray()
+	keep.resize(points.size())
+	keep.fill(0)
+	keep[0] = 1
+	keep[points.size() - 1] = 1
+	# Douglas-Peucker, with a list of spans still to look at rather than
+	# recursion, since a long stroke is thousands of points deep.
+	var spans: Array[Vector2i] = [Vector2i(0, points.size() - 1)]
+	while not spans.is_empty():
+		var span: Vector2i = spans.pop_back()
+		var from := points[span.x]
+		var to := points[span.y]
+		var furthest := -1.0
+		var at := -1
+		for i in range(span.x + 1, span.y):
+			var gap := _off_the_line(points[i], from, to)
+			if gap > furthest:
+				furthest = gap
+				at = i
+		if at >= 0 and furthest > tolerance:
+			keep[at] = 1
+			spans.append(Vector2i(span.x, at))
+			spans.append(Vector2i(at, span.y))
+	var out := PackedVector2Array()
+	for i in points.size():
+		if keep[i] == 1:
+			out.append(points[i])
+	# A dot is one point drawn as a disc, and a dot the mouse wobbled on is
+	# two points on top of each other: kept as one.
+	if out.size() == 2 and out[0].distance_to(out[1]) <= tolerance:
+		out.resize(1)
+	return out
+
+
+## A mark with its word's strokes thinned to a pixel of `SCRAWL_SIZE`, and
+## anything that is not a word handed back as it came.
+static func thinned_word(mark: Dictionary) -> Dictionary:
+	if str(mark.get("kind", "")) != SCRAWL:
+		return mark
+	var out := mark.duplicate()
+	var strokes := []
+	for stroke: PackedVector2Array in mark.get("strokes", []):
+		strokes.append(thinned(stroke, 1.0 / float(SCRAWL_SIZE)))
+	out["strokes"] = strokes
+	return out
+
+
+static func _off_the_line(point: Vector2, from: Vector2, to: Vector2) -> float:
+	var along := to - from
+	var length := along.length_squared()
+	if length < 0.0000001:
+		return point.distance_to(from)
+	var t := clampf((point - from).dot(along) / length, 0.0, 1.0)
+	return point.distance_to(from + along * t)
 
 
 # --- how much of the car a thing covers ---------------------------------
@@ -188,7 +278,8 @@ static func cover_of(mark: Dictionary) -> float:
 			return float(_stamp_cover.get(shape, 0.0)) * span * span
 		SCRAWL:
 			var span := clampf(float(mark.get("size", 0.3)), 0.0, 1.0)
-			return _scrawl_cover(mark.get("strokes", [])) * span * span
+			return _scrawl_cover(mark.get("strokes", []),
+				float(mark.get("pen", PEN))) * span * span
 	return 0.0
 
 
@@ -207,14 +298,15 @@ static func cover_of_all(marks: Array) -> float:
 ## be wrong: the number is a cap, and a cap that guesses high refuses a
 ## decoration that would have been allowed, while one that guesses low lets a
 ## car vanish. Counting the pixels would mean reading a whole image back every
-## time the player moved the mouse.
-static func _scrawl_cover(strokes: Array) -> float:
+## time the player moved the mouse. A fatter pen covers more of the same path,
+## so the width is in it too.
+static func _scrawl_cover(strokes: Array, pen: float) -> float:
 	var travelled := 0.0
 	for stroke in strokes:
 		var points: PackedVector2Array = stroke
 		for i in range(1, points.size()):
 			travelled += points[i - 1].distance_to(points[i])
-	return minf(travelled * PEN, 1.0)
+	return minf(travelled * clampf(pen, PEN_LEAST, PEN_MOST), 1.0)
 
 
 # --- drawing ------------------------------------------------------------
@@ -430,10 +522,44 @@ static func tidy(mark: Dictionary) -> Dictionary:
 		# The free twelve only. The six the shop sells are paint, and a stripe
 		# in one would be a way of wearing a colour without buying it.
 		"colour": clampi(int(mark.get("colour", 0)), 0, Paints.FREE - 1),
+		# Which part of the car it is on. A stripe is not on a part of the car
+		# at all - it is worn in the model's own texture space and goes
+		# wherever the unwrap sends it - so it is always the flanks, which is
+		# the nothing-in-particular value, and never writes a face down.
+		"face": CarFaces.FLANKS if kind == STRIPE \
+			else clampi(int(mark.get("face", CarFaces.FLANKS)), 0, CarFaces.COUNT - 1),
 		"at": _inside(mark.get("at", Vector2(0.5, 0.5))),
 		"size": clampf(float(mark.get("size", 0.28)), 0.08, 1.0),
 		"turn": wrapf(float(mark.get("turn", 0.0)), -PI, PI),
 	}
+	# Put on the body rather than on a face (see `CarFaces.on_the_body`). The
+	# face and the place on it are worked out from where it is, never taken
+	# from the mark, so the two cannot disagree - and every drawing of a design
+	# that still thinks in faces has one to draw it on.
+	if kind != STRIPE and CarFaces.on_the_body(mark):
+		var spot: Vector3 = mark.spot
+		spot = Vector3(clampf(spot.x, 0.0, 1.0), clampf(spot.y, 0.0, 1.0),
+			clampf(spot.z, 0.0, 1.0))
+		var aim: Vector3 = mark.aim
+		# Only put right when it is wrong. An aim read back off four decimals
+		# is a hair off unit length, and making it exactly one would move its
+		# last digit - which is a different livery id for the same design.
+		if aim.length() < 0.001:
+			aim = Vector3.RIGHT
+		elif absf(aim.length() - 1.0) > 0.001:
+			aim = aim.normalized()
+		clean["spot"] = spot
+		clean["aim"] = aim
+		clean["face"] = CarFaces.face_of_aim(aim)
+		clean["at"] = CarFaces.at_of_spot(spot, int(clean.face))
+		# Kept only when it is off, so a mark on both doors - which is every
+		# mark there was before the choice - is the same mark it always was.
+		# Kept whatever face it is on, because the mirror is about the mark
+		# and not the panel: a sticker put on the bonnet with the mirror off
+		# and dragged onto a door is on that door alone. See
+		# `CarFaces.mirrored`.
+		if not bool(mark.get("mirror", true)):
+			clean["mirror"] = false
 	if kind == SCRAWL:
 		var strokes := _tidy_strokes(mark.get("strokes", []))
 		if strokes.is_empty():
@@ -442,6 +568,7 @@ static func tidy(mark: Dictionary) -> Dictionary:
 			# nothing and a slot out of the eight spent on it.
 			return {}
 		clean["strokes"] = strokes
+		clean["pen"] = clampf(float(mark.get("pen", PEN)), PEN_LEAST, PEN_MOST)
 	return clean
 
 
@@ -470,8 +597,8 @@ static func _inside(at: Variant) -> Vector2:
 
 # --- a design, flat ------------------------------------------------------
 
-## The silhouette a decoration is placed on and shown against, as fractions of
-## whatever box it is drawn in. Nose to the left.
+## The silhouette a design is shown against, as fractions of whatever box it is
+## drawn in. Nose to the left.
 ##
 ## A drawn outline rather than a picture of the model, because the model might
 ## be anything at all - the point of projecting stickers rather than painting
@@ -488,16 +615,20 @@ const WHEELS: Array[Vector2] = [Vector2(0.24, 0.72), Vector2(0.76, 0.72)]
 
 ## Draw a decoration on the flat side of a car, in a box of `span`.
 ##
-## The one drawing of a design there is. The garage's decoration tab puts a
-## board up to drag stickers about on, and a saved livery gets a tile with its
-## design on it; both are the same picture and neither is allowed to disagree
-## with the other about what a player made.
+## What a saved livery's row in the garage puts up, and the only picture of a
+## design there is that is not the car itself. It used to be the page a design
+## was made on as well; that page is the model now
+## ([scripts/decoration_page.gd](decoration_page.gd)), which leaves this doing
+## the one job it was always better at - being small, flat and recognisable in
+## a list.
 ##
-## Stripes are drawn as bands across the silhouette, which is a schematic and
-## not a promise: on the car they are worn in the model's own texture space and
-## go wherever its unwrap sends them. The car turning beside the board is the
-## truth. What this has to say is only whether a stripe is on, and where it
-## roughly lies, which is what a player is choosing between.
+## It is a schematic and not a promise, and it was always one. A stripe is
+## drawn as a band across the silhouette, where on the car it is worn in the
+## model's own texture space and goes wherever the unwrap sends it; a mark on
+## the roof, the nose or the tail is drawn at the edge of the silhouette those
+## belong to, since a flat side has none of them. What this has to say is which
+## design it is, and that is all that is ever asked of it: the car in the
+## garage is the truth.
 static func draw_side(into: CanvasItem, span: Vector2, paint: Color,
 		marks: Array) -> void:
 	# A control draws once before its container has given it a size, and a
@@ -520,18 +651,48 @@ static func draw_side(into: CanvasItem, span: Vector2, paint: Color,
 
 ## One placed mark - a sticker or a hand-written word - where it sits, turned
 ## the way it was turned and in the colour it was drawn in.
+##
+## Turned the other way round from the number in the mark, because this picture
+## is the car's left flank - the nose is at the left, which is the end the nose
+## is at from over there - and on a flank the car turns a mark the opposite way
+## round from a page with its y pointing down. The turn a player set is a turn
+## of the thing on the car; this is the drawing agreeing with it.
 static func draw_mark(into: CanvasItem, span: Vector2, mark: Dictionary) -> void:
 	var picture := picture_of(mark)
 	if picture == null:
 		return
 	var wide := mark_span(mark, span)
-	into.draw_set_transform(
-		(mark.get("at", Vector2(0.5, 0.5)) as Vector2) * span,
-		float(mark.get("turn", 0.0)), Vector2.ONE)
+	into.draw_set_transform(where_on_the_side(mark) * span,
+		-float(mark.get("turn", 0.0)), Vector2.ONE)
 	into.draw_texture_rect(picture,
 		Rect2(-Vector2(wide, wide) * 0.5, Vector2(wide, wide)), false,
 		Paints.colour(int(mark.get("colour", 0))))
 	into.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## Where on the flat side of the car a mark is drawn, as fractions of the box.
+##
+## A mark on the flanks is where it says it is: this picture is a flank. The
+## other three faces are not in this picture at all, and they are drawn at the
+## edge of the silhouette they belong to - along the roof, off the nose, off
+## the tail - so a design made of them is still a design somebody can pick out
+## of a row of them. It is a schematic, the way the stripes here are: the car
+## in the garage is the truth, and what this has to say is only which design
+## this is.
+static func where_on_the_side(mark: Dictionary) -> Vector2:
+	var at: Vector2 = mark.get("at", Vector2(0.5, 0.5))
+	match int(mark.get("face", CarFaces.FLANKS)):
+		CarFaces.TOP:
+			return Vector2(at.x, ROOF)
+		CarFaces.NOSE:
+			return Vector2(0.09, lerpf(0.46, 0.66, at.y))
+		CarFaces.TAIL:
+			return Vector2(0.92, lerpf(0.46, 0.66, at.y))
+	return at
+
+
+## Where the roofline of the silhouette is, for a mark worn on top of the car.
+const ROOF := 0.26
 
 
 ## How wide a mark is drawn. Its size is a fraction of the car's length, and
@@ -543,7 +704,7 @@ static func mark_span(mark: Dictionary, span: Vector2) -> float:
 ## The picture a placed mark wears.
 static func picture_of(mark: Dictionary) -> Texture2D:
 	if str(mark.get("kind", "")) == SCRAWL:
-		return scrawl_stamp(mark.get("strokes", []))
+		return scrawl_stamp(mark.get("strokes", []), float(mark.get("pen", PEN)))
 	return sticker_stamp(int(mark.get("shape", 0)))
 
 

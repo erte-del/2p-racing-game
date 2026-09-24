@@ -88,6 +88,17 @@ func owns(item: String) -> bool:
 	return _bought.has(item)
 
 
+## Whether a car may be painted a colour: everything the game came with, and
+## whatever has been bought since.
+##
+## Here rather than on `Paints`, which is a table and names no autoload, and
+## here rather than in a screen, because two screens now ask it - the paint
+## screen over a paused race, and the garage - and a paint that one of them
+## would wear without it having been bought is a paint nobody needs to buy.
+func owns_paint(index: int) -> bool:
+	return Paints.is_free(index) or owns(Paints.item_for(index))
+
+
 ## Buy something, once. Buying what is already owned is not a purchase and
 ## costs nothing: the purse is what stops an item being paid for twice, because
 ## it is the only thing that knows what is already in it.

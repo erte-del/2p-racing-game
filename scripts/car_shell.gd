@@ -159,6 +159,8 @@ var _wheel_roll := 0.0
 ## from outside needs this - it is what its headlights are placed off - but it
 ## is measured either way, because phase two has to be able to ask.
 var _bounds := AABB()
+## The model's triangles, for `surface`. Gathered when first asked for.
+var _surface: TriangleMesh
 
 ## The paint and the light level the shell is currently wearing. Remembered
 ## rather than merely applied, so a model swapped in halfway through a race
@@ -177,13 +179,21 @@ var _smoke_level := 0.0
 ## reason the paint is: a model swapped in mid-race has to arrive wearing it.
 var _marks: Array = []
 ## The extra passes hung on the paint material, one per stripe, and the decal
-## nodes projected onto the body, one pair per sticker or word.
+## nodes projected onto the body - two for a sticker or a word on the flanks,
+## one for one on any other face. Kept flat and in no particular order: this is
+## what a rebuild tears down, and what wears which is in `_worn`.
 var _stripe_passes: Array[StandardMaterial3D] = []
 var _stamps: Array[Decal] = []
 ## Every decorated thing in the order it is worn, as
-## `{colour: Color, phase: float}` - the colour it is wearing *now*, and where
-## in the chaos cycle it starts. Kept apart from the nodes because a sticker is
-## two decals and a stripe is a material, and the cycle does not care which.
+## `{colour: Color, phase: float, wears: Array}` - the colour it is wearing
+## *now*, where in the chaos cycle it starts, and the material or the decals
+## that actually carry the colour.
+##
+## What it wears is written down beside it rather than worked out from its
+## place in the list, because a mark is not always the same number of things: a
+## stripe is one material, a sticker on the flanks is two decals and one on the
+## boot is one. Counting from an index would mean knowing all of that in the
+## one function that exists so nothing else has to.
 ##
 ## The colour is the one on the car rather than the one it was drawn in, which
 ## is in `_marks` and is what a rebuild reads. So asking what the decoration
@@ -467,6 +477,7 @@ func _take_up_the_model(stock: bool) -> void:
 			push_warning("CarShell: no SteeringWheel in the model")
 
 	_bounds = _measure()
+	_surface = null
 	_mark_the_body()
 	_prepare_materials()
 	_place_headlights()
@@ -800,10 +811,9 @@ func _dress_the_decoration() -> void:
 		last.next_pass = worn
 		last = worn
 		_stripe_passes.append(worn)
-		_remember(mark, count)
+		_remember(mark, count, [worn])
 	for mark: Dictionary in stamps:
-		_add_stamp(mark)
-		_remember(mark, count)
+		_remember(mark, count, _add_stamp(mark))
 	# Put the drawn colours on straight away. Under chaos the next frame moves
 	# them, but a car has to be right on the frame it is dressed as well -
 	# that is the frame the garage's own view of it is drawn on.
@@ -816,15 +826,17 @@ func _dress_the_decoration() -> void:
 ## Its own place in the turn per mark, so a car with three stickers shimmers -
 ## the same idea as the wood, where each kind of leaf turns from a different
 ## point and the field never pulses as one.
-func _remember(mark: Dictionary, count: int) -> void:
+func _remember(mark: Dictionary, count: int, wears: Array) -> void:
 	_worn.append({
 		"colour": Paints.colour(int(mark.get("colour", 0))),
 		"phase": float(_worn.size()) / float(count),
+		"wears": wears,
 	})
 
 
-## Put a colour on the nth thing worn. Stripes come first in `_worn`, so the
-## index says which of the two it is without anything having to be asked.
+## Put a colour on the nth thing worn, whatever that thing turned out to be
+## made of - one material for a stripe, one decal per side of the car for a
+## sticker or a word.
 ##
 ## Written down as well as put on, because what a thing is wearing is a
 ## question worth being able to answer: the alternative is reading a colour
@@ -833,16 +845,13 @@ func _remember(mark: Dictionary, count: int) -> void:
 func _wear(at: int, colour: Color) -> void:
 	if at < 0 or at >= _worn.size():
 		return
-	(_worn[at] as Dictionary).colour = colour
-	if at < _stripe_passes.size():
-		_stripe_passes[at].albedo_color = colour
-		return
-	var stamp := at - _stripe_passes.size()
-	# A sticker is two decals, one per flank.
-	for side in 2:
-		var index := stamp * 2 + side
-		if index < _stamps.size():
-			_stamps[index].modulate = colour
+	var thing: Dictionary = _worn[at]
+	thing.colour = colour
+	for wears in thing.wears:
+		if wears is StandardMaterial3D:
+			(wears as StandardMaterial3D).albedo_color = colour
+		elif wears is Decal:
+			(wears as Decal).modulate = colour
 
 
 ## One stripe, as an extra pass over the paint.
@@ -863,34 +872,40 @@ func _stripe_pass(mark: Dictionary, order: int) -> StandardMaterial3D:
 	return worn
 
 
-## One sticker or one hand-written word: a decal on each flank.
+## One sticker or one hand-written word, projected onto the car where it was
+## put. The decals it turned out to be, for the cycle to colour.
 ##
-## Two rather than one, because a decal projects one way only and a number on a
-## door is on both doors. They are mirror images in the world and the same
-## picture to look at - image right is the car's tail on the left flank and its
-## nose on the right - so a word reads the right way round whichever side of
-## the car a player is on, which is how a name on a door works.
-func _add_stamp(mark: Dictionary) -> void:
+## Where it is, and which way up its picture goes, is
+## [scripts/car_faces.gd](car_faces.gd)'s `placements` - the same answer the
+## garage draws the ring round a selected mark from and works out a press
+## against, so what a player pointed at and what the car wears cannot drift
+## apart.
+##
+## A mark on the flanks is two decals rather than one, because a decal projects
+## one way only and a number on a door is on both doors. They are mirror images
+## in the world and the same picture to look at - image right is the car's tail
+## on the left flank and its nose on the right - so a word reads the right way
+## round whichever side of the car a player is on, which is how a name on a
+## door works. Anything else is one decal, because a car has one bonnet.
+func _add_stamp(mark: Dictionary) -> Array:
 	var picture: Texture2D
 	if str(mark.get("kind", "")) == DecalArt.SCRAWL:
-		picture = DecalArt.scrawl_stamp(mark.get("strokes", []))
+		picture = DecalArt.scrawl_stamp(mark.get("strokes", []),
+			float(mark.get("pen", DecalArt.PEN)))
 	else:
 		picture = DecalArt.sticker_stamp(int(mark.get("shape", 0)))
 
-	var at: Vector2 = mark.get("at", Vector2(0.5, 0.5))
-	var span: float = maxf(_bounds.size.z, 1.0) * clampf(
-		float(mark.get("size", 0.28)), 0.08, 1.0)
-	# Only a quarter of the car's width deep, so a decal thrown at one flank
-	# cannot reach through the car and come out backwards on the other.
-	var depth: float = maxf(_bounds.size.x * 0.5, 0.2)
-	var along := lerpf(_bounds.position.z, _bounds.end.z, at.x)
-	var up := lerpf(_bounds.end.y, _bounds.position.y, at.y)
-	var turn := float(mark.get("turn", 0.0))
-
-	for side in [-1.0, 1.0]:
+	var made := []
+	for placement: Dictionary in CarFaces.placements(_bounds, mark):
+		var out: Vector3 = placement.out
+		var right: Vector3 = placement.right
+		var span := float(placement.half) * 2.0
 		var stamp := Decal.new()
 		stamp.texture_albedo = picture
-		stamp.size = Vector3(span, depth, span)
+		# Deep enough to follow the curve of the body and no deeper, so a
+		# decal thrown at one side of the car cannot reach through it and come
+		# out backwards on the other.
+		stamp.size = Vector3(span, float(placement.depth), span)
 		# The one thing that keeps a sticker off the road: it is told to look
 		# at this shell's own layer and at nothing else at all.
 		stamp.cull_mask = _decal_bit()
@@ -899,16 +914,57 @@ func _add_stamp(mark: Dictionary) -> void:
 		stamp.normal_fade = 0.5
 		stamp.upper_fade = 0.1
 		stamp.lower_fade = 0.1
-		# A decal throws its picture along its own -Y, so up is out of the
-		# flank and the box hangs inward from the face it sits on.
-		var across := Vector3(0.0, 0.0, -side)
-		var outward := Vector3(side, 0.0, 0.0)
-		var basis := Basis(across, outward, across.cross(outward))
-		stamp.transform = Transform3D(
-			basis * Basis(Vector3.UP, turn),
-			Vector3(_bounds.position.x if side < 0.0 else _bounds.end.x, up, along))
+		# A decal throws its picture along its own -Y, so the way the mark is
+		# thrown is the decal's up, and its right is already turned.
+		stamp.transform = Transform3D(Basis(right, out, right.cross(out)),
+			placement.point as Vector3)
 		add_child(stamp)
 		_stamps.append(stamp)
+		made.append(stamp)
+	return made
+
+
+## Where a ray meets the model itself, in the shell's own space, as `{point,
+## normal}` with the normal turned to face the ray - or nothing, for a ray that
+## misses it. `from` and `along` are in the shell's own space too.
+##
+## The bodywork and not the box round it, which is the difference between a
+## sticker landing on the bonnet and one landing in the air over it. Asked of
+## the model's own triangles rather than of the physics, because the model has
+## no collision - the car's collision is a box on `Car` - and a model somebody
+## brought in has nothing of the kind either. The triangles are gathered the
+## first time they are asked for and kept until the model changes: only the
+## garage ever asks, and a car on a course never pays for it.
+func surface(from: Vector3, along: Vector3) -> Dictionary:
+	if _surface == null:
+		_surface = _gather_the_surface()
+	if _surface == null:
+		return {}
+	var found := _surface.intersect_ray(from, along)
+	if found.is_empty():
+		return {}
+	var normal: Vector3 = (found.normal as Vector3).normalized()
+	if normal.dot(along) > 0.0:
+		normal = -normal
+	return {"point": found.position, "normal": normal}
+
+
+func _gather_the_surface() -> TriangleMesh:
+	if _model == null or not is_inside_tree():
+		return null
+	var into := global_transform.affine_inverse()
+	var faces := PackedVector3Array()
+	for node in _model.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh == null or not mesh_instance.is_visible_in_tree():
+			continue
+		var there := into * mesh_instance.global_transform
+		for corner in mesh_instance.mesh.get_faces():
+			faces.append(there * corner)
+	if faces.is_empty():
+		return null
+	var gathered := TriangleMesh.new()
+	return gathered if gathered.create_from_faces(faces) else null
 
 
 func _decal_bit() -> int:

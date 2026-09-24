@@ -136,7 +136,7 @@ func _show_the_choices() -> void:
 			var swatch := swatches[index] as Button
 			var colour := Paints.colour(index)
 			var taken := _players > 1 and colour.is_equal_approx(theirs)
-			var locked := not _owned(index)
+			var locked := not Purse.owns_paint(index)
 			var chosen := colour.is_equal_approx(mine)
 			swatch.disabled = taken or locked
 			# The price written across a locked swatch, and nothing written on
@@ -145,12 +145,6 @@ func _show_the_choices() -> void:
 			swatch.text = str(Shop.cost_of(Paints.item_for(index))) if locked else ""
 			swatch.tooltip_text = _what_it_is(index, taken, locked)
 			_dress(swatch, colour, chosen, taken or locked)
-
-
-## Whether this player may wear a paint. Everything the game came with, and
-## whatever has been bought since.
-func _owned(index: int) -> bool:
-	return Paints.is_free(index) or Purse.owns(Paints.item_for(index))
 
 
 func _what_it_is(index: int, taken: bool, locked: bool) -> String:

@@ -75,7 +75,7 @@ theme_override_font_sizes/font_size = 20
 custom_minimum_size = Vector2(230, 0)
 layout_mode = 2
 toggle_mode = true
-text = "DECORATION"
+text = "PAINT AND DECORATION"
 theme_override_font_sizes/font_size = 20
 
 [node name="Rows" type="VBoxContainer" parent="Page/Panel/Margin/Box"]

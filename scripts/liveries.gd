@@ -110,7 +110,13 @@ func keep(marks: Array, called: String) -> Dictionary:
 	if not Livery.holds(tidied):
 		if tidied.is_empty():
 			return _problem("There is nothing on the car to save.")
-		return _problem("That design is too much for one livery.")
+		# Which rule it broke, since each one is put right a different way.
+		if tidied.size() > DecalArt.MARKS_LIMIT:
+			return _problem("A livery holds %d things. Take some off first."
+				% DecalArt.MARKS_LIMIT)
+		if DecalArt.cover_of_all(tidied) > DecalArt.COVER_CAP:
+			return _problem("That design covers too much of the car.")
+		return _problem("There is too much handwriting on it to save.")
 
 	var id := Livery.id_for(tidied)
 	if has(id):
@@ -178,6 +184,9 @@ func remove(id: String) -> bool:
 ## Which livery a set of marks is, or an empty string for a design that has not
 ## been saved. It is a hash, so this is a lookup rather than a search.
 func which(marks: Array) -> String:
+	# A car with nothing on it is no livery, and hashing nothing is an error.
+	if marks.is_empty():
+		return ""
 	var id := Livery.id_for(marks)
 	return id if has(id) else ""
 

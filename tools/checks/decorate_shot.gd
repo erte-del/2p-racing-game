@@ -8,19 +8,28 @@ extends SceneTree
 # asserting sees, and there is more of it here than anywhere else in the game,
 # because the whole feature is a picture:
 #
+#   - whether the paint row under the car reads as the car's own colour rather
+#     than as a second set of sticker colours, and whether the six the shop
+#     sells are legibly both that colour and out of reach;
 #   - whether a stripe actually lands on the body, in its own colour, rather
 #     than washing the whole car in it or z-fighting with the paint under it;
-#   - whether a sticker lands on the flank the right way up and the right way
-#     round, and whether the word a player drew is still legible once it has
-#     been thrown at a curved door;
+#   - whether a sticker lands the right way up and the right way round on each
+#     of the panels a car has, and whether the word a player wrote straight
+#     onto the paintwork is still legible once it has been thrown at a curved
+#     door;
+#   - whether the car is framed, whether the ring round what is selected is
+#     round the thing and not near it, and whether either of them stays inside
+#     the view when the car is zoomed right into;
 #   - whether either of them leaks onto the road. A decal projects onto
 #     whatever its cull mask lets it, and the cars share the world with the
 #     tarmac - so a sticker printed on the ground under the car is the failure
 #     this feature was always most likely to ship with, and it is invisible to
 #     every number in the game.
 #
-# The walk is: buy the slot, put one of each kind on in the garage, look at the
-# tab, then start a race and look at the car from behind and from the side.
+# The walk is: buy the slot, put one of each kind on in the garage, write a
+# word on the car with the pen, turn it to its roof and then to its tail and
+# put something on each, then start a race and look at the car from behind and
+# from the side.
 #
 # Not headless: it takes pictures, so it needs a real renderer. Sandboxed like
 # everything under `tools/`, so the purse it fills and the car it draws on are
@@ -70,6 +79,15 @@ func _init() -> void:
 	purse.buy(Shop.SLOT_ITEM, Shop.SLOT_COST)
 	await _settle()
 
+	# The car's own paint, which is on this page as well and is not decoration
+	# at all: the row under the car, pressed, and the car wearing it before the
+	# next frame. Player one starts in red; this is the picture that says the
+	# row is not a second set of sticker colours.
+	page.call("_choose_paint", 8)
+	await _settle()
+	print("painted: ", garage.get_node(PAGE + "Status").text)
+	_shot(out, "painting_the_car")
+
 	# One of each kind, put on the way a player puts them on: through the
 	# buttons, not by writing marks into the store behind the page's back.
 	page.call("_choose_colour", 10)
@@ -78,26 +96,118 @@ func _init() -> void:
 	page.call("_choose_colour", 2)
 	page.call("_add_sticker", 4)
 	await _settle()
-	_place(page, Vector2(0.62, 0.40), 0.20)
+	_place(page, Vector2(0.60, 0.46), 0.20)
 	await _settle()
 	_shot(out, "decoration_stripe_and_sticker")
 
-	# And a word, drawn the way a mouse draws one.
+	# And a word, written on the car with the pen the way a mouse writes one:
+	# pressed on the view, dragged, let go, a stroke at a time - each one going
+	# onto the car as it is let go of, which is the whole of what this is. On
+	# the door nearest the camera, found by asking the car where its door is.
+	var stage: Control = page.get("_stage")
+	var shell: Node3D = stage.get("_shell")
+	var box: AABB = stage.call("bounds")
 	page.call("_choose_colour", 3)
-	page.call("_open_the_drawing")
+	page.call("_press_the_pen")
+	var door: Dictionary = shell.call("surface", Vector3(box.end.x + 1.0,
+		box.position.y + box.size.y * 0.45, box.get_center().z), Vector3.LEFT)
+	var on_the_door: Vector2 = (stage.call("flat", door.point) as Dictionary).at
+	var word := _handwriting()
+	for i in 3:
+		_stroke(page, on_the_door, 56.0, word[i])
+		page.call("_finish_a_stroke")
 	await _settle()
-	page.set("_strokes", _handwriting())
-	page.get("_pad").queue_redraw()
-	page.call("_show_the_drawing_buttons")
+	# Three of it on the paintwork and the fourth still in hand, which is the
+	# state a player spends the whole of a word in.
+	_stroke(page, on_the_door, 56.0, word[3])
 	await _settle()
-	_shot(out, "drawing_a_word")
-	page.call("_keep_the_writing")
-	await _settle()
-	_place(page, Vector2(0.35, 0.46), 0.26)
+	_shot(out, "writing_on_the_car")
+	page.call("_finish_a_stroke")
+	_stroke(page, on_the_door, 56.0, word[4])
+	page.call("_finish_a_stroke")
+	page.call("_press_the_pen")
 	await _settle()
 	print("on the car: ", _worn(decals, settings))
-	print("covered: ", garage.get_node(PAGE + "Status").text)
+	# The cover line rather than the status line: the status line is carrying
+	# whatever the pen said last, which is the pen being put down.
+	print("covered: ", (page.get("_cover") as Label).text)
 	_shot(out, "decoration_all_three")
+
+	# The bonnet, which is why things go on the body rather than on the box
+	# round it: it slopes, and it sits well under the roofline, and nothing
+	# thrown at the top of the box ever reached it. Looked at from in front
+	# and above, and written on where the car says the bonnet is.
+	stage.call("turn_by", -float(stage.get("_yaw")), 0.70 - float(stage.get("_pitch")))
+	await _settle()
+	var bonnet: Dictionary = shell.call("surface", Vector3(box.get_center().x,
+		box.end.y + 1.0, box.position.z + box.size.z * 0.18), Vector3.DOWN)
+	var on_the_bonnet: Vector2 = (stage.call("flat", bonnet.point) as Dictionary).at
+	# Nothing selected first, or the colour would be the door's word's new one.
+	page.call("_choose_nothing")
+	page.call("_choose_colour", 11)
+	page.call("_press_the_pen")
+	for stroke in word:
+		_stroke(page, on_the_bonnet, 150.0, stroke)
+		page.call("_finish_a_stroke")
+	page.call("_press_the_pen")
+	await _settle()
+	print("on the bonnet: ", _worn(decals, settings))
+	_shot(out, "writing_on_the_bonnet")
+	page.call("_take_it_off")
+	stage.call("reset_view")
+	await _settle()
+
+	# The three sides the flat drawing of a car never had. Turned to the roof,
+	# a sticker put on it, and then round to the tail for another - which is
+	# the whole of what this page is for now, and the half of it no number
+	# checks.
+	stage.call("turn_by", 0.9, 0.85)
+	await _settle()
+	page.call("_choose_colour", 6)
+	page.call("_add_sticker", 6)
+	await _settle()
+	_shot(out, "on_the_roof")
+	# Squared up to the tail, which is what a player does to put something on
+	# it: a boot lid is a quarter of the size of a flank, and it is the panel
+	# in front of you only when you are actually standing behind the car.
+	# Turned from wherever the view opens to nearly square at the tail, rather
+	# than by a written-down amount. `CarStage` is not an identifier in a
+	# `--script` run - it names `Garage`, which is an autoload - so how far
+	# round it already is, is asked of the thing itself.
+	stage.call("reset_view")
+	stage.call("turn_by", PI + 0.10 - float(stage.get("_yaw")), -0.20)
+	stage.call("zoom_by", 2.0)
+	await _settle()
+	page.call("_choose_colour", 4)
+	page.call("_add_sticker", 5)
+	await _settle()
+	print("with the tail done: ", _worn(decals, settings))
+	_shot(out, "on_the_tail_up_close")
+	# Taken off again, so the car that goes out onto the road is the one the
+	# rest of this walk is about.
+	page.call("_take_it_off")
+	stage.call("reset_view")
+	await _settle()
+
+	# The manual camera, ticked the way a player ticks it and taken right in
+	# to the front wheel off the front corner - further in than the automatic
+	# camera may go, and towards what is under the cursor rather than the
+	# middle of the view. Whether the boxes read as a choice over the car, and
+	# whether a view that close is still a car, are things only a picture says.
+	var manual: CheckBox = page.get("_manual_box")
+	manual.button_pressed = true
+	await _settle()
+	var wheel: Dictionary = shell.call("surface", Vector3(box.end.x + 1.0,
+		box.position.y + box.size.y * 0.3, box.position.z + box.size.z * 0.2),
+		Vector3.LEFT)
+	var at_the_wheel: Vector2 = (stage.call("flat", wheel.point) as Dictionary).at \
+		if not wheel.is_empty() else (stage as Control).size * 0.5
+	stage.call("zoom_by", 9.0, at_the_wheel)
+	await _settle()
+	_shot(out, "manual_camera_close")
+	(page.get("_automatic_box") as CheckBox).button_pressed = true
+	stage.call("reset_view")
+	await _settle()
 
 	garage.call("close")
 	await _settle()
@@ -156,22 +266,26 @@ func _on_the_road(out: String) -> void:
 
 
 ## Put whatever is selected where the picture wants it.
+## Drag the selected mark to a point on the car's view, given as fractions of
+## the view, and make it a size - the way a player's mouse would.
 func _place(page: Node, at: Vector2, size: float) -> void:
+	var stage: Control = page.get("_stage")
+	page.set("_grab_copy", 0)
+	page.call("_drag_to", stage.size * at)
 	var marks: Array = page.call("_marks")
 	var chosen: int = page.get("_chosen")
 	if chosen < 0 or chosen >= marks.size():
 		return
 	var mark: Dictionary = marks[chosen]
-	mark["at"] = at
 	mark["size"] = size
 	var decals: Node = Engine.get_main_loop().root.get_node(^"/root/Decals")
 	decals.change_mark(page.call("_car_id"), chosen, mark)
 
 
-## A few strokes, the way a mouse drags them out. Deliberately scrawled rather
-## than neat: the question a picture of this answers is whether somebody's
-## actual handwriting survives being thrown at a door, and a tidy polygon would
-## not be asking it.
+## A few strokes, the way a mouse drags them. Deliberately scrawled rather than
+## neat: the question a picture of this answers is whether somebody's actual
+## handwriting survives being thrown at a curved body, and a tidy polygon would
+## not be asking it. As fractions of a square the word is written in.
 func _handwriting() -> Array:
 	return [
 		PackedVector2Array([Vector2(0.10, 0.62), Vector2(0.16, 0.30),
@@ -183,6 +297,18 @@ func _handwriting() -> Array:
 		PackedVector2Array([Vector2(0.76, 0.30), Vector2(0.76, 0.66)]),
 		PackedVector2Array([Vector2(0.72, 0.30), Vector2(0.86, 0.30)]),
 	]
+
+
+## One stroke of it with the pen, down and dragged but not yet let go, in a
+## square `wide` pixels across round a point on the car's view.
+func _stroke(page: Node, around: Vector2, wide: float,
+		stroke: PackedVector2Array) -> void:
+	var points := []
+	for point in stroke:
+		points.append(around + (point - Vector2(0.5, 0.5)) * wide)
+	page.call("_start_a_stroke", points[0])
+	for i in range(1, points.size()):
+		page.call("_draw_to", points[i])
 
 
 func _worn(decals: Node, settings: Node) -> String:

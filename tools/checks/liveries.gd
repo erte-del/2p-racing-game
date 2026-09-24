@@ -60,6 +60,7 @@ func _init() -> void:
 	_check_writing_it_down()
 	_check_the_id()
 	_check_keeping()
+	_check_a_word_as_it_is_drawn()
 	_check_what_comes_from_outside()
 	_check_throwing_one_away()
 	await _check_the_garage(purse)
@@ -137,8 +138,116 @@ func _check_the_id() -> void:
 	(hair[1] as Dictionary).size = float((hair[1] as Dictionary).size) + 0.000001
 	if Livery.id_for(hair) != id:
 		_fault("a millionth of a car's length made it a different livery")
+	# A design of things worn on the flanks - which is everything anybody drew
+	# before there were other panels to draw on - has to hash to what it always
+	# hashed to. Written out in full here, because this is the one promise in
+	# the game that reaches other people's machines and older copies of this
+	# one: a livery shared last year has to still be the livery it says it is.
+	# See `Livery.written` for how a face stays out of the line until there is
+	# one worth writing.
+	var flanks: Array = [{"kind": DecalArt.STICKER, "shape": 4, "colour": 2,
+		"at": Vector2(0.4, 0.45), "size": 0.2, "turn": 0.0}]
+	var line := Livery.written(flanks)
+	if line != "sticker|4|2|0.4|0.45|0.2|0.0":
+		_fault("a design worn on the flanks is written as `%s` now" % line)
+	if Livery.id_for(flanks) != "5c220050ec76844a":
+		_fault("a design worn on the flanks hashes to %s, which is not the id it "
+			% Livery.id_for(flanks) + "had before there were panels to choose")
+	# And one worn somewhere else is a different livery, carrying the panel it
+	# is on through the text and back.
+	var roof := flanks.duplicate(true)
+	(roof[0] as Dictionary).face = CarFaces.TOP
+	if Livery.id_for(roof) == Livery.id_for(flanks):
+		_fault("the same sticker on the roof and on the doors is one livery")
+	var came_back: Array = Livery.read(Livery.written(roof))
+	if came_back.size() != 1 or int((came_back[0] as Dictionary).face) != CarFaces.TOP:
+		_fault("a sticker on the roof did not come back off the roof")
+	# A word's pen is the same kind of promise. A word in the width every word
+	# had before there was a choice writes no pen at all, and one in another
+	# width carries it through the text and back - on a panel that is not the
+	# flanks too, since the pen and the panel are the two lone numbers that
+	# can follow the seven.
+	var word: Dictionary = _a_design()[2]
+	if Livery.written([word]).split("|").size() != 8:
+		_fault("a word in the old width wrote a pen down: %s" % Livery.written([word]))
+	var fine := word.duplicate(true)
+	fine.pen = 0.012
+	fine.face = CarFaces.NOSE
+	var fine_back: Array = Livery.read(Livery.written([fine]))
+	if fine_back.size() != 1 or not _close(float((fine_back[0] as Dictionary).pen), 0.012) \
+			or int((fine_back[0] as Dictionary).face) != CarFaces.NOSE:
+		_fault("a word in a fine pen on the nose came back as %s" % [fine_back])
+	if Livery.id_for([fine]) == Livery.id_for([word]):
+		_fault("the same word in two widths is one livery")
+	# And a mark put on the body. It comes back where it was and facing the
+	# way it faced, its id survives the trip - the spot and the aim are
+	# written rounded, and what is worked out from them has to be worked out
+	# from the rounded ones - and it still carries the face it is nearest, for
+	# anything that draws a design in faces and for a copy of the game that
+	# has never heard of a body.
+	var bonnet: Dictionary = word.duplicate(true)
+	bonnet.erase("face")
+	bonnet.erase("at")
+	bonnet.spot = Vector3(0.51234567, 0.6789123, 0.1987654)
+	bonnet.aim = Vector3(0.03, 0.81, -0.58).normalized()
+	bonnet.pen = 0.0213
+	var line_on_it := Livery.written([bonnet])
+	var bonnet_back: Array = Livery.read(line_on_it)
+	if bonnet_back.size() != 1 or not CarFaces.on_the_body(bonnet_back[0]):
+		_fault("a word on the bonnet came back off the body: %s" % line_on_it)
+	else:
+		var was_on: Dictionary = DecalArt.tidy(bonnet)
+		var now_on: Dictionary = bonnet_back[0]
+		if (now_on.spot as Vector3).distance_to(was_on.spot) > 0.001 \
+				or (now_on.aim as Vector3).dot(was_on.aim) < 0.9999:
+			_fault("a word on the bonnet came back somewhere else: %s" % line_on_it)
+		if int(now_on.face) != CarFaces.TOP:
+			_fault("a word on the bonnet is nearest %s, not the top"
+				% CarFaces.name_of(int(now_on.face)))
+		if Livery.id_for(bonnet_back) != Livery.id_for([bonnet]) \
+				or Livery.written(bonnet_back) != line_on_it:
+			_fault("a word on the bonnet changed id on a trip through text")
+	# What a copy from before the body reads: the same line with the body
+	# taken out of it, which is the top of the car at the place nearest the
+	# bonnet, and never the doors.
+	var fields := line_on_it.split("|")
+	var older := PackedStringArray()
+	for field in fields:
+		if not field.contains(":"):
+			older.append(field)
+	var older_back: Array = Livery.read("|".join(older))
+	if older_back.size() != 1 or CarFaces.on_the_body(older_back[0]) \
+			or int((older_back[0] as Dictionary).face) != CarFaces.TOP:
+		_fault("a word on the bonnet, read without its body, is not on the top")
+	# A mark on one door only. One on both doors - every mark there was before
+	# the mirror could be turned off - writes nothing for it and keeps the id it
+	# had; one on one door carries it through the text and back, and is a
+	# different livery; and a copy from before the mirror, which reads the word
+	# as a face the way it reads any lone field, reads the doors.
+	var door := {"kind": DecalArt.STICKER, "shape": 1, "colour": 2,
+		"spot": Vector3(1.0, 0.5, 0.5), "aim": Vector3(1.0, 0.1, 0.0).normalized(),
+		"size": 0.2, "turn": 0.0}
+	var both_line := Livery.written([door])
+	if both_line.contains(Livery.SINGLE):
+		_fault("a sticker on both doors wrote the mirror down: %s" % both_line)
+	var one_door := door.duplicate(true)
+	one_door["mirror"] = false
+	var one_line := Livery.written([one_door])
+	var one_back: Array = Livery.read(one_line)
+	if one_back.size() != 1 or CarFaces.mirrored(one_back[0]):
+		_fault("a sticker on one door came back on both: %s" % one_line)
+	elif Livery.written(one_back) != one_line:
+		_fault("a sticker on one door changed on a trip through text: %s" % one_line)
+	if Livery.id_for([one_door]) == Livery.id_for([door]):
+		_fault("a sticker on one door and on both is one livery")
+	var fields_one := one_line.split("|")
+	if fields_one.size() != 9 or int(fields_one[8]) != CarFaces.FLANKS:
+		_fault("a copy from before the mirror would read a sticker on one door "
+			+ "off the doors: %s" % one_line)
 	print("a design hashes to %s, and to %s after a trip through text"
 		% [id, Livery.id_for(Livery.read(Livery.written(design)))])
+	print("one worn on the flanks still hashes to %s, and the same one on the "
+		% Livery.id_for(flanks) + "roof to %s" % Livery.id_for(roof))
 
 
 ## Saving one, and saving the same one again.
@@ -178,6 +287,70 @@ func _check_keeping() -> void:
 		_fault("a design could not find the livery it is")
 	print("saved as %s, %s, and the same design again is the same livery"
 		% [kept.id, _liveries.name_of(String(kept.id))])
+
+
+## Words the way the pen hands them over: a point every time the mouse moved,
+## most of them a hair from the last and some of them the same point twice.
+##
+## Kept like that, three words ran past what a livery can be written down in,
+## and every design with handwriting on it was refused as "too much" whatever
+## else was on it. So: a word as it comes off the pen does not fit, the same
+## word thinned does, thinning it again changes nothing, and a word already on
+## a car from before there was thinning is thinned when the car is loaded.
+func _check_a_word_as_it_is_drawn() -> void:
+	_forget_everything()
+	var raw := []
+	for word in 3:
+		raw.append({"kind": DecalArt.SCRAWL, "shape": 0, "colour": 2,
+			"at": Vector2(0.3 + 0.2 * word, 0.5), "size": 0.2, "turn": 0.0,
+			"pen": 0.06, "strokes": [_a_scrawled_line(word)]})
+	if Livery.holds(raw):
+		_fault("the scrawled words are not long enough to test anything")
+	var thin := raw.map(DecalArt.thinned_word)
+	var before := 0
+	var after := 0
+	for i in raw.size():
+		before += (raw[i].strokes[0] as PackedVector2Array).size()
+		after += (thin[i].strokes[0] as PackedVector2Array).size()
+	if not Livery.holds(thin):
+		_fault("three words thinned are still too long for a livery: %d characters"
+			% Livery.written(thin).length())
+	var twice := thin.map(DecalArt.thinned_word)
+	if not _same_strokes(twice[0].strokes, thin[0].strokes):
+		_fault("thinning a word that was already thin took more out of it")
+
+	# A word on a car from before: saved at every point, and loaded back thin.
+	_decals.set_marks(_stock, raw)
+	_decals.save_decals()
+	_decals.load_decals()
+	var loaded: Array = _decals.marks_on(_stock)
+	if loaded.size() != raw.size():
+		_fault("a car with three words on it came back with %d marks" % loaded.size())
+	else:
+		var kept: Dictionary = _liveries.keep(loaded, "THREE WORDS")
+		if not kept.ok:
+			_fault("words loaded off a car from before would not save as a "
+				+ "livery: %s" % kept.error)
+		elif _liveries.which(_decals.marks_on(_stock)) != kept.id:
+			_fault("the car those words were saved off is not wearing the livery")
+	_decals.clear(_stock)
+	print("three words as the pen drew them: %d points, thinned to %d, "
+		% [before, after] + "and %d characters written down"
+		% Livery.written(thin).length())
+
+
+## A wavy line across the box read the way a mouse is read: a step a fraction
+## of a pixel long, and every so often the same point again.
+func _a_scrawled_line(seed: int) -> PackedVector2Array:
+	var line := PackedVector2Array()
+	for i in 700:
+		var t := float(i) / 699.0
+		var point := Vector2(0.05 + 0.9 * t,
+			0.5 + 0.3 * sin(t * TAU * (2.0 + seed)) * cos(t * 3.0))
+		line.append(point)
+		if i % 5 == 0:
+			line.append(point)
+	return line
 
 
 ## A design from somebody else, which is a line of text this game did not

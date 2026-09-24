@@ -36,15 +36,21 @@ const NAME_LIMIT := 24
 ## How many characters the written-down form may run to.
 ##
 ## It is what goes to the server as a single column, so it needs a ceiling
-## there whatever the game thinks. Eight marks of a dozen numbers is nothing;
-## the whole of it is the handwriting, which is points. This is generous enough
-## for eight scrawled words and far short of anything worth worrying about.
+## there whatever the game thinks - `backend/schema.sql` holds the same number.
+## Eight marks of a dozen numbers is nothing; the whole of it is the
+## handwriting, which is points, about fourteen characters each. That is only
+## generous because a word is thinned as it is drawn (`DecalArt.thinned`): a
+## word kept at every point the pen was read at runs to thousands of
+## characters, and one of them on its own was enough to go over.
 const TEXT_LIMIT := 8192
 
 ## How many places every number is written to, in the id and in the text that
 ## goes to the server. See above: this is the number two machines have to agree
 ## on, not a number anybody reads.
 const PLACES := 4
+
+## The word a mark on one door only is written with. See `written`.
+const SINGLE := "single"
 
 
 ## The id of a design: the first sixteen hex characters of the sha256 of it.
@@ -74,8 +80,39 @@ static func is_id(id: String) -> bool:
 ##
 ## Fields separated by `|` and marks by `;`, with the strokes of a word run
 ## together inside their mark. Nothing in it can hold either character - every
-## field is a number or one of three fixed words - so it comes apart again
+## field is a number or one of four fixed words - so it comes apart again
 ## exactly the way it went together.
+##
+## **The face a mark is on is written only when it is not the flanks**, and the
+## flanks are what everything drawn before there were faces to choose is on. So
+## every design that existed before hashes to exactly the id it already had:
+## the one saved in the file here, the one somebody else is holding, and the
+## one a copy of this game with no faces in it would work out. A field that is
+## a lone number where a word's strokes would be is the face - nothing else out
+## there can be, since a stroke is points and a point has a comma in it.
+##
+## **A word's pen is written only when it is not the width every word had
+## before there was a choice**, for the same reason, and it goes before the
+## face. It is the one extra field with a decimal point and no comma. A copy of
+## this game from before the pen reads it as a face, which is a lone number to
+## it, and gets nought - the flanks - which the face written after it then
+## puts right; so an older copy puts a new word in the right place and only
+## draws it at the old width.
+##
+## **A mark put on the body is written as it would be on its nearest face, and
+## then where it really is**: the spot and the aim in one field, six numbers
+## run together with `:`, which is the only field with a colon in it. It goes
+## before the face for the pen's reason - a copy of the game from before the
+## body reads it as face nought and the real face after it puts that right - so
+## that copy draws the mark on the face it is nearest, near enough where it
+## was put, instead of losing it.
+##
+## **A mark on one door only** - put on with the mirror off - has the word
+## `single` after its body, and nothing when it is on both, which is every mark
+## there was before the choice. After the body and before the face, for the
+## pen's reason again: a copy of the game from before the mirror reads it as a
+## face, gets nought, and has the real face after it put that right - so it
+## puts the mark in the right place and only wears it on both doors.
 static func written(marks: Array) -> String:
 	var lines := PackedStringArray()
 	for mark in marks:
@@ -85,11 +122,35 @@ static func written(marks: Array) -> String:
 		if clean.is_empty():
 			continue
 		var at: Vector2 = clean.at
+		var face := int(clean.face)
+		var body := ""
+		if CarFaces.on_the_body(clean):
+			# The face and the place on it from the spot and the aim as they
+			# are written, not as they were: worked out from the unrounded
+			# ones, they could round a different way the first time than
+			# every time after, and the design would change id on its way to
+			# somebody else.
+			var spot := _snapped(clean.spot)
+			var aim := _snapped(clean.aim)
+			face = CarFaces.face_of_aim(aim)
+			at = CarFaces.at_of_spot(spot, face)
+			body = ":".join(PackedStringArray([
+				_number(spot.x), _number(spot.y), _number(spot.z),
+				_number(aim.x), _number(aim.y), _number(aim.z)]))
 		var fields := PackedStringArray([
 			str(clean.kind), str(int(clean.shape)), str(int(clean.colour)),
 			_number(at.x), _number(at.y),
 			_number(float(clean.size)), _number(float(clean.turn)),
 		])
+		if str(clean.kind) == DecalArt.SCRAWL \
+				and _number(float(clean.pen)) != _number(DecalArt.PEN):
+			fields.append(_number(float(clean.pen)))
+		if not body.is_empty():
+			fields.append(body)
+			if not CarFaces.mirrored(clean):
+				fields.append(SINGLE)
+		if face != CarFaces.FLANKS:
+			fields.append(str(face))
 		if str(clean.kind) == DecalArt.SCRAWL:
 			var pen := PackedStringArray()
 			for stroke in clean.get("strokes", []):
@@ -125,8 +186,28 @@ static func read(text: String) -> Array:
 			"size": float(fields[5]),
 			"turn": float(fields[6]),
 		}
-		if fields.size() > 7:
-			mark["strokes"] = _read_strokes(fields[7])
+		# What is left is the pen, the body, the face and the strokes, any of
+		# them or none, and they are told apart by what they look like rather
+		# than by where they are: strokes are points and a point has a comma
+		# in it, the body is six numbers held together by colons, a pen is a
+		# number with a decimal point, a mark on one door is the word for it,
+		# and a face is a lone digit. See `written`.
+		for extra in range(7, fields.size()):
+			if fields[extra].contains(","):
+				mark["strokes"] = _read_strokes(fields[extra])
+			elif fields[extra].contains(":"):
+				var six := fields[extra].split(":")
+				if six.size() == 6:
+					mark["spot"] = Vector3(float(six[0]), float(six[1]),
+						float(six[2]))
+					mark["aim"] = Vector3(float(six[3]), float(six[4]),
+						float(six[5]))
+			elif fields[extra].contains("."):
+				mark["pen"] = float(fields[extra])
+			elif fields[extra] == SINGLE:
+				mark["mirror"] = false
+			else:
+				mark["face"] = int(fields[extra])
 		var clean := DecalArt.tidy(mark)
 		if not clean.is_empty():
 			marks.append(clean)
@@ -155,6 +236,12 @@ static func _number(value: float) -> String:
 	if is_zero_approx(snapped):
 		snapped = 0.0
 	return String.num(snapped, PLACES)
+
+
+static func _snapped(value: Vector3) -> Vector3:
+	var step := pow(10.0, -PLACES)
+	return Vector3(snappedf(value.x, step), snappedf(value.y, step),
+		snappedf(value.z, step))
 
 
 static func _read_strokes(text: String) -> Array:
