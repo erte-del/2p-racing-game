@@ -11,6 +11,7 @@ config_version=5
 [application]
 
 config/name="2P Racing Game"
+config/version="1.1.3"
 run/main_scene="res://scenes/menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
