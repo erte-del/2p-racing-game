@@ -90,16 +90,16 @@ func _on_a_road() -> int:
 		faults += 1
 
 	# The key is named, not assumed: moved, it is named where it is now.
-	var was := InputMap.action_get_events("p1_reset")
-	InputMap.action_erase_events("p1_reset")
-	InputMap.action_add_event("p1_reset", _moved_to_k())
+	var was := InputMap.action_get_events("solo_reset")
+	InputMap.action_erase_events("solo_reset")
+	InputMap.action_add_event("solo_reset", _moved_to_k())
 	run = await _out_on_the_grass(solo, track, car, lost)
 	print("with the reset moved to K: %s"
 		% ["said \"%s\"" % run[1] if not String(run[1]).is_empty() else "nothing said"])
 	faults += _judge(run, "K")
-	InputMap.action_erase_events("p1_reset")
+	InputMap.action_erase_events("solo_reset")
 	for event in was:
-		InputMap.action_add_event("p1_reset", event)
+		InputMap.action_add_event("solo_reset", event)
 
 	solo.queue_free()
 	await process_frame

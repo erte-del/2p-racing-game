@@ -115,7 +115,7 @@ func _drive(solo: Node, track: Track, car: Car, jump: TrackLayout.Piece,
 		# none of that right.
 		_let_go()
 		if stage == "braking":
-			Input.action_press("p1_brake")
+			Input.action_press("solo_brake")
 			if car.speed() < 0.5:
 				stage = "waiting"
 		elif stage == "waiting":
@@ -124,7 +124,7 @@ func _drive(solo: Node, track: Track, car: Car, jump: TrackLayout.Piece,
 			if lift.lift_at(now) >= lift.lift - 0.05:
 				stage = "away"
 		elif stage == "away":
-			Input.action_press("p1_accelerate")
+			Input.action_press("solo_accelerate")
 		else:
 			car._speed = car.max_speed
 		await physics_frame
@@ -142,7 +142,7 @@ func _drive(solo: Node, track: Track, car: Car, jump: TrackLayout.Piece,
 
 
 func _let_go() -> void:
-	for action in ["p1_accelerate", "p1_brake", "p1_steer_left", "p1_steer_right"]:
+	for action in ["solo_accelerate", "solo_brake", "solo_steer_left", "solo_steer_right"]:
 		Input.action_release(action)
 
 

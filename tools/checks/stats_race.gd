@@ -118,9 +118,9 @@ func _resets() -> void:
 		return
 	await _frames(20)
 	var before := _snapshot()
-	Input.action_press("p1_reset")
+	Input.action_press("solo_reset")
 	await physics_frame
-	Input.action_release("p1_reset")
+	Input.action_release("solo_reset")
 	await physics_frame
 	_expect("the reset key", before, {"resets": 1}, true)
 	await _gone(solo)
@@ -146,10 +146,10 @@ func _a_quit_run() -> void:
 		return
 	var before := _snapshot()
 	var on_disk := _distance_on_disk()
-	Input.action_press("p1_accelerate")
+	Input.action_press("solo_accelerate")
 	await _frames(90)
 	solo.call("_restart")
-	Input.action_release("p1_accelerate")
+	Input.action_release("solo_accelerate")
 	_expect("a restarted run", before, {}, true)
 	if _distance_on_disk() <= on_disk:
 		_fault("restarting did not write the run's driving down")
@@ -158,9 +158,9 @@ func _a_quit_run() -> void:
 		_fault("the second go never started")
 	before = _snapshot()
 	on_disk = _distance_on_disk()
-	Input.action_press("p1_accelerate")
+	Input.action_press("solo_accelerate")
 	await _frames(90)
-	Input.action_release("p1_accelerate")
+	Input.action_release("solo_accelerate")
 	await _gone(solo)
 	_expect("a run left halfway", before, {}, true)
 	if _distance_on_disk() <= on_disk:

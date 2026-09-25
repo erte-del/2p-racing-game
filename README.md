@@ -119,6 +119,14 @@ drift, and would be wrong again the moment the window was resized.
 
 Reaching the finish generates a new course and pauses for three seconds.
 
+Played alone, every key in both columns works: WASD or the arrows to drive, R
+or M to go back to the last checkpoint, C or L to change the view - whichever
+hand the player would rather use. Solo reads its own `solo_*` actions, which
+carry both players' keys, rather than `p1_*`; in the two-player race each car
+keeps to its own half of the keyboard, because there a key answering to both
+cars would be one player driving the other's. Where solo names a key on screen
+it names the first one bound, so it still says R and C.
+
 Both players use the same `scenes/car/car.tscn`. A car reads its actions from an
 `input_prefix` export (`p1` / `p2`) and takes its paint from a `body_color`
 export, so adding a third player would mean one more instance and one more set

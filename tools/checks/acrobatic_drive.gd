@@ -178,22 +178,22 @@ func _drive(solo: Node) -> Dictionary:
 		_let_go()
 		if hold and car.is_on_floor():
 			if angle > 0.02:
-				Input.action_press("p1_steer_left", clampf(angle * STEER_GAIN, 0.0, 1.0))
+				Input.action_press("solo_steer_left", clampf(angle * STEER_GAIN, 0.0, 1.0))
 			elif angle < -0.02:
-				Input.action_press("p1_steer_right", clampf(-angle * STEER_GAIN, 0.0, 1.0))
+				Input.action_press("solo_steer_right", clampf(-angle * STEER_GAIN, 0.0, 1.0))
 			if speed > 0.3:
-				Input.action_press("p1_brake")
+				Input.action_press("solo_brake")
 		elif car.is_on_floor():
 			if angle > 0.02:
-				Input.action_press("p1_steer_left", clampf(angle * STEER_GAIN, 0.0, 1.0))
+				Input.action_press("solo_steer_left", clampf(angle * STEER_GAIN, 0.0, 1.0))
 			elif angle < -0.02:
-				Input.action_press("p1_steer_right", clampf(-angle * STEER_GAIN, 0.0, 1.0))
+				Input.action_press("solo_steer_right", clampf(-angle * STEER_GAIN, 0.0, 1.0))
 			if speed > allowed + 1.5:
-				Input.action_press("p1_brake")
+				Input.action_press("solo_brake")
 			else:
-				Input.action_press("p1_accelerate")
+				Input.action_press("solo_accelerate")
 		else:
-			Input.action_press("p1_accelerate")
+			Input.action_press("solo_accelerate")
 		await physics_frame
 
 		# A fall: off the ground long enough to be flying, and come down lower
@@ -265,7 +265,7 @@ func _fell(solo: Node, tries: PackedInt32Array, ring: int) -> void:
 
 
 func _let_go() -> void:
-	for action in ["p1_accelerate", "p1_brake", "p1_steer_left", "p1_steer_right"]:
+	for action in ["solo_accelerate", "solo_brake", "solo_steer_left", "solo_steer_right"]:
 		Input.action_release(action)
 
 

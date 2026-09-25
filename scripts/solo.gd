@@ -248,9 +248,10 @@ func _ready() -> void:
 	Garage.changed.connect(_apply_cars)
 	Decals.changed.connect(_on_decals_changed)
 	_lines.watch(_car)
-	# One player, one keyboard: solo is always driven on player one's keys,
-	# whichever they have been moved to.
-	_lost.watch(_car, _track, "p1_reset")
+	# One player, one keyboard. Everything solo reads is a `solo_*` action,
+	# which answers to player one's keys and player two's both, so either hand
+	# drives, resets and changes the view.
+	_lost.watch(_car, _track, "solo_reset")
 	_place_on_the_line()
 	# Now, and not in _build_the_bot, because the practice laps set off from
 	# wherever the car is standing when the plan begins - which has to be the
@@ -281,8 +282,8 @@ func _ready() -> void:
 	_hint.text = "%s  %s        %s  back to the last checkpoint        %s  view        ESC  pause" % [
 		Controls.key_for("restart").to_upper(),
 		"next course" if _endless else "run again",
-		Controls.key_for("p1_reset").to_upper(),
-		Controls.key_for("p1_view").to_upper()]
+		Controls.key_for("solo_reset").to_upper(),
+		Controls.key_for("solo_view").to_upper()]
 	_start_after_countdown()
 
 
@@ -380,7 +381,7 @@ func _physics_process(delta: float) -> void:
 	# Both of these work whether or not the clock is running, so a player held
 	# on the line can look around, and one sitting on a finished run can start
 	# another without waiting for anything.
-	if Input.is_action_just_pressed("p1_view"):
+	if Input.is_action_just_pressed("solo_view"):
 		_camera.set_inside(not _camera.is_inside())
 	# Not while the finished run is offering the choice: the same key works
 	# the button the cursor is on, and a track that restarted itself on the
@@ -416,7 +417,7 @@ func _physics_process(delta: float) -> void:
 	_track.set_race_time(_time)
 	if _bot_driver != null:
 		_bot_driver.race_time = _time
-	if Input.is_action_just_pressed("p1_reset"):
+	if Input.is_action_just_pressed("solo_reset"):
 		# Counted here, at the key, rather than in _back_to_checkpoint: the bot
 		# goes down that same path, and the bot asking is not the player asking.
 		Stats.reset_taken()
