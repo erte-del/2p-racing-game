@@ -71,6 +71,23 @@ func _init() -> void:
 		print("  the dropped time came back off disk")
 		faults += 1
 
+	# A release from before the tracks' text shipped with it wrote every time
+	# down against a fingerprint of nothing. Those are kept, and from then on
+	# held to the track as it is.
+	var key := TRACK.get_file().get_basename()
+	times._best[key] = 40.25
+	times._fingerprints[key] = 0
+	times.save_times()
+	times.load_times()
+	if not is_equal_approx(times.best(TRACK), 40.25):
+		print("  a time from a release that could not read its tracks was lost")
+		faults += 1
+	elif times._fingerprints[key] != real:
+		print("  a time from such a release was not given the track's fingerprint")
+		faults += 1
+	else:
+		print("a time set by a release that could not read its tracks is kept")
+
 	# And a track that does not exist has no fingerprint to match against.
 	if times.fingerprint("res://tracks/nothing_here.gd") != 0:
 		print("  a track that is not there fingerprinted as something")

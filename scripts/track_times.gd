@@ -28,6 +28,9 @@ const SAVE_PATH := "user://times.cfg"
 ## the grass from a jump hole, and none of them stand.
 const GEOMETRY := 3
 
+## What an exported game calls the copy of a track's text; see `source`.
+const SHIPPED_SOURCE := ".source"
+
 ## Emitted when a time is beaten, so a screen showing one can follow it.
 signal beaten(track: String, seconds: float)
 
@@ -52,7 +55,15 @@ func best(track_file: String) -> float:
 	var key := _key(track_file)
 	if not _best.has(key):
 		return -1.0
-	if int(_fingerprints.get(key, 0)) != fingerprint(track_file):
+	var standing := int(_fingerprints.get(key, 0))
+	if standing == 0:
+		# Set by a release from before the tracks' text shipped with it, which
+		# could not read a track and so wrote every time down against nothing.
+		# Taken as set on the track as it is now: the alternative is throwing
+		# away every time those players drove, and they drove these roads.
+		_fingerprints[key] = fingerprint(track_file)
+		save_times()
+	elif standing != fingerprint(track_file):
 		_best.erase(key)
 		_fingerprints.erase(key)
 		save_times()
@@ -78,7 +89,7 @@ func record(track_file: String, seconds: float) -> bool:
 ## built from it: the file is what an author edits, and it changes if and only
 ## if they changed the track.
 func fingerprint(track_file: String) -> int:
-	var text := FileAccess.get_file_as_string(track_file)
+	var text := source(track_file)
 	if text.is_empty():
 		return 0
 	return hash("%d\n%s" % [GEOMETRY, text])
@@ -93,10 +104,26 @@ func fingerprint(track_file: String) -> int:
 ## is the number a Windows machine computes for track seven, this year and
 ## next.
 func signature(track_file: String) -> String:
-	var text := FileAccess.get_file_as_string(track_file)
+	var text := source(track_file)
 	if text.is_empty():
 		return ""
 	return ("%d\n%s" % [GEOMETRY, text]).sha256_text()
+
+
+## A track's file as its author wrote it, or empty for one that is not there.
+##
+## In the editor that is the file itself. An exported game does not have it:
+## scripts go into a release compiled, under another name, and the text is
+## left behind. `addons/track_sources` puts a copy of each track's text into
+## the export under the name here, which is what makes a release and the
+## editor agree on what a track is - and a board keyed on that agreement
+## possible at all.
+func source(track_file: String) -> String:
+	if FileAccess.file_exists(track_file):
+		return FileAccess.get_file_as_string(track_file)
+	if FileAccess.file_exists(track_file + SHIPPED_SOURCE):
+		return FileAccess.get_file_as_string(track_file + SHIPPED_SOURCE)
+	return ""
 
 
 ## Take a time that was set somewhere else - the same player, on their other

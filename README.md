@@ -703,6 +703,38 @@ anything, which is why it only showed in a download. The cost is a slightly
 larger pack and slightly slower scene loads, neither of which this game
 notices.
 
+The tracks go into a release twice: compiled, like every other script, and as
+the text they were written in, under `<track>.gd.source`. An export ships a
+script's compiled tokens rather than its text, and a track's time is kept
+against a hash of that text (see Track times) - so without the copy a release
+had nothing to hash, no signature for any track, and quietly posted no times
+and read no boards, while the same game run from the editor worked perfectly.
+`addons/track_sources` adds the copies. It is an editor plugin, and it has to
+stay switched on in the project settings: an export made without it builds and
+runs and looks fine, and has no leaderboards.
+
+Whether the copies went in can only be seen from inside an export, and an
+exported game will not run a `--script`. `tools/signature_probe.gd` goes in as
+an autoload instead, through an `override.cfg` beside the binary (on macOS,
+`Contents/MacOS` inside the app):
+
+```
+[autoload]
+
+SignatureProbe="*res://tools/signature_probe.gd"
+```
+
+```
+"<exported binary>" --headless -- --sandbox
+Godot --path . --headless --script tools/checks/track_sources.gd
+```
+
+The two lists of signatures have to match line for line. `--sandbox` is not
+optional: an export keeps its files in the same `user://` as the editor, the
+probe is not on the command line for `Sandbox` to notice, and a build that
+cannot read its tracks drops every time in the real record as soon as the
+title screen asks about one. Take the `override.cfg` out again afterwards.
+
 ## Smooth motion
 
 The cars, the cameras and the arrows all move on the physics step, sixty times a
@@ -2863,6 +2895,13 @@ stands; `signature()` is sha256 over the same material and is what a shared
 board is keyed on. The difference matters only when a time leaves the machine
 it was set on: a board has to agree across a Mac, a Windows box and next
 year's Godot, and an engine hash promises none of that.
+
+Both are taken over `source()`, which is the track file where there is one and
+the copy of it an export carries where there is not (see Exported builds). A
+time written down with a fingerprint of 0 was set by a release from before the
+copy existed, which could read no track at all; it is kept and given the
+track's fingerprint as it is now, rather than every tester's times being thrown
+away for a fault that was not theirs.
 
 `adopt()` is `record()` without the announcement. It takes a time that was set
 somewhere else - the same player, on their other machine - and keeps it if it
