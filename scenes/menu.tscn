@@ -9,6 +9,7 @@
 [ext_resource type="PackedScene" path="res://scenes/garage.tscn" id="7_garage"]
 [ext_resource type="PackedScene" path="res://scenes/shop.tscn" id="9_shop"]
 [ext_resource type="Script" path="res://scripts/purse_tally.gd" id="8_purse"]
+[ext_resource type="PackedScene" path="res://scenes/stats.tscn" id="10_stats"]
 
 [node name="Menu" type="Control"]
 anchors_preset = 15
@@ -358,9 +359,19 @@ horizontal_scroll_mode = 0
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="Boards" type="Button" parent="TrackChoice/Page/Panel/Margin/Box"]
+[node name="Pages" type="HBoxContainer" parent="TrackChoice/Page/Panel/Margin/Box"]
 layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Boards" type="Button" parent="TrackChoice/Page/Panel/Margin/Box/Pages"]
+layout_mode = 2
+size_flags_horizontal = 3
 text = "LEADERBOARD"
+
+[node name="Stats" type="Button" parent="TrackChoice/Page/Panel/Margin/Box/Pages"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "STATISTICS"
 
 [node name="Back" type="Button" parent="TrackChoice/Page/Panel/Margin/Box"]
 layout_mode = 2
@@ -379,4 +390,7 @@ visible = false
 visible = false
 
 [node name="ShopScreen" parent="." instance=ExtResource("9_shop")]
+visible = false
+
+[node name="StatsScreen" parent="." instance=ExtResource("10_stats")]
 visible = false

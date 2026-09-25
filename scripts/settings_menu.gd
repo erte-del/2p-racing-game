@@ -7,6 +7,11 @@ extends Control
 ## title screen carries on turning behind the panel and nothing has to be torn
 ## down and rebuilt to come back.
 ##
+## Statistics open from here too, over the same screen, so the lifetime totals
+## can be found from the title and from a paused race alike. The page is the
+## one the track screen opens; it lives inside this scene so it goes wherever
+## the settings go.
+##
 ## The controls sheet is not a written list. It reads the keys straight out of
 ## the input map, so rebinding an action in the project settings changes what
 ## the players are shown - a list typed out here would be wrong the first time
@@ -43,7 +48,9 @@ const CONTROL_ROWS := [
 	$SettingsPage/Panel/Margin/Box/Damage/Row/Off,
 	$SettingsPage/Panel/Margin/Box/Damage/Row/On,
 ]
-@onready var _controls_button: Button = $SettingsPage/Panel/Margin/Box/Controls
+@onready var _controls_button: Button = $SettingsPage/Panel/Margin/Box/Pages/Controls
+@onready var _stats_button: Button = $SettingsPage/Panel/Margin/Box/Pages/Stats
+@onready var _stats_page: StatsMenu = $StatsScreen
 @onready var _close_button: Button = $SettingsPage/Panel/Margin/Box/Close
 @onready var _controls_back: Button = $ControlsPage/Panel/Margin/Box/Back
 @onready var _player_names: Array[Label] = [
@@ -70,6 +77,8 @@ func _ready() -> void:
 	_controls_button.pressed.connect(_show_controls)
 	_close_button.pressed.connect(close)
 	_controls_back.pressed.connect(_show_settings)
+	_stats_button.pressed.connect(_show_stats)
+	_stats_page.closed.connect(_on_stats_closed)
 
 	_fill_controls($ControlsPage/Panel/Margin/Box/Columns/P1/Keys, "p1")
 	_fill_controls($ControlsPage/Panel/Margin/Box/Columns/P2/Keys, "p2")
@@ -97,8 +106,12 @@ func close() -> void:
 
 
 ## Escape backs out one step: off the controls sheet, or off the screen.
+##
+## The statistics page backs out of itself, so it is left the key.
 func _input(event: InputEvent) -> void:
 	if not visible or not event.is_action_pressed("ui_cancel"):
+		return
+	if _stats_page.visible:
 		return
 	get_viewport().set_input_as_handled()
 	if _controls_page.visible:
@@ -113,6 +126,19 @@ func _show_settings() -> void:
 	# Both players share one keyboard and neither has been asked to find the
 	# mouse, so something on the new page always holds focus.
 	_volume.grab_focus()
+
+
+## The settings panel steps aside rather than lying under the statistics, as it
+## does for the controls sheet: one panel showing through another reads as a
+## bug however faint it is.
+func _show_stats() -> void:
+	_settings_page.hide()
+	_stats_page.open()
+
+
+func _on_stats_closed() -> void:
+	_settings_page.show()
+	_stats_button.grab_focus()
 
 
 func _show_controls() -> void:

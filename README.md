@@ -28,6 +28,10 @@ two tables the leaderboards live in, the notes for standing a project up, and
 the two pages a confirmation email needs. The game's half of that is three
 scripts in `scripts/` like any other.
 
+What the game keeps between runs is a handful of autoloads in `scripts/`, one
+file in `user://` each: `GameSettings`, `TrackTimes`, `Progress`, `Stats`,
+`Purse`, `Decals` and `Liveries`, and `Garage` with a folder of its own.
+
 Nothing a player brings into the game is in the repo. Cars they add live in
 `user://cars/`, a folder per car, beside the settings and the times - see
 [Custom cars](#custom-cars). Anything under `tools/` that runs the game keeps
@@ -64,7 +68,9 @@ every frame whether it should be visible and would simply turn itself back on.
 Under Play sit Garage, Shop, Settings and Account, and Account is there only
 when there is a server to talk to. A build with no `backend.cfg` in it does not
 grow a button that cannot do anything - the same reason the Leaderboard button
-on the track page is not always there either.
+on the track page is not always there either. Statistics is not a sixth button
+in this column, which would be a layout change rather than a button; it is in
+the settings, beside Controls, and on the track page beside Leaderboard.
 
 The five are stacked from **54%** of the way down, not from 60% as the four
 were. A button is 52 pixels and the gap under it is ten, so the shop cost the
@@ -673,6 +679,21 @@ The one thing left at a fixed size is the garage's car portraits, which are
 rendered once at 208x136 and kept beside the model (see Custom cars). They are
 drawn into a box that size in the laid-out space, so on a screen bigger than
 1600 wide they are scaled up with everything else.
+
+### Exported builds
+
+`editor/export/convert_text_resources_to_binary` is off, so the scenes go
+into the release exactly as they are in the project. With it on, which is
+Godot's default, the conversion to binary rewrote the root of every page that
+is a scene of its own - settings, garage, shop, account, boards, statistics,
+and the pause screen's pages - from the full-rect anchor preset to the
+top-left one, and wrote that onto each place the menu instances them. Each
+page came out as a 0x0 box in the corner of the window with its panel centred
+on the corner, so a downloaded game opened with the pages hanging off the top
+left and the title screen covered. Running from the editor never converts
+anything, which is why it only showed in a download. The cost is a slightly
+larger pack and slightly slower scene loads, neither of which this game
+notices.
 
 ## Smooth motion
 
@@ -2710,6 +2731,10 @@ looking at one board is nearly always about to look at the next, and a page
 they have to back out of and come back into twenty times is a page they look
 at once.
 
+Beside it, in the same row, is Statistics - see [Statistics](#statistics). It
+is there whether or not the build has a server, since everything on it is kept
+on this machine, so in a build without one it has the row to itself.
+
 The track that was picked travels to the race in `GameSettings.track_file`, the
 same way the chaos choice does, and is not written to disk: it is what was
 picked on the way into this race rather than a preference, and a game that
@@ -2843,6 +2868,138 @@ It writes to a scratch file, so running it does not touch anyone's own record:
 
 ```
 Godot --path . --headless --script tools/checks/track_times.gd
+```
+
+## Statistics
+
+A page of lifetime totals - how far the cars have been driven and for how
+long, how many races were finished and how many won, how many tracks have a
+time, how many coins were picked up, how many cars were wrecked, how many
+resets were asked for - and under them the best time and medal on every
+track. It opens from two places: Statistics beside Controls in the settings,
+which is where a player looking for it by name tries first and which works over
+a paused race as well as on the title, and Statistics beside Leaderboard on the
+track page, where half of the page - the table of times - is already the
+question being asked. The settings carry their own copy of the page inside
+`scenes/settings.tscn`, so it goes wherever the settings go.
+
+The totals are `Stats`, an autoload over `user://stats.cfg`, in
+`scripts/stats.gd`. It is kept apart from `GameSettings` because a total is
+something that happened rather than something chosen, and apart from
+`TrackTimes` because a total is never beaten, only added to. One section,
+`[totals]`, not a section per thing as `TrackTimes` and `Progress` do it:
+those grow a section per track or block, and this is a fixed handful of
+counters that grows by nothing. No fingerprint either - a lap time stops
+meaning anything when its track is edited, and a distance does not.
+
+The times are not copied in. The table reads `TrackTimes.best()` and
+`Medal.earned()` every time the page is drawn, the way the medal gate does, so
+there is no second copy of a best time to disagree with the first. A time on a
+track that has since been edited comes back as no time, silently, from the same
+call, and shows as a dash - which is right, because it was set on a road that
+no longer exists. Locked tracks keep their row and their name, so the table
+does not change shape as a player unlocks things, and the acrobatic tracks are
+grouped under their own heading as they are on the select screen.
+
+### What a number means
+
+Each of these was settled before anything counted, because a question left
+until then gets answered by whichever branch was easiest to reach.
+
+- **A race is completed when a result is announced.** A finish, a win, a
+  loss, a breakdown, a draw. A run quit from the pause screen or restarted
+  announced nothing and completes nothing.
+- **A breakdown is completed, and a wreck.** It ended in a result, just a bad
+  one. A count that only moves when the player succeeds cannot tell "I have
+  played a lot" from "I am good".
+- **A win is beating somebody**: the bot, or the other car on a two-player
+  course - including by being the car that did not break down. A solo time
+  trial has nobody to beat and is never a win; what it earns is a medal, and
+  that is counted as a medal. The win rate is taken over the races that could
+  have been won, never over every race finished, or a player who mostly races
+  the clock would read as someone who mostly loses. It is worked out on the
+  page and never stored, and with none of those races yet it is a dash.
+- **A two-player course is one race and at most one win**, whichever half of
+  the screen took it. There is one record on this machine, for the reason
+  there is one purse.
+- **A wreck is a car worn to nothing**, and only a car a person drove: the
+  bot's car breaking is the player's win. Both cars breaking on a split screen
+  is two wrecks. Contact that took condition off is not a wreck, and is not
+  counted at all yet - one long scrape along a barrier would need a rule of its
+  own. Resets are counted beside wrecks rather than inside them, and only when
+  somebody pressed the key: the bot asking to be put back goes down the same
+  path in the race, and is not counted.
+- **With damage off nothing is ever wrecked.** Damage is off by default, so the
+  row is greyed with a line saying why, rather than a zero with no reason.
+- **Distance is distance raced**, and only while the race clock runs - not on
+  the line before GO, and not on a finished course, where a player idling
+  could otherwise farm kilometres. It is the player's distance and never the
+  bot's; on a split screen it is both cars', since both were driven, so it is
+  never "how far player one has gone". Time driven is counted once per race,
+  however many cars were in it.
+- **An abandoned run keeps its distance and nothing else**, for the reason a
+  coin picked up on it stays in the purse: it was driven.
+- **The endless course counts.** Every course crossed is a completed race, so
+  that count climbs steadily there, and nothing on it is ever a win.
+- **Chaos counts.** A chaos race is still driving.
+- **Coins earned is coins ever picked up**, counted beside the purse at the
+  moment one is driven through. It is not what is in the purse: the two part
+  company the first time anything is bought, and the purse is the shop's number.
+- **The title screen counts nothing.** Its moving backdrop is the two-player
+  scene in attract mode, and every call into `Stats` there is gated on that
+  mode, not on its cars happening to be parked. Coins are the exception: like
+  the purse, they are kept off the title only by its cars being parked, and
+  the check below watches that too.
+- **Nothing goes to the server.** A time means the same thing on every
+  machine; a lifetime total does not, and syncing one would need a rule for
+  merging every counter.
+
+Distances are metres under a kilometre and kilometres to one decimal after.
+There are no miles, because the game has no units setting to follow.
+
+### Writing it down
+
+Every call saves what it changed, except distance, which moves every physics
+step. Sixty writes a second would grind the disk for nothing, so distance and
+time driven are held in memory and flushed when a result is announced, when
+the pause screen opens, when a run is quit or restarted, from the race scene's
+`_exit_tree()`, when the window is asked to close, and after every five
+seconds of driving whatever else happens. A hard kill loses at most those five
+seconds. A damaged file loads as zeros wherever it makes no sense - a missing
+key, a word, a negative, a nan - and never as more wins than races, so nothing
+a file says can put `-nan KM` on the page.
+
+### Checking it
+
+`tools/checks/stats.gd` is the store on its own: a fresh profile is all zeros,
+each call moves what it names and nothing else, the totals survive being read
+back, `forget()` clears them, damaged files load as zeros, and held distance is
+on the disk after each flush the store owns.
+
+```
+Godot --path . --headless --script tools/checks/stats.gd
+```
+
+`tools/checks/stats_race.gd` drives real races and says what each one should
+have moved: a time trial to the flag, one broken down, the reset key against
+the bot's reset, a run restarted and one left halfway, a bot race won, lost and
+broken down all three ways, two-player courses won, broken and drawn - and the
+title screen's backdrop, left alone for four seconds and then let go with the
+throttles held, counting nothing either time.
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/stats_race.gd
+```
+
+`tools/checks/stats_shot.gd` walks to the page from the track screen and
+photographs it empty, full, and with damage on, then backs out with Escape and
+checks the keyboard landed back on the button - then does the same from the
+settings on the title, where Escape has to step back to the settings first and
+only close them on the second press. `screen_fit.gd` opens the page
+both empty and full, since the full one is the taller.
+
+```
+Godot --path . --script tools/checks/stats_shot.gd -- /tmp/shots
 ```
 
 ## Accounts

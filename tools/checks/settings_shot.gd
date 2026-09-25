@@ -24,7 +24,7 @@ func _init() -> void:
 			"SettingsPage/Panel/Margin/Box/Volume/Row/Value").text)
 	_shot(out, "settings")
 
-	settings.get_node("SettingsPage/Panel/Margin/Box/Controls").emit_signal("pressed")
+	settings.get_node("SettingsPage/Panel/Margin/Box/Pages/Controls").emit_signal("pressed")
 	await _settle()
 	for player in ["P1", "P2"]:
 		var keys: GridContainer = settings.get_node(

@@ -89,7 +89,7 @@ func _check(window: Vector2i, laid_out_least: Vector2) -> int:
 		await process_frame
 
 	for named in ["SettingsScreen", "AccountScreen", "GarageScreen", "LeaderboardScreen",
-			"ShopScreen"]:
+			"ShopScreen", "StatsScreen"]:
 		var screen: Node = menu.get_node(named)
 		if named == "GarageScreen":
 			screen.call("open", 2)
@@ -113,6 +113,12 @@ func _check(window: Vector2i, laid_out_least: Vector2) -> int:
 			screen.call("_show_tab", 0)
 			for i in 5:
 				await process_frame
+		# The statistics page is two pages in one: a line saying nothing has
+		# been driven yet, and eight totals with a note under them. The second
+		# is the taller, and a fresh sandbox only ever shows the first, so it is
+		# given something to count - in a scratch file, thrown away after.
+		if named == "StatsScreen":
+			faults += await _stats_full_fits(screen, laid_out)
 		screen.call("close")
 		for i in 5:
 			await process_frame
@@ -142,6 +148,28 @@ func _check(window: Vector2i, laid_out_least: Vector2) -> int:
 	pause.call("close")
 	for i in 5:
 		await process_frame
+	return faults
+
+
+## The statistics page with every total showing and the damage note under
+## them, which is as tall as it gets.
+func _stats_full_fits(screen: Node, laid_out: Vector2) -> int:
+	var stats: Node = root.get_node(^"/root/Stats")
+	var settings: Node = root.get_node(^"/root/GameSettings")
+	var kept: String = stats.save_path
+	var damage: bool = settings.damage
+	stats.save_path = Sandbox.path("user://stats_fit_check.cfg")
+	settings.damage = false
+	stats.add_distance(12345.0, 600.0)
+	stats.race_finished(true, true)
+	for i in 10:
+		await process_frame
+	var faults := _fits("StatsScreen, with totals", screen, laid_out)
+	stats.forget()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(stats.save_path))
+	stats.save_path = kept
+	stats.load_stats()
+	settings.damage = damage
 	return faults
 
 

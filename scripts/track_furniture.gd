@@ -180,6 +180,8 @@ var _coins: Array[Dictionary] = []
 ## Where the coins go, found off the tree the first time one is taken. See
 ## `_the_purse`.
 var _purse: Node
+## The lifetime totals, found the same way and for the same reason.
+var _stats: Node
 
 
 ## Lay out the furniture for a course.
@@ -619,6 +621,14 @@ func _on_coin_entered(body: Node3D, index: int) -> void:
 	var purse := _the_purse()
 	if purse != null:
 		purse.bank()
+	# Counted beside the bank rather than off `Purse.changed`, which fires when
+	# something is bought as well. Here, it is on abandoned runs for free, as
+	# the purse already is. There is no title-screen gate of its own, as there
+	# is none on the purse: the backdrop's cars are parked, and the check in
+	# stats_race.gd watches this count to prove they stay that way.
+	var stats := _the_stats()
+	if stats != null:
+		stats.coins_collected(1)
 	coin_taken.emit()
 	_play_the_pickup(coin)
 
@@ -634,6 +644,13 @@ func _the_purse() -> Node:
 	if not is_instance_valid(_purse):
 		_purse = get_tree().root.get_node_or_null(^"/root/Purse")
 	return _purse
+
+
+## The lifetime totals, found off the tree for the reason `_the_purse` gives.
+func _the_stats() -> Node:
+	if not is_instance_valid(_stats):
+		_stats = get_tree().root.get_node_or_null(^"/root/Stats")
+	return _stats
 
 
 ## The coin lifting and fading, with a small number going up with it.

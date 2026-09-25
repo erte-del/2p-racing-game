@@ -19,6 +19,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 GameSettings="*res://scripts/game_settings.gd"
 TrackTimes="*res://scripts/track_times.gd"
 Progress="*res://scripts/progress.gd"
+Stats="*res://scripts/stats.gd"
 Backend="*res://scripts/backend.gd"
 Leaderboard="*res://scripts/leaderboard.gd"
 Garage="*res://scripts/garage.gd"
@@ -36,6 +37,10 @@ window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+
+[editor]
+
+export/convert_text_resources_to_binary=false
 
 [input]
 

@@ -290,7 +290,11 @@ func _ready() -> void:
 ## hand. The driver goes first: the car holds the driver and the driver holds the
 ## car, and the two cars hold each other, and a knot that only comes undone when
 ## the whole scene does is a knot that outlives the scene.
+##
+## The session's driving is flushed on the way out as well, so closing the
+## window or leaving mid-race does not lose it.
 func _exit_tree() -> void:
+	Stats.flush()
 	if _bot == null:
 		return
 	_bot.driver = null
@@ -400,6 +404,11 @@ func _physics_process(delta: float) -> void:
 
 	_time += delta
 	_clock.text = RaceClock.format(_time)
+	# Only while the clock runs, so a car driven about on the line or on a
+	# finished run cannot farm kilometres. The player's car and never the bot's:
+	# nobody drove the bot. Speed without its sign, because reversing out of a
+	# hedge is driving too.
+	Stats.add_distance(absf(_car.speed()) * delta, delta)
 	# Before the cars move, so what they drive into this step is where the
 	# clock says it is. The bot is told for the same reason the track is: the
 	# traps run on the race clock, and a bot that does not know the time drives
@@ -408,6 +417,9 @@ func _physics_process(delta: float) -> void:
 	if _bot_driver != null:
 		_bot_driver.race_time = _time
 	if Input.is_action_just_pressed("p1_reset"):
+		# Counted here, at the key, rather than in _back_to_checkpoint: the bot
+		# goes down that same path, and the bot asking is not the player asking.
+		Stats.reset_taken()
 		_back_to_checkpoint()
 		return
 	# The bot asking to be put back is the bot pressing the key, and it goes
@@ -497,6 +509,7 @@ func _on_decals_changed(_id: String) -> void:
 ## which is where the menu opens anyway, since nothing has cleared the track
 ## that is still chosen.
 func _open_pause() -> void:
+	Stats.flush()
 	_focus_before_pause = get_viewport().gui_get_focus_owner()
 	if _endless:
 		var what := "ENDLESS COURSE"
@@ -518,7 +531,10 @@ func _take_the_keyboard_back() -> void:
 	_focus_before_pause = null
 
 
+## A run given up counts as nothing but the driving in it, and the driving is
+## kept on purpose, for the reason a coin picked up on it is: it was driven.
 func _on_pause_quit() -> void:
+	Stats.flush()
 	get_tree().change_scene_to_file(menu_scene)
 
 
@@ -528,8 +544,12 @@ func _on_pause_quit() -> void:
 ## a retry: the track is not rebuilt, because it is the same track and
 ## rebuilding it would cost a second of watching a road appear that was
 ## already there.
+##
+## A run restarted halfway announced nothing, so it completes nothing; only its
+## driving is kept, as it is for a run quit from the pause screen.
 func _restart() -> void:
 	_running = false
+	Stats.flush()
 	_hint.show()
 	_result.hide()
 	_choice.hide()
@@ -621,12 +641,18 @@ func _finish() -> void:
 	_badge.show_medal(Medal.NONE)
 
 	if _endless:
+		# Every course crossed on the endless one is a completed race, which is
+		# why the count climbs steadily there. Never a win: nobody was beaten.
+		Stats.race_finished(false, false)
 		await _and_on_to_the_next()
 		return
 
 	# Offered to the record before anything is said about it, so what appears
 	# on the screen is what was actually written down.
 	var beaten := TrackTimes.record(_track_file, _time)
+	# A time trial is completed and never won - it has nobody to beat. What it
+	# earns instead is a medal, and that is counted as a medal.
+	Stats.race_finished(false, false)
 
 	# A run that earned nothing says so rather than leaving the line blank.
 	# Silence where the medal goes reads as a screen that has not finished
@@ -672,6 +698,9 @@ func _finish() -> void:
 ## car is left where it broke, in the air if that is where it was.
 func _break_down() -> void:
 	_running = false
+	# Completed, and a wreck. It ended in a result, just a bad one.
+	Stats.race_finished(false, false)
+	Stats.wrecked()
 	_car.frozen = true
 	_clock.text = RaceClock.format(_time)
 	_result_time.text = RaceClock.format(_time)
@@ -810,8 +839,13 @@ func _track_targets() -> Vector3:
 # --- winning and losing a bot race --------------------------------------
 
 ## The player got there first.
+##
+## Counted here and in its neighbours rather than in _write_the_win_down, which
+## is about Progress opening a block. The two are not the same question: a draw
+## is a completed race that is neither.
 func _won_the_race() -> void:
 	_stop_the_race(true)
+	Stats.race_finished(true, true)
 	_write_the_win_down()
 	_say_who_won("YOU WIN", "BY %s" % _how_far_back(_bot), Color.WHITE)
 
@@ -831,6 +865,7 @@ func _write_the_win_down() -> void:
 ## The bot did.
 func _lost_the_race() -> void:
 	_stop_the_race(true)
+	Stats.race_finished(true, false)
 	_say_who_won("THE BOT WINS", "BY %s" % _how_far_back(_car),
 		_condition.warning_colour)
 
@@ -842,8 +877,15 @@ func _lost_the_race() -> void:
 ##
 ## The cars are left where they broke, in the air if that is where they were, for
 ## the reason _break_down gives.
+##
+## Each of the three counts differently, and the draw is the one that gets
+## forgotten: a completed race, the player's wreck, and no win. The bot's car
+## breaking is never a wreck - nobody was driving it.
 func _bot_broke_down() -> void:
 	_stop_the_race(false)
+	Stats.race_finished(true, _bot.is_broken() and not _car.is_broken())
+	if _car.is_broken():
+		Stats.wrecked()
 	if _car.is_broken() and _bot.is_broken():
 		_say_who_won("DRAW", "BOTH CARS BROKEN", _condition.warning_colour)
 	elif _bot.is_broken():

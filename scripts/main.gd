@@ -280,6 +280,12 @@ func _physics_process(delta: float) -> void:
 		return
 	_race_time += delta
 	_show_clock(RaceClock.format(_race_time))
+	# Both cars' distance, since a person drove each - so the total is never
+	# "how far player one has driven". The time once, because it is one race.
+	# Only while racing, and never behind the title: the return at the top of
+	# this function is what keeps the backdrop out, whatever its cars are doing.
+	Stats.add_distance(
+		(absf(_car1.speed()) + absf(_car2.speed())) * delta, delta)
 	# Before the cars move, so what they drive into this step is where the
 	# clock says it is.
 	_track.set_race_time(_race_time)
@@ -291,6 +297,7 @@ func _physics_process(delta: float) -> void:
 	var marks := _track.checkpoint_offsets()
 	for i in _cars.size():
 		if Input.is_action_just_pressed(_cars[i].input_prefix + "_reset"):
+			Stats.reset_taken()
 			_reset_to_checkpoint(i)
 			continue
 		_losts[i].check(delta, offsets[i])
@@ -325,6 +332,7 @@ func _input(event: InputEvent) -> void:
 ## it was picked from - which is where the menu opens anyway, since nothing has
 ## cleared the track that is still chosen.
 func _open_pause() -> void:
+	Stats.flush()
 	if _endless:
 		var what := "ENDLESS COURSE"
 		if _chaos != null:
@@ -343,8 +351,12 @@ func _open_pause() -> void:
 ## Either way this counts as a new countdown, which is what stops a result
 ## screen that is still waiting out its own timer from starting a third race
 ## over the top of this one.
+##
+## A course restarted halfway announced nothing and completes nothing. Its
+## driving is kept, as it is for one quit from the pause screen.
 func _restart() -> void:
 	_racing = false
+	Stats.flush()
 	_show_result("")
 	_countdown_run += 1
 	if _endless:
@@ -357,7 +369,21 @@ func _restart() -> void:
 
 
 func _on_pause_quit() -> void:
+	Stats.flush()
 	get_tree().change_scene_to_file(menu_scene)
+
+
+## The session's driving is written down on the way out, so leaving mid-race or
+## closing the window does not lose it.
+##
+## Gated on `attract_mode` rather than on the cars happening to stand still.
+## The title's backdrop is this scene, and a player who leaves the game on the
+## title must not come back to a thousand kilometres - whatever a later change
+## to the backdrop does to its cars.
+func _exit_tree() -> void:
+	if attract_mode:
+		return
+	Stats.flush()
 
 
 ## Put each player in the car they picked.
@@ -518,7 +544,11 @@ func _new_course(course_seed: int) -> void:
 
 
 ## Show who won and how long they took, then swap in a fresh course.
+##
+## One race and one win, whichever half of the screen took it: there is one
+## record on this machine, not one each.
 func _finish_course(winner: int) -> void:
+	Stats.race_finished(true, true)
 	_end_course("%s WINS\n%s" % [
 		_colour_name(_cars[winner].body_color), RaceClock.format(_race_time)])
 
@@ -539,7 +569,12 @@ func _broken_cars() -> Array[int]:
 ## drive the rest of it: there is nobody left to race. Both breaking together is
 ## a draw, and says so, rather than handing it to whichever car the physics
 ## happened to move first.
+##
+## Every broken car is a wreck, because a person was in each. One car broken is
+## also a win, for the car still going; both is two wrecks and a draw.
 func _break_down(broken: Array[int]) -> void:
+	Stats.race_finished(true, broken.size() < _cars.size())
+	Stats.wrecked(broken.size())
 	if broken.size() >= _cars.size():
 		_end_course("DRAW\nBOTH CARS BROKEN")
 		return

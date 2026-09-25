@@ -174,8 +174,10 @@ const WON_COLOUR := Color(0.44, 0.85, 0.52)
 @onready var _settings_screen: SettingsMenu = $SettingsScreen
 @onready var _account_button: Button = $Account
 @onready var _account_screen: AccountMenu = $AccountScreen
-@onready var _boards_button: Button = $TrackChoice/Page/Panel/Margin/Box/Boards
+@onready var _boards_button: Button = $TrackChoice/Page/Panel/Margin/Box/Pages/Boards
 @onready var _boards_screen: LeaderboardMenu = $LeaderboardScreen
+@onready var _stats_button: Button = $TrackChoice/Page/Panel/Margin/Box/Pages/Stats
+@onready var _stats_screen: StatsMenu = $StatsScreen
 @onready var _mode_choice: Control = $ModeChoice
 @onready var _alone_button: Button = $ModeChoice/Page/Panel/Margin/Box/Players/Alone
 @onready var _together_button: Button = $ModeChoice/Page/Panel/Margin/Box/Players/Together
@@ -239,6 +241,8 @@ func _ready() -> void:
 	_account_screen.closed.connect(_on_account_closed)
 	_boards_button.pressed.connect(_on_boards_pressed)
 	_boards_screen.closed.connect(_on_boards_closed)
+	_stats_button.pressed.connect(_stats_screen.open)
+	_stats_screen.closed.connect(_on_stats_closed)
 	# A time pulled down off the server is a time this screen is showing the
 	# old version of, so the grid is rebuilt when the sync moves one.
 	Leaderboard.times_changed.connect(_on_times_changed)
@@ -252,6 +256,7 @@ func _ready() -> void:
 	# anything, or a board that is always empty.
 	_account_button.visible = Leaderboard.available()
 	_boards_button.visible = Leaderboard.available()
+	# Statistics stay either way: they are this machine's, and need no server.
 	_fill_the_track_grid()
 	# The slots are plain Controls, so nothing lays their contents out but this.
 	_flavour_slot.resized.connect(_fit_flavour)
@@ -1050,7 +1055,7 @@ func _input(event: InputEvent) -> void:
 		return
 	if _shop_screen.visible:
 		return
-	if _boards_screen.visible:
+	if _boards_screen.visible or _stats_screen.visible:
 		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
@@ -1133,6 +1138,10 @@ func _on_boards_closed() -> void:
 	# the grid behind them would still be showing the old one.
 	_refresh_the_track_grid()
 	_boards_button.grab_focus()
+
+
+func _on_stats_closed() -> void:
+	_stats_button.grab_focus()
 
 
 ## A sync moved a record. Only the track grid shows times, and only when it is

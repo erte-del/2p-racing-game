@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/settings_menu.gd" id="1_settings"]
 [ext_resource type="Theme" path="res://scenes/menu_theme.tres" id="2_theme"]
+[ext_resource type="PackedScene" path="res://scenes/stats.tscn" id="3_stats"]
 
 [node name="Settings" type="Control"]
 anchors_preset = 15
@@ -170,9 +171,19 @@ autowrap_mode = 3
 theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
 theme_override_font_sizes/font_size = 18
 
-[node name="Controls" type="Button" parent="SettingsPage/Panel/Margin/Box"]
+[node name="Pages" type="HBoxContainer" parent="SettingsPage/Panel/Margin/Box"]
 layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Controls" type="Button" parent="SettingsPage/Panel/Margin/Box/Pages"]
+layout_mode = 2
+size_flags_horizontal = 3
 text = "CONTROLS"
+
+[node name="Stats" type="Button" parent="SettingsPage/Panel/Margin/Box/Pages"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "STATISTICS"
 
 [node name="Close" type="Button" parent="SettingsPage/Panel/Margin/Box"]
 layout_mode = 2
@@ -247,3 +258,6 @@ theme_override_constants/v_separation = 8
 [node name="Back" type="Button" parent="ControlsPage/Panel/Margin/Box"]
 layout_mode = 2
 text = "BACK"
+
+[node name="StatsScreen" parent="." instance=ExtResource("3_stats")]
+visible = false
