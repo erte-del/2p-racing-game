@@ -167,23 +167,19 @@ var track_chaos_seed := 0
 ## along it - above one curves the foot into the road and leaves the steepest
 ## part at the lip, which is where the angle does the work.
 ##
-## The curve is held at 1.2, and the ceiling on it is a fact about the car
-## rather than about taste. The road is sampled every `TrackLayout.step` (2.5 m)
-## and the car's collision box is level - it never pitches to follow the road -
-## so climbing a ramp is a flat-bottomed box being pushed up a staircase of
-## facets. Above about 22 degrees on a facet the box's front face is buried
-## deep enough in the one ahead that the depenetration cancels the whole of the
-## step's forward motion, and the car stops dead reading full speed: on the
-## floor, one contact, nothing moving.
+## The curve is 1.2, and nothing about the car holds it there any more. It was
+## dropped from 1.5 to stop cars jamming partway up a ramp, on the belief that
+## the top facets were too steep for a level box to climb. That was wrong. The
+## jam was the physics taking a flat seam in the road's own mesh for a wall,
+## which Car.seam_lift describes and now steps over. It depends on where a
+## corner of the car's floor comes to rest rather than on any angle, so every
+## curve has it at some speed. Driven at one ramp from 15 to 45 m/s in steps of
+## half a metre a second, a straight wedge jammed at 25 and 1.5 at 34.5 and
+## 42.5; 1.2 was clean there, and jammed instead on the ramp to Freefall's lift,
+## met at 30 m/s by a car pulling away from a standstill below it.
 ##
-## At 1.5 the top facet was 25.6 degrees and the one below it 23.4, and both
-## The Wringer and Long Haul jammed there - The Wringer never finished at all.
-## At 1.2 no facet is over 21.3 degrees and both are clean. The foot still
-## curves out of the road, which is what 1.0 would give up.
-##
-## This is the same staircase on every jump on every track, so the margin does
-## not vary by track - but it is thin, and it is `ramp_rise / ramp_length` that
-## sets it. Changing either wants the slopes worked out again.
+## So the curve is free to go back to 1.5. That changes the road under every
+## lap already set over a jump, though, so it is a change for a release to make.
 @export var ramp_length := 15.0
 @export var ramp_rise := 5.0
 @export var ramp_curve := 1.2
@@ -307,6 +303,9 @@ func _ready() -> void:
 	# is what banks a checkpoint and crosses the finish; see Car.ROAD_GROUP.
 	$RoadBody.add_to_group(Car.ROAD_GROUP)
 	$RailBody.add_to_group(Car.ROAD_GROUP)
+	# The surface on its own is nothing but floor, so a wall it reports is one
+	# the car may drive through; see Car.seam_lift. The rails are real walls.
+	$RoadBody.add_to_group(Car.SURFACE_GROUP)
 	# Passed out rather than reached in for: whoever is running the race holds
 	# a Track, not the furniture hanging off it, and the coins are rebuilt from
 	# nothing on every course - a listener that had to find them again after

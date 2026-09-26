@@ -2145,42 +2145,52 @@ climbs. Taking the climb from the last step alone reads that settling as the
 launch and throws the car at the ground - which is exactly what it did. It is
 kept as a peak that fades at `climb_memory` instead.
 
-**The ramp cannot meet the road at its full angle.** A wedge makes a crease,
-and a car driving at one catches its front edge on it: at some speeds it
-climbed a little way and then jammed there and stopped dead, which is how the
-same jump was cleared at 19.5 m/s and 38.8 m/s and impassable at 25. The ramp
-comes up out of the road as a curve (`ramp_curve`), so it has no edge at the
-foot to catch on.
+**And the road has walls in it that are not there.** The road's collision is
+a mesh of triangles, two to every 2.5 m of road, with a seam corner to corner
+across each pair that is perfectly flat. The car's collision box is level - it
+never pitches to follow the road - so on a slope it touches only at the front
+corners of its floor. When one of those corners comes to rest within a
+millimetre of a seam, Godot's box-against-triangle test can take the seam for
+the edge of a wall standing straight up along it, and report that as the
+contact: a normal lying flat, pointing back at the car and turned off its
+heading by the angle of the seam, about nine degrees on a 16 m road. A car on
+the ground that meets a wall has its step cancelled and its speed along the
+wall taken away. Next step it is in the same place going the same way, so it
+stops again, and it stays there for good: on the floor, velocity zero, still
+reading full speed at full throttle.
 
-**And it cannot be too steep at the lip either,** which is the same fault at
-the other end of the ramp and took much longer to find. The road is sampled
-every 2.5 m and the car's collision box is level - it never pitches to follow
-what it is standing on - so climbing a ramp is a flat-bottomed box being pushed
-up a staircase of facets. Its bottom rests on one facet while its front face is
-buried in the next, and above about 22 degrees on a facet that burial is deep
-enough that pushing the box out of it cancels the whole of the step's forward
-motion. The car stops dead: on the floor, one contact, velocity zero, still
-reading full speed and still at full throttle.
+It took three goes to find, because it looks like a fault in the ramp. It
+depends on where a corner lands, which depends on the speed a car arrives at,
+so it shows up at one speed and not at the next. A straight wedge jammed at 25
+m/s and was cleared at 19.5 and at 38.8, and that was put down to the crease
+at its foot, so the ramp was curved up out of the road (`ramp_curve` 1.5). Then
+The Wringer's bot jammed 8.4 m up its first jump every lap - 1:33.82 against a
+1:12 gold, one reset to get round at all - and that was put down to the top
+facets being too steep for a level box, so the curve came down to 1.2. Then
+Freefall jammed 9.3 m up the ramp to its lift, on a facet of 19.7 degrees, when
+the key driver pulled away from its stop 50 m short and met the ramp at 30
+m/s. Every one of those was the seam. Driven at one ramp from 15 to 45 m/s in
+steps of half a metre a second, a wedge jams at 25, 1.2 is clean and 1.5 jams
+at 34.5 and 42.5; with the fix, none of them jams at any of those speeds. Most
+cars never meet it, because they skip into the air at the foot of a ramp and
+are gone before the steep part. A car that arrives glued to the road stays on
+the surface the whole way up and crosses a seam with each front corner on
+every facet.
 
-At `ramp_curve` 1.5 the top facet was 25.6 degrees and the one below it 23.4,
-and both were over the line. It did not show up everywhere because most cars
-skip into the air at the foot of a ramp and are gone before the steep part -
-but a car that arrives glued to the road stays on the surface the whole way up
-and meets it. The Wringer's first jump is at the lowest point of that course,
-reached flat and fast off a descent, and the bot jammed 8.4 m up it every
-single lap: 1:33.82 against a 1:12 gold, one reset to get round at all, and
-+30.3% where the rest of the field was +3%. Long Haul had begun to meet the
-same thing at its jump at 1450 m, after a change seven hundred metres earlier
-altered how the car arrived.
+So the car does not let the road stop it. Only the road's surface is in
+`Car.SURFACE_GROUP` - the rails, the platforms and the other car are walls that
+are really there - and when a grounded step comes back stopped by a wall from
+that group, it is taken again from `seam_lift` (5 cm) higher. That is far more
+than the millimetre the false wall lives in and far less than anything that
+could be seen, and the car is snapped back down onto the road inside the same
+step. The same seam also stops a car for a single step on gentler slopes,
+which it gets out of by itself; with the lift there is no step to lose.
 
-`ramp_curve` is **1.2**, where no facet is over 21.3 degrees. Both tracks are
-clean, The Wringer comes home in 1:15.05 (+4.2%) with no reset, and the bot
-needs putting back nowhere on any of the twenty. The foot still curves out of
-the road, which is what dropping to a straight 1.0 would have given up. The
-margin is thin and it is worth knowing why it is thin: the staircase is the
-same on every jump on every track, so it does not vary by track, but it is
-`ramp_rise / ramp_length` that sets it and changing either wants the facet
-slopes worked out again.
+The ramp still curves up out of the road, so it has no crease at the foot and
+its steepest part is at the lip, where the angle does the work. It is at 1.2
+rather than the 1.5 it was designed at only because that is the road every
+time over a jump since has been set on: going back is free as far as the car
+is concerned, but it is a change to the road, and that is a release's call.
 
 A fourth was found later, by reading the car rather than by driving it.
 Nothing wore the climb away while a car was in the air, so it came down still
@@ -3893,9 +3903,9 @@ changes direction most.
 **The Wringer used to be the outlier at +30.3%,** and it was not the bot. The
 car was jamming partway up the track's first ramp - on the floor, reading full
 speed, going nowhere - and needed putting back on the road to get round at all.
-The cause was the ramp's own profile and it is written up under **Jumps**; with
-it fixed The Wringer comes in at +4.2% and Long Haul, which had begun to meet
-the same thing, at -1.1%. The average was +3.0% with that one track in it.
+The cause was the physics reading a flat seam in the road as a wall, and it is
+written up under **Jumps**; with it fixed The Wringer comes in at +4.2% and
+Long Haul, which had begun to meet the same thing, at -1.1%. The average was +3.0% with that one track in it.
 
 **The driver comes after the grid,** not with the car. A plan's practice laps set
 off from wherever the car is standing when the plan begins, so the car has to be

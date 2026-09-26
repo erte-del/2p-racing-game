@@ -95,7 +95,7 @@ var ramp_rise := 5.0
 ## How the rise is spread along the ramp. One is a straight wedge; above one
 ## curves the foot into the road and leaves the steepest part at the lip,
 ## which is where the angle actually does any work.
-var ramp_curve := 1.2          ## see Track.ramp_curve for why not 1.5
+var ramp_curve := 1.2          ## see Track.ramp_curve for why 1.2
 ## The hole. Two things pin this from either side. It has to be short enough
 ## that a car at the slowest speed the game can roll still sails over it,
 ## since falling in costs a respawn and a jump nobody can clear is not a risk
@@ -420,12 +420,11 @@ func _profile(piece: Piece, along: float) -> float:
 	if piece.kind == JUMP:
 		var at := along * piece.length
 		if at < ramp_length:
-			# Eased at the foot and steepest at the lip. A ramp that meets the
-			# road at its full angle is a crease, and a car driving at one is
-			# a long flat box catching its front edge on it: it climbs a
-			# little way and then jams there and stops dead. Coming up out of
-			# the road instead gives it nothing to catch on, and putting the
-			# steepest part at the top is what a ramp should be doing anyway.
+			# Eased at the foot and steepest at the lip, so it comes up out of
+			# the road rather than standing on it with a crease, and puts the
+			# steepest part at the top, which is what a ramp should be doing.
+			# The crease was once blamed for a car jamming partway up a
+			# wedge; that was the seam Car.seam_lift describes, not the crease.
 			return ramp_rise * pow(at / ramp_length, ramp_curve)
 		var hole := gap_of(piece)
 		if at < ramp_length + hole:
