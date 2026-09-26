@@ -173,7 +173,8 @@ func _check_the_checker(track: Track) -> void:
 			[[200.0, [-0.3, 0.3], 0.7]]],
 		# At GO both rest on the left and the way past is a straight line.
 		# Once the first has crossed and the second has not, the ways past are
-		# on opposite sides of the middle, 1.6 m apart, with 5 m to cross in.
+		# on opposite sides of the middle, 1.6 m apart, with 5 m of road between
+		# the rows to cross in.
 		["two traps whose ways past only line up where they rest",
 			[[200.0, [-0.45, 0.45], 0.55], [207.4, [-0.45, 0.45], 0.55]]],
 		["two traps standing beside each other",

@@ -1802,8 +1802,40 @@ at a single row:
   spaced by that, times `dodge_margin` (1.4), because a player also has to see
   the row and decide before any of the turning starts.
 
-`dodge_radius` (16 m) and `clear_lane` are the car's own numbers - its widest
-turning circle and its width plus room. Change the car and these follow.
+The shift d is how far the car's middle has to move: from the nearest place
+the whole car fits through one gap to the nearest place it fits through the
+next. That is the room between the two gaps plus the car's own width, or the
+car's width less however much the gaps overlap. Two gaps that only touch still
+ask for 2.06 m of crossing, since a car does not fit through a point, and only
+gaps overlapping by at least a car's width can be driven through in a straight
+line. It used to be measured between the gaps themselves, as if the car had no
+width, which passed two rows whose gaps met at a single point with no road
+between them at all.
+
+The run L is counted from the middle of one row to the middle of the next,
+not from where one ends to where the next begins. Weaving from gap to gap a
+car is square at the top of each swing, and a row is short enough to put that
+in the middle of it: over half of a 2.4 m row, a car turning at a 16 m radius
+comes back across the road by less than 5 cm. Counted from the ends, rows 20 m
+apart would be given 1.4 m less crossing than the car has.
+
+Either change alone would have moved the rule a long way from what the tracks
+were written against. Measured for the car but between the ends, Rattlesnake's
+third run lets through nothing wider than 0.68 m, and the bot drives it every
+lap. Together they are the arithmetic the car actually does, and every track
+passes it every way it can be driven. The tightest place anywhere is that same
+run: five rows 20 m apart, each gap 4.16 m from the next across an 8 m road,
+which lets through a car up to 2.09 m wide - 3 cm to spare. The track says it
+is very close to the arithmetic that says a car can get across at all, and it
+is.
+
+`dodge_radius` (16 m), `clear_lane` and `car_width` are the car's own numbers -
+its widest turning circle, its width plus room, and its width, read off the box
+it collides with. Change the car and these follow.
+
+Rows the Hard way of driving a track adds are held to the same rule for
+something `clear_lane` wide rather than for the car; see
+[Track variants](#track-variants).
 
 Rows are built to pass those rules rather than rolled and rejected: where a row
 may stand is not known until it is known what it blocks, so each one is placed,
@@ -2019,8 +2051,9 @@ That is the worst case rather than whatever the clock actually lines up, on
 purpose: a player slower or faster than the course expects meets a different
 pair of places, and a road that is only driveable at the right speed is a road
 some players cannot get down. The same goes for a sweeper whose ways past only
-line up where the two rest; a pair that is fine at GO can be 1.6 m apart with
-5 m to cross in once one of them has moved, and that one needs 22.9 m.
+line up where the two rest; a pair 7.4 m apart, middle to middle, that is fine
+at GO can have its ways past 1.6 m apart once one of them has moved, and the
+worst of their places needs 25.6 m.
 
 Two traps may not stand beside each other along the road, because the checks
 follow one trap at a time with everything else where it stands at GO. A trap
@@ -2102,7 +2135,7 @@ Godot --path . --headless --fixed-fps 60 --script tools/checks/trap_layout.gd
 ```
 
 On the tuned numbers that is 8 traps on the tracks with never less than 5.28 m
-past any of them anywhere they go, and 109 traps among 306 rows on a hundred
+past any of them anywhere they go, and 112 traps among 308 rows on a hundred
 chaos courses, 6 with none - those have no straight long enough to hold one
 clear of the respawns - and never less than 4.44 m past. With the shove turned
 off the same check reports cars lifted onto the rail.
@@ -2932,13 +2965,13 @@ and neither broke a rule.
 
 A row Hard adds is also held to a stricter reading of the dodge rule than the
 tracks' own rows are. `faults()` measures the move from one row's gap to the
-next as the distance between the gaps themselves, so two gaps that only touch
-count as no move at all, though no car fits through a point.
-`hard_row_holds` measures the move for something a clear lane wide, which has
-to get all of itself from one gap into the next. The tracks' own rows were
-written against the looser rule, and five of them have slaloms that would fail
-the strict one by a metre or two, so tightening it for everyone is a question
-of its own.
+next for the car, 2.06 m wide (see [Barriers](#barriers)). `hard_row_holds`
+measures it the same way for something a clear lane wide, 3.4 m: the room a
+player is promised through a single row, kept all the way to the next. The
+tracks' own rows were placed by hand and driven; a row Hard adds is rolled from
+a seed and kept without anyone having driven it. Rattlesnake's tightest run
+passes a car 2.09 m wide, so the tracks as written could never be held to
+this one.
 
 How much harder Hard is comes down to two numbers in `TrackVariant`:
 `HARD_MORE_ROWS` (1.5) and `HARD_TRAP_SHARE` (0.3). Every Hard fingerprint is

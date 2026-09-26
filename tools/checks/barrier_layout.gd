@@ -216,6 +216,12 @@ func _check_the_checker(track: Track) -> int:
 		# 5 m apart, the gaps do not line up and no car can cross between them.
 		["two rows whose gaps do not line up, 5 m apart",
 			[[200.0, -0.4, 0.6], [207.4, 0.4, 0.6]]],
+		# One takes the left half of the road and the next the right half, so
+		# the gaps meet exactly in the middle. Measured between the gaps that
+		# is no move at all; the car has its own width to get across, which
+		# wants 11.5 m and has 7.4.
+		["two rows whose gaps only touch, 5 m apart",
+			[[200.0, -0.5, 0.5], [207.4, 0.5, 0.5]]],
 	]:
 		features.placements.clear()
 		for row in trial[1]:

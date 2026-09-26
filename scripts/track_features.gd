@@ -249,6 +249,10 @@ var pad_clearance := 9.0
 ## The gap that must always be left open across the road, in metres. The car
 ## is 2.06 m wide, so this is it plus room either side to aim with.
 var clear_lane := 3.4
+## How wide the car is, in metres - the box it collides with. What crosses
+## from one row's way past to the next is the car, not a point, so this is
+## what the move between them is measured for; see `_shift_between`.
+var car_width := CarImport.CAR_SIZE.x
 ## How much more than that the planner actually leaves. The rule above is what
 ## the finished plan is checked against; building right up to it produces
 ## courses that are passable only if driven perfectly, and any rounding in the
@@ -527,7 +531,7 @@ func _is_claimed(from: float, to: float) -> bool:
 ## Rows are built to be passable rather than rolled and rejected: each one is
 ## cut back until the gap it leaves is wide enough to drive through, and the
 ## next one is set far enough downstream that the car can get from this row's
-## gap to that one. `_dodgeable` then checks the finished plan against the
+## gap to that one. `faults()` then checks the finished plan against the
 ## same rules, so a mistake in the construction shows up as a fault rather
 ## than as a course nobody can finish.
 func _place_obstacles(layout: TrackLayout, rng: RandomNumberGenerator) -> void:
@@ -567,10 +571,11 @@ func _place_obstacles(layout: TrackLayout, rng: RandomNumberGenerator) -> void:
 			# is wherever the two of them are furthest apart.
 			if previous != null:
 				var sets := gap_sets(layout, barrier, Vector2(-1.0, 1.0), barrier)
-				var shift := (_worst_shift(previous_sets, sets)
-						* layout.half_width_at(barrier.centre()))
+				var half_width := maxf(layout.half_width_at(barrier.centre()), 0.001)
+				var shift := (_worst_shift(previous_sets, sets, car_width / half_width)
+						* half_width)
 				barrier.offset = maxf(barrier.offset,
-					previous.offset + previous.length + _run_for(shift, rng))
+					previous.centre() + _run_for(shift, rng) - barrier.length * 0.5)
 				if barrier.offset + barrier.length > limit:
 					break
 				# The road may have narrowed since the provisional offset, so
@@ -590,15 +595,18 @@ func _place_obstacles(layout: TrackLayout, rng: RandomNumberGenerator) -> void:
 			at = barrier.offset + obstacle_length + min_row_gap
 
 
-## Metres of road to leave for a car to cross `shift` metres of it.
+## Metres from the middle of one row to the middle of the next to leave for a
+## car to move `shift` metres across the road between them.
 ##
 ## A car crossing from one gap to the next turns in and then back out again,
 ## which over a run of L metres at radius R shifts it about L squared over 4R
 ## sideways. Turned around, the run needed for a shift of d is the root of
 ## 4Rd - and then some, because a player also has to see the row and decide.
+## See `_road_to_cross` for why the run is counted from the rows' middles. Never
+## less than `min_row_gap` of road between them either.
 func _run_for(shift: float, rng: RandomNumberGenerator) -> float:
-	var needed := sqrt(4.0 * dodge_radius * shift) * dodge_margin
-	return maxf(needed, min_row_gap) * rng.randf_range(1.0, 1.25)
+	var needed := _road_to_cross(shift) * dodge_margin
+	return maxf(needed, min_row_gap + obstacle_length) * rng.randf_range(1.0, 1.25)
 
 
 ## Narrow a row until the way past it is wide enough to drive through, for
@@ -907,12 +915,12 @@ func roll_track_chaos(layout: TrackLayout, roll_seed: int, chance: Vector2) -> v
 ## no more faults than `standing`, and a car can get from the row before it to
 ## this one's way past, and from this one's to the row after.
 ##
-## The second is stricter than `faults()`, which measures the move from one
-## gap to the next between the gaps themselves - so two gaps that only touch
-## count as no move at all, though no car fits through a point. The tracks'
-## own rows are left to that rule, which they were written against. A row Hard
-## adds is not left to it: here the move is measured for something a clear
-## lane wide, which has to get all of itself from one gap into the next.
+## The second is the rule `faults()` holds every row to, asked for something a
+## clear lane wide rather than for the car. The tracks' own rows were placed by
+## hand and driven; a row Hard adds is rolled from a seed and kept without
+## anyone having driven it, so it is held to the room a player is promised
+## through a single row - the car and some to aim with - on the way from one
+## row to the next as well.
 func hard_row_holds(layout: TrackLayout, row: Placement, standing: int) -> bool:
 	return faults(layout).size() <= standing and _car_reaches(layout, row)
 
@@ -928,30 +936,12 @@ func _car_reaches(layout: TrackLayout, row: Placement) -> bool:
 			continue
 		var from: Placement = all[pair[0]]
 		var to: Placement = all[pair[1]]
-		var half_width := layout.half_width_at(to.centre())
-		var car := clear_lane / maxf(half_width, 0.001)
-		var shift := _worst_shift_for(gap_sets(layout, from), gap_sets(layout, to), car)
-		var run := to.offset - (from.offset + from.length)
-		if run < sqrt(4.0 * dodge_radius * shift * half_width):
+		var half_width := maxf(layout.half_width_at(to.centre()), 0.001)
+		var shift := _worst_shift(gap_sets(layout, from), gap_sets(layout, to),
+			clear_lane / half_width) * half_width
+		if to.centre() - from.centre() < _road_to_cross(shift):
 			return false
 	return true
-
-
-## `_worst_shift`, for something `width` wide rather than for a point: each
-## gap is what is left of it once that width fits inside.
-func _worst_shift_for(from_sets: Array, to_sets: Array, width: float) -> float:
-	var worst := 0.0
-	for from: Array[Vector2] in from_sets:
-		for to: Array[Vector2] in to_sets:
-			if from.is_empty() or to.is_empty():
-				continue
-			var least := INF
-			for a in from:
-				for b in to:
-					least = minf(least, maxf(0.0, maxf(b.x - a.y + width, a.x - b.y + width)))
-			if least < INF:
-				worst = maxf(worst, least)
-	return worst
 
 
 ## Whether a row already stands within `gap` metres of one put down at `at`.
@@ -1174,9 +1164,10 @@ func _fill_the_fast_lane(
 			var gaps := _gaps_within(layout, barrier.centre(), lane, barrier)
 			if gaps.is_empty():
 				return
-			var shift := _shift_between(previous_gaps, gaps) * half_width
+			var shift := (_shift_between(previous_gaps, gaps,
+					car_width / maxf(half_width, 0.001)) * half_width)
 			barrier.offset = maxf(barrier.offset,
-				previous.offset + previous.length + _run_for(shift, rng))
+				previous.centre() + _run_for(shift, rng) - barrier.length * 0.5)
 			if barrier.offset + barrier.length > limit:
 				return
 		placements.append(barrier)
@@ -1714,13 +1705,13 @@ func _check_the_dodges(
 	for row in rows:
 		var sets := gap_sets(layout, row, side)
 		if previous != null:
-			var half_width := layout.half_width_at(row.centre())
-			var shift := _worst_shift(previous_sets, sets) * half_width
-			var run := row.offset - (previous.offset + previous.length)
-			var needed := sqrt(4.0 * dodge_radius * shift)
+			var half_width := maxf(layout.half_width_at(row.centre()), 0.001)
+			var shift := _worst_shift(previous_sets, sets, car_width / half_width) * half_width
+			var run := row.centre() - previous.centre()
+			var needed := _road_to_cross(shift)
 			if run < needed:
 				found.append(
-					"%sthe row at %.0f m needs %.1f m of road to reach, has %.1f m%s"
+					"%sthe row at %.0f m needs %.1f m from the middle of the one before, has %.1f m%s"
 					% [what, row.offset, needed, run,
 						" at worst" if row.moves() or previous.moves() else ""])
 		previous = row
@@ -1742,22 +1733,30 @@ func _gaps_within(
 	return kept
 
 
-## The least a car has to move across the road to get from any one of these
-## spans to any one of those, in lateral units. Zero if one lines up with the
-## other, which is the case a straight line through exists. Used when laying
-## rows out, to decide how far apart to set them.
-func _shift_between(from: Array[Vector2], to: Array[Vector2]) -> float:
+## How far a car `width` wide has to move across the road to get from any one
+## of these spans to any one of those, in lateral units: how far its middle
+## moves, from the nearest place it fits through one to the nearest place it
+## fits through the other.
+##
+## That is the room between the two spans plus the car's own width - or, where
+## they overlap, the car's width less the overlap. Two spans that only touch
+## still ask for a whole car's width of crossing, since a car does not fit
+## through a point, and only spans overlapping by at least the car's width are
+## the case where it can drive straight through both. Every span is at least a
+## clear lane wide, so the car fits through each of them on its own.
+func _shift_between(from: Array[Vector2], to: Array[Vector2], width: float) -> float:
 	var least := INF
 	for a in from:
 		for b in to:
-			least = minf(least, maxf(0.0, maxf(b.x - a.y, a.x - b.y)))
+			least = minf(least, maxf(0.0, maxf(b.x - a.y, a.x - b.y) + width))
 	return 0.0 if least == INF else least
 
 
-## The furthest apart the ways past two rows can be, over every place each of
-## them can be in. A set with no gaps in it is skipped: that is a road with no
-## way past, which is its own fault and not a distance.
-func _worst_shift(from_sets: Array, to_sets: Array) -> float:
+## The furthest apart the ways past two rows can be, for a car `width` wide,
+## over every place each of them can be in. A set with no gaps in it is
+## skipped: that is a road with no way past, which is its own fault and not a
+## distance.
+func _worst_shift(from_sets: Array, to_sets: Array, width: float) -> float:
 	var worst := 0.0
 	for from: Array[Vector2] in from_sets:
 		if from.is_empty():
@@ -1765,5 +1764,21 @@ func _worst_shift(from_sets: Array, to_sets: Array) -> float:
 		for to: Array[Vector2] in to_sets:
 			if to.is_empty():
 				continue
-			worst = maxf(worst, _shift_between(from, to))
+			worst = maxf(worst, _shift_between(from, to, width))
 	return worst
+
+
+## The least road a car moving `shift` metres across it needs, in metres from
+## the middle of one row to the middle of the next: the root of 4Rd, for the
+## turn in and back out that `_run_for` describes.
+##
+## From the middles rather than from where one row ends to where the next
+## begins, because the car does not have to be square all the way through a
+## row. Weaving from one gap to the next it is square at the top of each
+## swing, and a row is short enough to put that in the middle of it: over half
+## of one, 1.2 m, a car turning at a 16 m radius comes back across the road by
+## less than 5 cm. Counting from the ends instead leaves a row's length of
+## turning out of the sum, and on rows 20 m apart that is 1.4 m of crossing
+## the car does have.
+func _road_to_cross(shift: float) -> float:
+	return sqrt(4.0 * dodge_radius * maxf(shift, 0.0))
