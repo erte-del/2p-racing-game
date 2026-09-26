@@ -75,6 +75,7 @@ func _init() -> void:
 		_check_the_mirror(file)
 		if file in TrackRoster.FILES:
 			_check_the_reverse(file)
+			_check_hard(file)
 		_check_what_is_offered(track, file)
 
 	_check_what_is_not_a_track()
@@ -185,6 +186,54 @@ func _check_the_reverse(file: String) -> void:
 				% [name, theirs[i].x, theirs[i].y, mirrored.x, mirrored.y])
 
 
+## Hard is the same road with more on it: every piece as written, more rows or
+## traps than the track has, and exactly the same plan every time it is made -
+## a Hard time is only worth keeping if the next run is on the same rows.
+func _check_hard(file: String) -> void:
+	var name := file.get_file().get_basename()
+	var base := TrackVariant.described(file, TrackVariant.NORMAL)
+	var hard := TrackVariant.described(file, TrackVariant.HARD)
+	if _road(hard) != _road(base):
+		_fault("%s: hard is not the same road as the track" % name)
+	if TrackVariant.plan(hard) != TrackVariant.plan(
+			TrackVariant.described(file, TrackVariant.HARD)):
+		_fault("%s: hard came out different the second time it was planned" % name)
+	var ours := _rows(base)
+	var theirs := _rows(hard)
+	if theirs.x <= ours.x and theirs.y <= ours.y:
+		_fault("%s: hard has %d rows and %d traps, no more than the track's %d and %d"
+			% [name, theirs.x, theirs.y, ours.x, ours.y])
+	if hard.targets != Vector3.ZERO:
+		_fault("%s: hard has medal targets nobody measured" % name)
+	# Everything the track wrote down is still there, where it wrote it: Hard
+	# adds rows and turns some into traps, and moves nothing else.
+	var written := TrackVariant.plan(hard).split("\n")
+	for placement in base.placements:
+		var alone := TrackDefinition.new()
+		alone.placements.append(placement)
+		if TrackVariant.plan(alone) in written:
+			continue
+		var trapped := placement.kind == TrackFeatures.OBSTACLE and hard.placements.any(
+			func(p: TrackFeatures.Placement) -> bool:
+				return p.kind == TrackFeatures.TRAP and is_equal_approx(p.offset, placement.offset))
+		if not trapped:
+			_fault("%s: hard moved or lost what the track put at %.0f m" % [name, placement.offset])
+	print("%-24s hard: %d rows -> %d, %d traps -> %d" % [name, ours.x, theirs.x, ours.y, theirs.y])
+
+
+## How many rows stand across a definition's road, and how many of them move.
+func _rows(definition: TrackDefinition) -> Vector2i:
+	var rows := 0
+	var traps := 0
+	for placement in definition.placements:
+		if placement.kind == TrackFeatures.TRAP:
+			rows += 1
+			traps += 1
+		elif placement.kind == TrackFeatures.OBSTACLE and not placement.along:
+			rows += 1
+	return Vector2i(rows, traps)
+
+
 ## The road a definition makes, sample by sample, to the millimetre: where the
 ## centreline goes, how wide it is, and whether there is road there at all.
 func _road(definition: TrackDefinition) -> String:
@@ -227,11 +276,13 @@ func _check_what_is_offered(track: Track, file: String) -> void:
 	for variant: String in TrackVariant.BUILT:
 		if variant == TrackVariant.NORMAL:
 			continue
-		# An acrobatic track is never driven in reverse, whatever a build of it
-		# would say: rings, platforms, lifts and high roads are aimed at where a
-		# ramp throws a car, and no check here can tell that a platform is in
-		# the wrong place for a car coming the other way.
-		if variant == TrackVariant.REVERSE and file in TrackRoster.ACROBATIC_FILES:
+		# An acrobatic track is never driven in reverse or hard, whatever a
+		# build of it would say. Rings, platforms, lifts and high roads are
+		# aimed at where a ramp throws a car, and no check here can tell that a
+		# platform is in the wrong place for a car coming the other way; and a
+		# barrier on a landing is a meaner thing than a check that only asks
+		# for a way past can see.
+		if variant != TrackVariant.MIRROR and file in TrackRoster.ACROBATIC_FILES:
 			continue
 		var wrong := _build(track, file, variant)
 		if variant in offered:
@@ -348,6 +399,33 @@ func _check_the_check() -> void:
 		_fault("a mirror with one lane left unturned passed for its own inverse")
 	else:
 		print("a mirror with one lane left unturned is caught")
+
+	# A Hard row pushed in right behind another, on the other side of the road,
+	# with no room between to cross over: the rule Hard's rows are kept under
+	# has to refuse it, or a Hard track could be one nobody can finish.
+	var track: Track = load("res://scenes/track/track.tscn").instantiate()
+	track.variant = TrackVariant.HARD
+	var hard: TrackDefinition = (load(file) as GDScript).new()
+	track.plan_course(hard)
+	var before := track.features().faults(track.layout()).size()
+	# A row in from one kerb, and one two metres behind it covering exactly the
+	# gap it leaves: the only way past the second is behind the first, and
+	# there is no room to get there.
+	var row: TrackFeatures.Placement = null
+	for candidate in track.features().rows():
+		if candidate.kind == TrackFeatures.OBSTACLE and not is_zero_approx(candidate.lateral):
+			row = candidate
+			break
+	var squeezed := TrackFeatures.Placement.new(TrackFeatures.OBSTACLE,
+		row.offset + row.length + 2.0, row.length)
+	squeezed.half_span = 1.0 - row.half_span
+	squeezed.lateral = -signf(row.lateral) * row.half_span
+	track.features().placements.append(squeezed)
+	if track.features().hard_row_holds(track.layout(), squeezed, before):
+		_fault("a Hard row squeezed in two metres behind another was not refused")
+	else:
+		print("a Hard row inside the dodge distance is refused")
+	track.free()
 
 	# And reverses that cannot be driven are refused by the rules the tracks
 	# are built under, rather than quietly made into something else.

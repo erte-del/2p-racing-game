@@ -234,6 +234,12 @@ var same_side_chance := 0.55
 ## long wall rather than as two barriers.
 var min_obstacle_spacing := 26.0
 var min_row_gap := 10.0
+## How long a straight a jump wants before it, and how far past the end of a
+## corner a row Hard adds has to stand, so it is seen before it is reached.
+## Only `harden` reads them: the tracks' own rows and a rolled course's are
+## placed by their own rules. Set by Track.
+var jump_run_up := 45.0
+var hard_sight := 35.0
 ## How many rows a single straight may hold, if it has the room for them.
 var max_obstacle_rows := 6
 ## Metres a row keeps clear of a boost pad. Small: a hazard is meant to sit
@@ -725,6 +731,173 @@ func _make_sure_of_a_trap(layout: TrackLayout, rng: RandomNumberGenerator) -> vo
 		if faults(layout).size() <= standing:
 			return
 		placements.pop_back()
+
+
+## Make a laid-out track harder: more rows of barriers, and some of them moving.
+##
+## Put down by the planner a rolled course is built with, under the same rules,
+## over the track's own furniture: only how many rows there are goes up. Each
+## new row is rolled by `_row_at` somewhere on a straight clear of the grid, the
+## flag, the respawns, the jumps, the pads, the fork and the rows already there,
+## and is kept only if the whole plan still passes every rule `faults()` holds
+## it to - a way past everywhere, reachable from the row before - and if a car
+## can get to it and on from it; see `hard_row_holds`. Then rows are turned
+## into traps on the same terms, the way `_make_sure_of_a_trap` turns one for
+## chaos. A row that would break a rule is not put down, so a Hard track is
+## harder to read and never one that cannot be finished.
+##
+## `more` is how many rows there are to be for each one there was, and `share`
+## how many of the rows added become traps, never fewer than one. Seeded, with
+## a generator of its own, so a Hard track is the same on every run and every
+## machine, and drawing from it moves nothing else's rolls. Rows in a fork's
+## fast lane are its own slalom and are left as the track wrote them.
+func harden(layout: TrackLayout, hard_seed: int, more: float, share: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hard_seed
+	var standing := faults(layout).size()
+	# Kept off: the fork and room either side of it, as a rolled course keeps
+	# its own fork; every jump's run-up, which the tracks all leave long, level
+	# and empty, since lining up with a ramp is the whole of what it asks; and
+	# the road straight out of every corner, where a row would not be seen
+	# until it was too late to do anything but hit it.
+	_claimed.clear()
+	for fork in of_kind(FORK):
+		_claimed.append(Vector2(fork.offset - fork_entry,
+			fork.offset + fork.length + fork_exit))
+	for piece in layout.pieces:
+		if piece.kind == TrackLayout.JUMP:
+			_claimed.append(Vector2(piece.start_offset - jump_run_up, piece.start_offset))
+		elif piece.kind == TrackLayout.CORNER:
+			_claimed.append(Vector2(piece.end_offset, piece.end_offset + hard_sight))
+
+	# Every spot a row could stand, a few metres apart on every straight and
+	# climb long enough to hold one, tried in an order rolled from the seed so
+	# the new rows are spread down the whole track rather than piled at its
+	# start.
+	var spots: Array[float] = []
+	for piece in layout.pieces:
+		if piece.kind != TrackLayout.STRAIGHT and piece.kind != TrackLayout.CLIMB:
+			continue
+		var at := piece.start_offset + obstacle_margin
+		while at + obstacle_length <= piece.end_offset - obstacle_margin:
+			spots.append(at)
+			at += layout.step * 2.0
+	_shuffle(spots, rng)
+
+	var wanted := maxi(1, roundi(float(rows().size()) * (more - 1.0)))
+	var added: Array[Placement] = []
+	var pads := of_kind(BOOST_PAD)
+	var was_trapping := traps_enabled
+	# Rows are put down standing still; which of them move is decided after,
+	# so a trap is only ever made where the rows either side of it allow one.
+	traps_enabled = false
+	for at in spots:
+		if added.size() >= wanted:
+			break
+		if (_too_close_to_keep_out(at + obstacle_length * 0.5)
+				or _is_claimed(at, at + obstacle_length)
+				or _row_near(at, min_row_gap)):
+			continue
+		var row := _row_at(layout, at, rng, _row_just_behind(at))
+		if row == null or _on_a_pad(row, pads):
+			continue
+		placements.append(row)
+		if not hard_row_holds(layout, row, standing):
+			placements.pop_back()
+			continue
+		added.append(row)
+	traps_enabled = was_trapping
+
+	# The rows added first, then the track's own loose ones, each tried as a
+	# trap starting from the side it held.
+	var trapped := 0
+	var traps_wanted := maxi(1, roundi(float(added.size()) * share))
+	var others: Array[Placement] = []
+	for row in rows():
+		if row.kind == OBSTACLE and row not in added and not _in_a_fork(row):
+			others.append(row)
+	_shuffle(added, rng)
+	_shuffle(others, rng)
+	for row: Placement in added + others:
+		if trapped >= traps_wanted:
+			break
+		if _in_a_fork(row):
+			continue
+		var i := placements.find(row)
+		var hold := signf(row.lateral) if not is_zero_approx(row.lateral) else INF
+		var trap := _trap_at(row.offset, _planned_clear(layout, row.centre()),
+			row.half_span * 2.0, hold, rng)
+		if trap == null:
+			continue
+		placements[i] = trap
+		if not hard_row_holds(layout, trap, standing):
+			placements[i] = row
+			continue
+		trapped += 1
+	_claimed.clear()
+
+
+## Whether a row Hard has put down, already in the plan, can stay: the plan has
+## no more faults than `standing`, and a car can get from the row before it to
+## this one's way past, and from this one's to the row after.
+##
+## The second is stricter than `faults()`, which measures the move from one
+## gap to the next between the gaps themselves - so two gaps that only touch
+## count as no move at all, though no car fits through a point. The tracks'
+## own rows are left to that rule, which they were written against. A row Hard
+## adds is not left to it: here the move is measured for something a clear
+## lane wide, which has to get all of itself from one gap into the next.
+func hard_row_holds(layout: TrackLayout, row: Placement, standing: int) -> bool:
+	if faults(layout).size() > standing:
+		return false
+	var all := rows()
+	var at := all.find(row)
+	for pair in [[at - 1, at], [at, at + 1]]:
+		if pair[0] < 0 or pair[1] >= all.size():
+			continue
+		var from: Placement = all[pair[0]]
+		var to: Placement = all[pair[1]]
+		var half_width := layout.half_width_at(to.centre())
+		var car := clear_lane / maxf(half_width, 0.001)
+		var shift := _worst_shift_for(gap_sets(layout, from), gap_sets(layout, to), car)
+		var run := to.offset - (from.offset + from.length)
+		if run < sqrt(4.0 * dodge_radius * shift * half_width):
+			return false
+	return true
+
+
+## `_worst_shift`, for something `width` wide rather than for a point: each
+## gap is what is left of it once that width fits inside.
+func _worst_shift_for(from_sets: Array, to_sets: Array, width: float) -> float:
+	var worst := 0.0
+	for from: Array[Vector2] in from_sets:
+		for to: Array[Vector2] in to_sets:
+			if from.is_empty() or to.is_empty():
+				continue
+			var least := INF
+			for a in from:
+				for b in to:
+					least = minf(least, maxf(0.0, maxf(b.x - a.y + width, a.x - b.y + width)))
+			if least < INF:
+				worst = maxf(worst, least)
+	return worst
+
+
+## Whether a row already stands within `gap` metres of one put down at `at`.
+func _row_near(at: float, gap: float) -> bool:
+	for row in rows():
+		if at < row.offset + row.length + gap and row.offset < at + obstacle_length + gap:
+			return true
+	return false
+
+
+## Shuffled from `rng`, so the order is the seed's and the same every time.
+static func _shuffle(items: Array, rng: RandomNumberGenerator) -> void:
+	for i in range(items.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var held: Variant = items[i]
+		items[i] = items[j]
+		items[j] = held
 
 
 func _in_a_fork(row: Placement) -> bool:

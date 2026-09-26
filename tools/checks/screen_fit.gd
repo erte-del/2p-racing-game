@@ -89,19 +89,26 @@ func _check(window: Vector2i, laid_out_least: Vector2) -> int:
 	# them rather than one, because the name and the line under it are each
 	# track's own, and the longest is the one that decides.
 	#
-	# Each with HARD held down where the track shows it: a way the track does
-	# not offer puts a line under PLAY saying why, which makes that column as
-	# tall as it gets.
+	# Each with the way held down that has the longest reason for not being
+	# offered, where the track has one: that puts a line over PLAY saying why,
+	# which makes that column as tall as it gets.
 	var pages := 0
-	var hard: Button = menu.get_node(
-		"TrackDetail/Page/Panel/Margin/Box/Variants/Hard")
+	var ways: Array = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Variants").get_children()
 	for index in TrackRoster.TOTAL:
 		if not menu.call("_has_a_page", index):
 			continue
 		menu.call("_open_track_detail", index)
-		if hard.visible:
-			hard.button_pressed = true
-			menu.call("_choose_detail_variant", TrackVariant.HARD)
+		var file := TrackRoster.file(index)
+		var longest := -1
+		for at in TrackVariant.ALL.size():
+			var why := TrackVariant.why_not(file, TrackVariant.ALL[at])
+			if (ways[at] as Button).visible and not why.is_empty() and (
+					longest < 0 or why.length() > TrackVariant.why_not(
+						file, TrackVariant.ALL[longest]).length()):
+				longest = at
+		if longest >= 0:
+			(ways[longest] as Button).button_pressed = true
+			menu.call("_choose_detail_variant", TrackVariant.ALL[longest])
 		for i in 4:
 			await process_frame
 		var fault := _fits("%s's page" % TrackRoster.track_name(index),

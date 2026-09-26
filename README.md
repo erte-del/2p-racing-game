@@ -2817,10 +2817,9 @@ and never has to ask where it came from.
 The ways are named constants, `NORMAL`, `MIRROR`, `REVERSE`, `HARD` and
 `TRACK_CHAOS`, rather than strings typed out where they are used, so a misspelt
 one is a compile error rather than a quiet extra board nobody can find.
-`NORMAL` is the track as written. `MIRROR` and `REVERSE` have transforms.
-`HARD` and track chaos have keys and boards already, but no track offers them
-until they have a transform, so nothing can drive the base track while calling
-it HARD.
+`NORMAL` is the track as written. `MIRROR`, `REVERSE` and `HARD` are built.
+Track chaos has a key and a board already, but no track offers it until it has
+a transform, so nothing can drive the base track while calling it track chaos.
 
 **Mirror** swaps left and right. Every corner turns the other way, and
 everything on the road - pads, rows, traps, the fork, rings, platforms, lifts,
@@ -2863,6 +2862,57 @@ show the rest. Rings, platforms, lifts and high roads are all aimed at where a
 ramp throws a car, and none of them has a reverse that is the same kind of
 thing. Reverse's medals are its own to measure, so until they are, a reversed
 track has a time and a board and no medal.
+
+**Hard** is the same road with more on it: half as many rows of barriers
+again, and some of them moving. It never touches the car and never changes the
+road: the road is the track, and the hazards are the variant. It is fixed, not
+rolled. It is seeded off the track's name, with a generator of its own, so a
+Hard track has the same rows in the same places on every run and every
+machine, which is what makes a Hard time worth writing down.
+
+The rows are put down by `TrackFeatures.harden`, using the planner a rolled
+course is built with: `_row_at` rolls a row on a straight and cuts it back to
+leave the clear lane. A row is kept only if the whole plan still passes every
+rule `faults()` holds a course to. Then some rows are turned into traps on the
+same terms: at least one per track, and about a third as many as were added.
+A row that would break a rule is never put down, so a Hard track is harder to
+read and never one that cannot be finished.
+
+Where a row goes matters as much as whether a car can get past it, so Hard's
+rows keep further off than the rules ask. They keep off every jump's run-up,
+which the tracks all leave long, level and empty, since lining up with the
+ramp is all a run-up asks of a car. They keep 35 m clear of the end of every
+corner, where a row would not be seen until it was too late to avoid
+(`hard_sight`). And they keep clear of the fork and its approach. The first
+Hard tracks had rows in both of the first two places. The bot came off a ramp
+crooked on Last Light, and circled a row straight out of a hairpin on Grinder,
+and neither broke a rule.
+
+A row Hard adds is also held to a stricter reading of the dodge rule than the
+tracks' own rows are. `faults()` measures the move from one row's gap to the
+next as the distance between the gaps themselves, so two gaps that only touch
+count as no move at all, though no car fits through a point.
+`hard_row_holds` measures the move for something a clear lane wide, which has
+to get all of itself from one gap into the next. The tracks' own rows were
+written against the looser rule, and five of them have slaloms that would fail
+the strict one by a metre or two, so tightening it for everyone is a question
+of its own.
+
+How much harder Hard is comes down to two numbers in `TrackVariant`:
+`HARD_MORE_ROWS` (1.5) and `HARD_TRAP_SHARE` (0.3). Every Hard fingerprint is
+taken over the plan they make, so moving either drops every Hard time.
+Rattlesnake takes 31 rows where it asked for 33, which is all the room it has.
+Hard is offered on all twenty normal tracks and none of the acrobatic ones,
+where most of the course is in the air and a barrier on a landing is a meaner
+thing than one on a straight.
+
+A Hard plan depends on where the grid, the flag, the respawns and the jumps
+fall, which only a `Track` knows. So it is planned in `Track.plan_course`, the
+half of `lay_out` that works out the plan without building anything. To
+fingerprint a Hard time, `TrackVariant.described` asks a `Track` that is never
+put in the world for the same plan. So the fingerprint covers exactly what the
+race is run on, worked out by the same code rather than by a second copy of
+it.
 Which ways a track offers is a table in `TrackVariant` keyed by file name, and
 not a line in the track file. A time's fingerprint is taken over the whole of
 its track's file, so adding a line to all thirty would throw away every best
@@ -2912,7 +2962,12 @@ flipped twice or not at all - and the check is shown a mirror with one lane
 left unturned, to prove it can say no. A reverse has to be its own inverse too,
 compared as the road that gets built, sample by sample, rather than piece by
 piece. Reversing twice can move where a jump's piece ends and the straight
-after it begins without moving any road. Every hole in a reversed track has to
+after it begins without moving any road. Hard has to be the same road as its
+track, with more rows or traps on it, and the same plan every time it is made.
+Everything the track put down has to still be where it was, or be a row turned
+into a trap in the same place. And a Hard row squeezed in two metres behind
+another, covering exactly the gap that row leaves, has to be refused. Every
+hole in a reversed track has to
 be where a hole was, and the check is shown a jump that would have to climb
 five metres reversed and a run-up too short to land on, and has to refuse
 both. It also works out every base track's

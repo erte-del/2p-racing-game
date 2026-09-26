@@ -11,7 +11,7 @@ ones, that comes to about a hundred timed configurations, and none of them had
 to be laid out.
 
 Written up 2026-09-25. **Built so far:** the track page (section 7) and build
-steps 1 to 3: Mirror and Reverse, playable off the page (2026-09-26). The previous contents
+steps 1 to 4: Mirror, Reverse and Hard, playable off the page (2026-09-26). The previous contents
 of this file (the shop, customisation, statistics) were all built and are in
 the README. Git has the old text.
 
@@ -136,12 +136,12 @@ the base track may leak into it.
 - [x] **A base track's fingerprint does not move.** `NORMAL` hashes exactly what
 	  it hashes today. That is the one number in this whole feature that must
 	  not change, and the check pins it.
-- [ ] Computing a Hard plan's fingerprint means building a `TrackLayout` (no
+- [x] Computing a Hard plan's fingerprint means building a `TrackLayout` (no
 	  meshes, just samples). Measure what that costs across twenty cells
 	  before the grid starts calling it. If it is noticeable, cache it for the
 	  session by key. The source file cannot change while the game is running.
-	  (Every plan is already cached by key in `TrackTimes._plans`. Mirror's
-	  costs one `describe()`; Hard's is the one still to measure.)
+	  (Every plan is cached by key in `TrackTimes._plans`. Measured: a Hard
+	  plan takes 3-65 ms, Last Light the most.)
 
 ### Passing it around: an argument, not a string
 
@@ -310,7 +310,7 @@ something worth writing down.
 
 ### What is added
 
-- [ ] **More loose rows.** They go on straights that are clear of the
+- [x] **More loose rows.** They go on straights that are clear of the
 	  existing rows, the respawns (`keep_out`), the jumps (`reserved`), the
 	  grid, the flag and the fork. They are laid down by the same planner code
 	  that places rows on a generated course
@@ -318,22 +318,33 @@ something worth writing down.
 	  row is placed, narrowed to leave `clear_lane`, and pushed downstream
 	  until it is reachable from the row before it. The rules stay the same.
 	  Only the density goes up.
-- [ ] **Some static rows become traps.** This reuses the pass that chaos
+- [x] **Some static rows become traps.** This reuses the pass that chaos
 	  mode (the endless course's, not track chaos) uses, which "turns a row into a trap wherever that still passes every rule"
 	  (`_make_sure_of_a_trap()`, [scripts/track_features.gd:684](scripts/track_features.gd:684)). Two
 	  traps may still not stand side by side, and rows in a fork's fast lane
 	  stay as they are.
-- [ ] Target: about half as many rows again as the base track, and at least
+- [x] Target: about half as many rows again as the base track, and at least
 	  one trap. Put both numbers in named constants in `TrackVariant` so they
 	  can be tuned in one place. Tune them against lap times rather than by
 	  eye.
-- [ ] Seeded from `hash(track_name + "-hard")`, with its own
+- [x] Seeded from `hash(track_name + "-hard")`, with its own
 	  `RandomNumberGenerator`. It must not draw from anything else's stream,
 	  for the reason coins are seeded apart: a shared stream would move every
 	  roll after it.
-- [ ] Planned in a new `TrackFeatures.harden(layout, seed, tuning)`, called
+- [x] Planned in a new `TrackFeatures.harden(layout, seed, tuning)`, called
 	  in `Track.lay_out()` after the base placements are adopted. It returns
 	  the finished list, and `faults()` runs over all of it.
+	  *As built:* in `Track.plan_course()`, the planning half of `lay_out()`,
+	  which `TrackVariant.described()` also calls on a Track never put in the
+	  world, so the fingerprint is over the plan the race is run on.
+- [x] *Added while building:* Hard's rows keep off every jump's run-up, 35 m
+	  clear of every corner's exit (`hard_sight`), and clear of the fork's
+	  approach. Without that the bot came off Last Light's ramp crooked and
+	  circled a row out of Grinder's hairpin, with no rule broken.
+- [x] *Added while building:* a row Hard adds is held to a car-width reading of
+	  the dodge rule (`hard_row_holds`). `faults()` counts two touching gaps
+	  as no move at all; the tracks' own rows keep that rule for now (a task
+	  to look at it was spun off).
 
 ### What Hard does not do
 
@@ -347,13 +358,13 @@ something worth writing down.
 
 ### Where it is offered
 
-- [ ] All twenty normal tracks, wherever the planner finds room. A track
+- [x] All twenty normal tracks, wherever the planner finds room. A track
 	  already dense with rows (Rattlesnake has 22, Last Light 20) may take only
 	  a few more. It is still offered as long as the result has more rows or
 	  traps than the base. If the planner cannot add anything, it is not
 	  offered, because a Hard track identical to the base track is a lie on the
 	  selector.
-- [ ] **Acrobatic tracks: not offered.** Their checkpoints are rings, most
+- [x] **Acrobatic tracks: not offered.** Their checkpoints are rings, most
 	  of the course is in the air, and a barrier on a landing is a different
 	  and much meaner thing than a barrier on a straight.
 
@@ -652,6 +663,12 @@ this.
    guess. Settle it by driving three tracks at 1.3×, 1.5× and 2× before
    measuring targets on all twenty, because the targets have to be measured
    again whenever it moves.
+   *Driven 2026-09-26* (The Weave, Long Haul, The Wringer): the bot's laps
+   barely move at any of them (+0.0% to +1.0% at 1.3×, +0.1% to +0.8% at
+   1.5×, +0.1% to +5.4% at 2×), because it dodges perfectly - its lap is no
+   measure of how hard a row is to read. 2× also runs out of room on busy
+   tracks (The Wringer gets 25 of 28). Left at 1.5×; needs a person to drive
+   it before targets are measured.
 
 ---
 
@@ -668,8 +685,9 @@ this.
 3. ~~**Reverse**, starting with the jump rebuild, then `variant_drive.gd`.~~
    Done 2026-09-26. 18 of 20 normal tracks offer it; Whiplash and Last Light
    do not. The bot drives every offered variant to the flag.
-4. **Hard**: `harden()`, settling the density (question 6), then the drive
-   check.
+4. ~~**Hard**: `harden()`, settling the density (question 6), then the drive
+   check.~~ Done 2026-09-26, at 1.5x. Offered on all twenty normal tracks; the
+   bot drives every one without a reset.
 5. **Track chaos**: `reroll_track_chaos()`, timed against the densest
    track, and its count in `Stats`.
 6. **Targets**: `lap_times.gd` per variant, filling the table. Mirror's

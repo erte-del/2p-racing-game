@@ -671,7 +671,7 @@ func _check_the_ways(settings: Node) -> int:
 	# Back from a race: the way it was driven is held again, and one the track
 	# does not offer comes back as NORMAL rather than as a way PLAY refuses.
 	for pair in [[TrackVariant.MIRROR, TrackVariant.MIRROR],
-			[TrackVariant.HARD, TrackVariant.NORMAL]]:
+			[TrackVariant.TRACK_CHAOS, TrackVariant.NORMAL]]:
 		settings.track_file = file
 		settings.track_variant = pair[0]
 		var back: Node = load("res://scenes/menu.tscn").instantiate()

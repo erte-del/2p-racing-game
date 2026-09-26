@@ -427,7 +427,33 @@ func piece_summary() -> String:
 func lay_out(definition: TrackDefinition) -> void:
 	if _asphalt == null:
 		_build_materials()
+	plan_course(definition)
+	_build_the_road()
+	# Seeded off the track's own name rather than off the file it came in -
+	# a definition can be handed straight to this, with no file behind it at
+	# all - so a track always has its coins in the same places. A player who
+	# drove it yesterday and knows where they are is remembering the road,
+	# which is the whole point of a road worth learning. A variant is a road of
+	# its own, so its coins are its own too, and still the same on every run.
+	_scatter_the_coins(hash(definition.track_name) if variant == TrackVariant.NORMAL
+		else hash("%s-%s" % [definition.track_name, variant]))
+	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
+	_build_branches(definition)
+	regenerated.emit()
 
+
+## Everything `lay_out` works out before it builds anything: the definition
+## described and put through the variant, the layout sampled, and the plan of
+## what stands on it - for Hard, with its rows added. No road, no meshes, no
+## coins, and nothing that needs the node to be in a scene.
+##
+## Split off because a Hard plan depends on where the grid, the flag, the
+## respawns and the jumps fall, and only a Track knows those. `TrackTimes` needs
+## the plan for a Hard time's fingerprint without a race to build it in, and
+## asks a Track that is never put in the world (see `TrackVariant.described`),
+## so the plan it fingerprints is the plan a race is run on, worked out by the
+## same lines.
+func plan_course(definition: TrackDefinition) -> void:
 	definition.step = sample_step
 	definition.ramp_length = ramp_length
 	definition.ramp_rise = ramp_rise
@@ -447,25 +473,21 @@ func lay_out(definition: TrackDefinition) -> void:
 	_definition = definition
 
 	_layout = TrackLayout.adopt(definition.pieces, _layout_tuning())
-	_build_the_road()
 	_features = TrackFeatures.adopt(definition.placements, {
 		"clear_lane": clear_lane,
 		"dodge_radius": dodge_radius,
+		"same_side_chance": same_side_chance,
+		"jump_run_up": jump_run_up,
 		"keep_out": _keep_out(),
 		"keep_out_radius": pad_keep_out,
 		"reserved": jump_spans(),
 	})
-	# Seeded off the track's own name rather than off the file it came in -
-	# a definition can be handed straight to this, with no file behind it at
-	# all - so a track always has its coins in the same places. A player who
-	# drove it yesterday and knows where they are is remembering the road,
-	# which is the whole point of a road worth learning. A variant is a road of
-	# its own, so its coins are its own too, and still the same on every run.
-	_scatter_the_coins(hash(definition.track_name) if variant == TrackVariant.NORMAL
-		else hash("%s-%s" % [definition.track_name, variant]))
-	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
-	_build_branches(definition)
-	regenerated.emit()
+	# Hard is rows on the road the track already has, so it is planned here,
+	# against the finished layout, rather than in `TrackVariant.apply` with the
+	# pieces. Seeded apart from everything else, for the reason coins are.
+	if variant == TrackVariant.HARD:
+		_features.harden(_layout, hash("%s-%s" % [definition.track_name, variant]),
+			TrackVariant.HARD_MORE_ROWS, TrackVariant.HARD_TRAP_SHARE)
 
 
 ## The high roads a track file split off the course, each a Track of its own

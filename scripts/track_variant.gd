@@ -29,10 +29,20 @@ const REVERSE := "reverse"
 ## In the order the track page shows them.
 const ALL := [NORMAL, HARD, TRACK_CHAOS, MIRROR, REVERSE]
 
-## The ways `apply()` knows how to make so far. HARD and track chaos have a key
-## and a board already, but no transform yet: until they do, no track offers
-## them, so nothing can drive the base track while calling it HARD.
-const BUILT := [NORMAL, MIRROR, REVERSE]
+## The ways that can be made so far. Track chaos has a key and a board already,
+## but no transform yet: until it does, no track offers it, so nothing can
+## drive the base track while calling it track chaos. HARD is made by
+## `Track.plan_course` rather than `apply()`, since its rows are planned against
+## the finished layout.
+const BUILT := [NORMAL, MIRROR, REVERSE, HARD]
+
+## How much harder HARD is: this many rows for every one the track has, and
+## this share of the rows added turned into traps - never fewer than one trap.
+## Here, in one place, so they are tuned together. Every Hard fingerprint is
+## taken over the plan these make, so moving either drops every Hard time;
+## tune them before the targets are measured, not after.
+const HARD_MORE_ROWS := 1.5
+const HARD_TRAP_SHARE := 0.3
 
 ## What each track offers besides NORMAL, by file name, in the order of
 ## `TrackRoster.FILES` and then `ACROBATIC_FILES`.
@@ -46,26 +56,26 @@ const BUILT := [NORMAL, MIRROR, REVERSE]
 ## is reported, so a track does not quietly miss out on one. Bot roads are not
 ## here at all. The gate is one race against one road.
 const OFFERED := {
-	"01_first_light": [MIRROR, REVERSE],
-	"02_long_way_round": [MIRROR, REVERSE],
-	"03_the_weave": [MIRROR, REVERSE],
-	"04_cold_start": [MIRROR, REVERSE],
-	"05_overpass": [MIRROR, REVERSE],
-	"06_split_decision": [MIRROR, REVERSE],
-	"07_pinch": [MIRROR, REVERSE],
-	"08_switchback": [MIRROR, REVERSE],
-	"09_the_gauntlet": [MIRROR, REVERSE],
-	"10_long_haul": [MIRROR, REVERSE],
-	"11_the_hook": [MIRROR, REVERSE],
-	"12_leap_of_faith": [MIRROR, REVERSE],
-	"13_needle": [MIRROR, REVERSE],
-	"14_relentless": [MIRROR, REVERSE],
-	"15_rattlesnake": [MIRROR, REVERSE],
-	"16_grinder": [MIRROR, REVERSE],
-	"17_whiplash": [MIRROR],
-	"18_bottleneck": [MIRROR, REVERSE],
-	"19_the_wringer": [MIRROR, REVERSE],
-	"20_last_light": [MIRROR],
+	"01_first_light": [MIRROR, REVERSE, HARD],
+	"02_long_way_round": [MIRROR, REVERSE, HARD],
+	"03_the_weave": [MIRROR, REVERSE, HARD],
+	"04_cold_start": [MIRROR, REVERSE, HARD],
+	"05_overpass": [MIRROR, REVERSE, HARD],
+	"06_split_decision": [MIRROR, REVERSE, HARD],
+	"07_pinch": [MIRROR, REVERSE, HARD],
+	"08_switchback": [MIRROR, REVERSE, HARD],
+	"09_the_gauntlet": [MIRROR, REVERSE, HARD],
+	"10_long_haul": [MIRROR, REVERSE, HARD],
+	"11_the_hook": [MIRROR, REVERSE, HARD],
+	"12_leap_of_faith": [MIRROR, REVERSE, HARD],
+	"13_needle": [MIRROR, REVERSE, HARD],
+	"14_relentless": [MIRROR, REVERSE, HARD],
+	"15_rattlesnake": [MIRROR, REVERSE, HARD],
+	"16_grinder": [MIRROR, REVERSE, HARD],
+	"17_whiplash": [MIRROR, HARD],
+	"18_bottleneck": [MIRROR, REVERSE, HARD],
+	"19_the_wringer": [MIRROR, REVERSE, HARD],
+	"20_last_light": [MIRROR, HARD],
 	"a01_lift_off": [MIRROR],
 	"a02_sky_stairs": [MIRROR],
 	"a03_island_hopper": [MIRROR],
@@ -313,16 +323,20 @@ static func targets(base: Vector3, variant: String) -> Vector3:
 ## and placements a race on it would be laid out from. Null for a file that is
 ## not a track.
 ##
-## Described with the definition's own jump lengths and sampling step rather
-## than a `Track`'s, since there is no `Track` here. They are the same numbers,
-## and a change to either is what `TrackTimes.GEOMETRY` is bumped for.
+## Planned by a `Track` that is never put in the world, through the same
+## `plan_course` a race lays itself out with. Hard's rows depend on where the
+## grid, the flag, the respawns and the jumps fall, and only a Track knows
+## those - and a plan worked out anywhere else would be a second copy of the
+## planner, free to drift from the one the race uses.
 static func described(track_file: String, variant: String) -> TrackDefinition:
 	var written := load(track_file) as GDScript
 	if written == null:
 		return null
 	var definition: TrackDefinition = written.new()
-	definition.describe()
-	apply(definition, variant)
+	var track: Track = load("res://scenes/track/track.tscn").instantiate()
+	track.variant = variant
+	track.plan_course(definition)
+	track.free()
 	return definition
 
 

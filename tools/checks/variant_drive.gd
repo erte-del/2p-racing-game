@@ -56,13 +56,19 @@ func _init() -> void:
 				line.append("%s DID NOT FINISH" % TrackVariant.display_name(variant))
 				continue
 			var seconds: float = result["seconds"]
+			# Where the bot had to be put back, since a lap with resets in it
+			# is measuring the resets as much as the road.
+			var put_back := ""
+			for at in result["resets"]:
+				put_back += " R%.0f" % at
 			if variant == TrackVariant.NORMAL:
 				as_written = seconds
-				line.append("NORMAL %s" % RaceClock.format(seconds))
+				line.append("NORMAL %s%s" % [RaceClock.format(seconds), put_back])
 			else:
-				line.append("%s %s (%+.1f%%)" % [TrackVariant.display_name(variant),
+				line.append("%s %s (%+.1f%%)%s" % [TrackVariant.display_name(variant),
 					RaceClock.format(seconds),
-					100.0 * (seconds / as_written - 1.0) if as_written > 0.0 else 0.0])
+					100.0 * (seconds / as_written - 1.0) if as_written > 0.0 else 0.0,
+					put_back])
 		print("%-20s %s" % [file.get_file().get_basename(), "   ".join(line)])
 
 	settings.track_file = ""
@@ -81,7 +87,8 @@ func _run(settings: Node) -> Dictionary:
 		await physics_frame
 	var track: Track = solo.get_node("Track")
 	var car: Car = solo.get_node("Car")
-	var result := {"finished": false, "seconds": 0.0, "progress": 0.0}
+	var result := {"finished": false, "seconds": 0.0, "progress": 0.0,
+		"resets": []}
 	if track.variant != settings.track_variant:
 		print("  the race was built %s, not %s" % [
 			TrackVariant.display_name(track.variant),
@@ -106,6 +113,7 @@ func _run(settings: Node) -> Dictionary:
 		bot.race_time = solo.get("_time")
 		await physics_frame
 		if bot.wants_reset() and solo.get("_running"):
+			(result["resets"] as Array).append(bot.progress())
 			solo.call("_back_to_checkpoint")
 			resets += 1
 			if resets > MAX_RESETS:
