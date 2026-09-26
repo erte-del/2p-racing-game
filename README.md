@@ -3209,7 +3209,12 @@ best in the middle of the menu and send it straight back where it came from.
 
 `tools/checks/track_times.gd` sets times, closes the game and sees what is
 still there, then edits a track and sees that the time on the old one has gone.
-It writes to a scratch file, so running it does not touch anyone's own record:
+It does the same for every way of driving a track. It edits a copy of First
+Light with a comment that moves no road, and the time on every way has to go,
+since every way is driven on that file. Then it moves one of First Light's
+Hard rows a metre, with the file untouched, and only the Hard time may go.
+It writes to a scratch file, and edits a copy in the sandbox rather than a real
+track, so running it does not touch anyone's own record:
 
 ```
 Godot --path . --headless --script tools/checks/track_times.gd

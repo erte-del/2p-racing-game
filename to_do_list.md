@@ -14,7 +14,7 @@ Written up 2026-09-25. **Built so far:** the track page (section 7) and build
 steps 1 to 7: Mirror, Reverse, Hard and track chaos, all playable off the
 page, Reverse's medal targets measured, every way on the Leaderboard and
 Statistics pages, and the README (2026-09-26). What is still open: Hard's
-targets (a person has to drive it), and one `track_times.gd` case (section 8). The previous contents
+targets, which wait on a person driving it. The previous contents
 of this file (the shop, customisation, statistics) were all built and are in
 the README. Git has the old text.
 
@@ -610,11 +610,13 @@ non-zero exit.
 	  acrobatic mirrors go through `acrobatic_drive.gd -- mirror`. No
 	  reversed jump drops, so no boosted runs yet. The two-player run is
 	  `mode_routing.gd`'s.
-- [ ] `tools/checks/track_times.gd`: a time on Mirror does not touch the base
+- [x] `tools/checks/track_times.gd`: a time on Mirror does not touch the base
 	  time. Editing the base file drops the variant's times as well. A Hard
 	  plan that changes drops the Hard time and leaves the others alone.
-	  *The first is checked* (each way keeps its own time). The other two are
-	  not.
+	  *As built:* the edit is real, on a copy of First Light in the sandbox;
+	  the new Hard plan is the real one with a row moved a metre. Each case
+	  was shown to fail with the text, then the plan, taken out of a
+	  variant's fingerprint.
 - [x] `tools/checks/track_select.gd`: a way the track does not offer cannot
 	  be played and says why, the variant arrives in the race's `Track`, and
 	  coming back lands on the same track and variant.

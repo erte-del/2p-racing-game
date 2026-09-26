@@ -9,11 +9,19 @@ extends SceneTree
 # and a record nobody can beat because nobody ever drove it is worse than no
 # record at all.
 #
+# Every way of driving a track keeps a time of its own, and each is held to the
+# road it was set on in the same way. Edit the file and every way's time goes,
+# since every way is driven on that file. Change how Hard is planned with no
+# file edited, and the Hard time goes and nothing else does.
+#
 # Nothing here touches the player's own times: the store is pointed at a
-# scratch file for the duration.
+# scratch file for the duration, and the track that gets edited is a copy of
+# First Light in the sandbox, never the real one.
 
 const TRACK := "res://tracks/01_first_light.gd"
 const SCRATCH := "user://times_check.cfg"
+## Where the copy of First Light that gets edited is written.
+const COPY := "user://sandbox/times_check_track.gd"
 
 
 func _init() -> void:
@@ -94,6 +102,8 @@ func _init() -> void:
 		faults += 1
 
 	faults += _check_the_variants(times)
+	faults += _check_an_edit_drops_every_way(times)
+	faults += _check_a_new_hard_plan(times)
 
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SCRATCH))
 	print("%d faults" % faults)
@@ -146,3 +156,99 @@ func _check_the_variants(times: Node) -> int:
 	if faults == 0:
 		print("each way of driving keeps its own time and board, and NORMAL's are untouched")
 	return faults
+
+
+## Edit a track's file and the time on every way of driving it goes, not only
+## NORMAL's. Every way is driven on that file, so a time on any of them was set
+## on a road that no longer exists.
+##
+## Edited for real, on a copy: a comment added to the end, which moves no road
+## at all. That is the point of fingerprinting the file - the file is what an
+## author edits, and a change to it is taken as a change to the track, whether
+## or not a corner moved.
+func _check_an_edit_drops_every_way(times: Node) -> int:
+	var faults := 0
+	DirAccess.make_dir_recursive_absolute(COPY.get_base_dir())
+	var text: String = times.source(TRACK)
+	_write(COPY, text)
+	var ways := [TrackVariant.NORMAL, TrackVariant.MIRROR, TrackVariant.REVERSE,
+		TrackVariant.HARD]
+	for variant: String in ways:
+		times.forget(COPY, variant)
+		times.record(COPY, 45.0, variant)
+		if times.best(COPY, variant) != 45.0:
+			print("  a %s time on the copy was not kept" % TrackVariant.display_name(variant))
+			faults += 1
+
+	_write(COPY, text + "\n# Edited by tools/checks/track_times.gd.\n")
+	for variant: String in ways:
+		if times.best(COPY, variant) >= 0.0:
+			print("  a %s time survived its track's file being edited"
+				% TrackVariant.display_name(variant))
+			faults += 1
+	times.load_times()
+	for variant: String in ways:
+		if times.best(COPY, variant) >= 0.0:
+			print("  a dropped %s time came back off disk" % TrackVariant.display_name(variant))
+			faults += 1
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(COPY))
+	if faults == 0:
+		print("editing a track's file drops the time on every way of driving it")
+	return faults
+
+
+## Change the road Hard makes of a track, with the file untouched, and the Hard
+## time goes while every other way's stays. That is the case a fingerprint over
+## the file alone would miss: HARD_MORE_ROWS moved, or the planner taught to put
+## a row somewhere else, and every Hard time would be a time on rows that are
+## not there any more.
+##
+## The new plan is First Light's real Hard plan with one row moved a metre up
+## the road, handed to the store in place of the one it worked out - which is
+## what it would work out, the session after such a change.
+func _check_a_new_hard_plan(times: Node) -> int:
+	var faults := 0
+	var ways := [TrackVariant.NORMAL, TrackVariant.MIRROR, TrackVariant.REVERSE,
+		TrackVariant.HARD, TrackVariant.TRACK_CHAOS]
+	for variant: String in ways:
+		times.forget(TRACK, variant)
+		times.record(TRACK, 45.0, variant)
+
+	var hard := TrackVariant.described(TRACK, TrackVariant.HARD)
+	var moved := false
+	for placement in hard.placements:
+		if placement.kind == TrackFeatures.OBSTACLE:
+			placement.offset += 1.0
+			moved = true
+			break
+	if not moved:
+		print("  First Light's Hard plan has no row to move")
+		return faults + 1
+	var plans: Dictionary = times.get("_plans")
+	var key := TrackVariant.key(TRACK, TrackVariant.HARD)
+	var before := times.fingerprint(TRACK, TrackVariant.HARD) as int
+	plans[key] = TrackVariant.plan(hard)
+	if times.fingerprint(TRACK, TrackVariant.HARD) == before:
+		print("  moving a Hard row did not move the Hard fingerprint")
+		faults += 1
+
+	if times.best(TRACK, TrackVariant.HARD) >= 0.0:
+		print("  a HARD time survived the rows it was set on moving")
+		faults += 1
+	for variant: String in ways:
+		if variant != TrackVariant.HARD and times.best(TRACK, variant) != 45.0:
+			print("  a new Hard plan took the %s time with it"
+				% TrackVariant.display_name(variant))
+			faults += 1
+	# Worked out again from the planner, so nothing after this is held to the
+	# moved row.
+	plans.erase(key)
+	if faults == 0:
+		print("a new Hard plan drops the Hard time and leaves every other way's")
+	return faults
+
+
+func _write(path: String, text: String) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(text)
+	file.close()
