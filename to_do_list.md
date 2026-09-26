@@ -11,7 +11,8 @@ ones, that comes to about a hundred timed configurations, and none of them had
 to be laid out.
 
 Written up 2026-09-25. **Built so far:** the track page (section 7) and build
-steps 1 to 4: Mirror, Reverse and Hard, playable off the page (2026-09-26). The previous contents
+steps 1 to 5: Mirror, Reverse, Hard and track chaos, all playable off the
+page (2026-09-26). The previous contents
 of this file (the shop, customisation, statistics) were all built and are in
 the README. Git has the old text.
 
@@ -126,7 +127,7 @@ the base track may leak into it.
 	  millimetre (`TrackVariant.plan()`, coins left out). The rounding
 	  matters because a signature has to agree between a Mac and a Windows
 	  machine.
-- [ ] **Track chaos cannot use that plan as it stands.** Its placements are
+- [x] **Track chaos cannot use that plan as it stands.** Its placements are
 	  rolled again every run, so a fingerprint over them would change every
 	  run and drop its best time each time. Its plan has to be the base plan
 	  with the loose rows and traps taken out - what is kept, not what is
@@ -403,23 +404,28 @@ against different barriers, so the board ranks luck as well as driving.
 
 - [x] Its own key, fingerprint and board, `TrackVariant.TRACK_CHAOS`, kept
 	  apart from NORMAL's (built with the page, see section 7).
-- [ ] No medal until question 2 is answered. A target measured against one
-	  roll of the dice is a target for that roll.
-- [ ] It counts in `Stats` as a completed race, with distance driven and
+- [x] No medal until question 2 is answered. A target measured against one
+	  roll of the dice is a target for that roll. (`TrackVariant.targets` gives
+	  it none.)
+- [x] It counts in `Stats` as a completed race, with distance driven and
 	  coins picked up.
-- [ ] It does not count toward the medal gate.
+- [x] It does not count toward the medal gate.
 
 ### The transform
 
-- [ ] Take the base definition. Remove every loose `OBSTACLE` row and every
+- [x] Take the base definition. Remove every loose `OBSTACLE` row and every
 	  `TRAP`. Keep the fork's divider, pad and marker, and the rows inside the
 	  fork's fast lane. Keep pads.
-- [ ] Re-plan rows and traps with the planner, using the `TRAP_CHANCE` range
+- [x] *As built:* the new rows keep off what Hard's keep off (run-ups, corner
+	  exits, the fork's approach) and are held to `hard_row_holds`. The
+	  fingerprint is over the track with its loose rows taken up and none
+	  rolled, not over the roll.
+- [x] Re-plan rows and traps with the planner, using the `TRAP_CHANCE` range
 	  chaos mode already rolls traps at ([scripts/chaos.gd](scripts/chaos.gd)), from a seed
 	  rolled at the start of the run. The fork lane's slalom stays as written
 	  in the first version. Re-rolling it is a later improvement.
-- [ ] Coins roll again with it.
-- [ ] Both players on a split screen get the same roll. A race where each
+- [x] Coins roll again with it.
+- [x] Both players on a split screen get the same roll. A race where each
 	  car meets different barriers is not a race.
 
 ### Every run, including a retry
@@ -429,16 +435,18 @@ rebuilding it would cost a second of watching a road appear"
 ([scripts/solo.gd:545](scripts/solo.gd:545)). Track chaos needs the hazards to
 change without the road being rebuilt.
 
-- [ ] `Track.reroll_track_chaos(seed)`: throw away and rebuild the furniture only, not
+- [x] `Track.reroll_track_chaos(seed)`: throw away and rebuild the furniture only, not
 	  the road mesh, rails or embankment. `_furniture.build()` already takes
 	  the features plan on its own. Measure how long it takes on the densest
 	  track. If it is under a frame or two, retry stays instant.
-- [ ] `solo.gd` and `main.gd` call it from `_restart()` when the variant is
+	  *Measured:* 6-26 ms across the twenty, after asking `faults()` once a
+	  pass rather than once a rolled row (it was up to 63 ms).
+- [x] `solo.gd` and `main.gd` call it from `_restart()` when the variant is
 	  track chaos, before the countdown.
 
 ### Where it is offered
 
-- [ ] All twenty normal tracks. Acrobatic tracks: no, for the reason Hard is
+- [x] All twenty normal tracks. Acrobatic tracks: no, for the reason Hard is
 	  not offered there.
 
 ---
@@ -510,8 +518,8 @@ largest interface size.
 - [x] PLAY drives the way held down, where the track offers it.
 - [x] REVERSE, on normal tracks' pages only.
 - [x] A way a track does not offer is dimmed, with one line saying why
-	  (`TrackVariant.why_not()`, over PLAY). HARD and CHAOS say they are
-	  still being built.
+	  (`TrackVariant.why_not()`, over PLAY). With every way built, only
+	  Whiplash's and Last Light's REVERSE have a line to show.
 - [x] `GameSettings.track_variant` is set by PLAY, next to `track_file`, and
 	  coming back from a race opens the page with the same way held down.
 - [x] Mirror's picture is the wide shot with `flip_h`.
@@ -586,8 +594,8 @@ non-zero exit.
 	  coming back lands on the same track and variant.
 - [x] `tools/checks/mode_routing.gd`: a variant survives both routes, solo
 	  and two-player.
-- [ ] `tools/checks/progress.gd`: golds on variants do not open a gate.
-- [ ] `tools/checks/stats_race.gd`: a track chaos run adds a completed race.
+- [x] `tools/checks/progress.gd`: golds on variants do not open a gate.
+- [x] `tools/checks/stats_race.gd`: a track chaos run adds a completed race.
 - [ ] `tools/checks/screen_fit.gd` opens the track page with the line under
 	  PLAY showing (done), and the Statistics page with its new columns (not
 	  yet), at every window shape and the largest interface size.
@@ -688,8 +696,9 @@ this.
 4. ~~**Hard**: `harden()`, settling the density (question 6), then the drive
    check.~~ Done 2026-09-26, at 1.5x. Offered on all twenty normal tracks; the
    bot drives every one without a reset.
-5. **Track chaos**: `reroll_track_chaos()`, timed against the densest
-   track, and its count in `Stats`.
+5. ~~**Track chaos**: `reroll_track_chaos()`, timed against the densest
+   track, and its count in `Stats`.~~ Done 2026-09-26. Offered on all twenty
+   normal tracks; every roll checked is clean and the bot drives one of each.
 6. **Targets**: `lap_times.gd` per variant, filling the table. Mirror's
    argument is confirmed or dropped here.
 7. **The other pages** (Leaderboard, Statistics), then the README.

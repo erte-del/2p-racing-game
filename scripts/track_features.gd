@@ -755,20 +755,7 @@ func harden(layout: TrackLayout, hard_seed: int, more: float, share: float) -> v
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hard_seed
 	var standing := faults(layout).size()
-	# Kept off: the fork and room either side of it, as a rolled course keeps
-	# its own fork; every jump's run-up, which the tracks all leave long, level
-	# and empty, since lining up with a ramp is the whole of what it asks; and
-	# the road straight out of every corner, where a row would not be seen
-	# until it was too late to do anything but hit it.
-	_claimed.clear()
-	for fork in of_kind(FORK):
-		_claimed.append(Vector2(fork.offset - fork_entry,
-			fork.offset + fork.length + fork_exit))
-	for piece in layout.pieces:
-		if piece.kind == TrackLayout.JUMP:
-			_claimed.append(Vector2(piece.start_offset - jump_run_up, piece.start_offset))
-		elif piece.kind == TrackLayout.CORNER:
-			_claimed.append(Vector2(piece.end_offset, piece.end_offset + hard_sight))
+	_claim_what_new_rows_keep_off(layout)
 
 	# Every spot a row could stand, a few metres apart on every straight and
 	# climb long enough to hold one, tried in an order rolled from the seed so
@@ -837,6 +824,85 @@ func harden(layout: TrackLayout, hard_seed: int, more: float, share: float) -> v
 	_claimed.clear()
 
 
+## Stake out what a row added to a laid-out track keeps off, for `harden` and
+## `roll_track_chaos`: the fork and room either side of it, as a rolled course
+## keeps its own fork; every jump's run-up, which the tracks all leave long,
+## level and empty, since lining up with a ramp is the whole of what it asks;
+## and the road straight out of every corner, where a row would not be seen
+## until it was too late to do anything but hit it.
+func _claim_what_new_rows_keep_off(layout: TrackLayout) -> void:
+	_claimed.clear()
+	for fork in of_kind(FORK):
+		_claimed.append(Vector2(fork.offset - fork_entry,
+			fork.offset + fork.length + fork_exit))
+	for piece in layout.pieces:
+		if piece.kind == TrackLayout.JUMP:
+			_claimed.append(Vector2(piece.start_offset - jump_run_up, piece.start_offset))
+		elif piece.kind == TrackLayout.CORNER:
+			_claimed.append(Vector2(piece.end_offset, piece.end_offset + hard_sight))
+
+
+## Take up every loose row and trap, leaving the fork - its divider, its pad
+## and the slalom in its fast lane - and every pad where the track put them.
+## What track chaos keeps of a track, before it rolls the rest; see
+## `roll_track_chaos`. Coins go too, since they are scattered around the rows
+## and a new set of rows wants a new scattering.
+func strip_loose_rows() -> void:
+	for i in range(placements.size() - 1, -1, -1):
+		var placement := placements[i]
+		var loose := (placement.kind == TRAP
+				or (placement.kind == OBSTACLE and not placement.along))
+		if (loose and not _in_a_fork(placement)) or placement.kind == COIN:
+			placements.remove_at(i)
+
+
+## Roll a laid-out track's loose rows and traps afresh: track chaos.
+##
+## Called on a plan `strip_loose_rows` has already cleared. The rows are put
+## down by `_place_obstacles`, the pass that lays them on a rolled course, with
+## traps rolled at `chance` - a chance drawn from that range, the one chaos mode
+## rolls its traps at. They keep off what Hard's rows keep off, and every one
+## has to hold to what Hard's are held to (`hard_row_holds`); a row that does
+## not is taken back up. The same seed makes the same rows, which is what lets
+## two players on a split screen meet the same road, and a check see a roll
+## again.
+func roll_track_chaos(layout: TrackLayout, roll_seed: int, chance: Vector2) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = roll_seed
+	var standing := faults(layout).size()
+	_claim_what_new_rows_keep_off(layout)
+	var was_trapping := traps_enabled
+	var was_chance := trap_chance
+	traps_enabled = true
+	trap_chance = rng.randf_range(chance.x, chance.y)
+	var before := placements.size()
+	_place_obstacles(layout, rng)
+	traps_enabled = was_trapping
+	trap_chance = was_chance
+	_claimed.clear()
+
+	# The planner builds each row to be reached from the one before it on the
+	# same straight, by the rule `faults()` holds; Hard's rule is stricter, and
+	# a row that fails it is lifted, the plan asked again, until none do.
+	# The whole plan is asked once a pass rather than once a row: while it has
+	# no more faults than it started with, each row only has to be reachable
+	# by a car, which is cheap to ask. A retry rolls this, and a retry is meant
+	# to be instant.
+	var rolled := placements.slice(before)
+	var lifted := true
+	while lifted:
+		lifted = false
+		var clean := faults(layout).size() <= standing
+		for row in rolled:
+			if row not in placements:
+				continue
+			if not (_car_reaches(layout, row) if clean
+					else hard_row_holds(layout, row, standing)):
+				placements.erase(row)
+				lifted = true
+				break
+
+
 ## Whether a row Hard has put down, already in the plan, can stay: the plan has
 ## no more faults than `standing`, and a car can get from the row before it to
 ## this one's way past, and from this one's to the row after.
@@ -848,8 +914,13 @@ func harden(layout: TrackLayout, hard_seed: int, more: float, share: float) -> v
 ## adds is not left to it: here the move is measured for something a clear
 ## lane wide, which has to get all of itself from one gap into the next.
 func hard_row_holds(layout: TrackLayout, row: Placement, standing: int) -> bool:
-	if faults(layout).size() > standing:
-		return false
+	return faults(layout).size() <= standing and _car_reaches(layout, row)
+
+
+## The second half of `hard_row_holds`: whether a car a clear lane wide can
+## get from the row before this one into its way past, and from its way past
+## into the next's.
+func _car_reaches(layout: TrackLayout, row: Placement) -> bool:
 	var all := rows()
 	var at := all.find(row)
 	for pair in [[at - 1, at], [at, at + 1]]:

@@ -2,6 +2,12 @@ extends SceneTree
 
 # Build every way of driving every track, and hold each to what it claims.
 #   Godot --path . --headless --script tools/checks/variants.gd
+#   Godot --path . --headless --script tools/checks/variants.gd -- 100
+#
+# The number is how many rolls of track chaos each track is checked over: 25
+# unless told otherwise, which takes about half a minute. A hundred takes about
+# a minute and a half, and is worth running after anything that changes what a
+# roll can put down.
 #
 # A variant is a road nobody laid out. Its track was written and looked at; the
 # mirrored copy of it was made by `TrackVariant` and has never been looked at
@@ -26,6 +32,12 @@ extends SceneTree
 # Nothing here writes a time. Everything it asks of the times is a hash.
 
 var _faults := 0
+
+## How many rolls of track chaos each track is checked over, unless a number
+## is given after `--`.
+const ROLLS := 25
+
+var _rolls := ROLLS
 
 
 ## A jump that drops five metres. Reversed, it would have to climb five, which
@@ -55,6 +67,9 @@ func _init() -> void:
 	var settings := root.get_node_or_null(^"/root/GameSettings")
 	if settings != null:
 		settings.chaos = false
+	var args := OS.get_cmdline_user_args()
+	if not args.is_empty() and args[0].is_valid_int():
+		_rolls = maxi(1, int(args[0]))
 	var times: Node = root.get_node_or_null(^"/root/TrackTimes")
 	if times == null:
 		print("  TrackTimes is not loaded")
@@ -76,6 +91,7 @@ func _init() -> void:
 		if file in TrackRoster.FILES:
 			_check_the_reverse(file)
 			_check_hard(file)
+			_check_track_chaos(track, file)
 		_check_what_is_offered(track, file)
 
 	_check_what_is_not_a_track()
@@ -219,6 +235,82 @@ func _check_hard(file: String) -> void:
 		if not trapped:
 			_fault("%s: hard moved or lost what the track put at %.0f m" % [name, placement.offset])
 	print("%-24s hard: %d rows -> %d, %d traps -> %d" % [name, ours.x, theirs.x, ours.y, theirs.y])
+
+
+## Track chaos: many rolls (`ROLLS`), every one holding to every rule Hard's rows
+## are held to, and not all of them the same. What is kept of the track - the
+## road, the fork, its slalom and the pads - is the same under every roll, and
+## is what the time is fingerprinted against. A roll made again from its seed
+## is the same roll, and one made in place on a built track, the way a retry
+## makes it, is the same as one built from nothing.
+func _check_track_chaos(track: Track, file: String) -> void:
+	var name := file.get_file().get_basename()
+	var planner: Track = load("res://scenes/track/track.tscn").instantiate()
+	planner.variant = TrackVariant.TRACK_CHAOS
+	var kept := _placed(TrackVariant.described(file, TrackVariant.TRACK_CHAOS))
+	var plans := {}
+	var counts := Vector2i(1 << 30, 0)
+	var trapped := 0
+	for roll in range(1, _rolls + 1):
+		planner.track_chaos_seed = roll
+		var definition: TrackDefinition = (load(file) as GDScript).new()
+		planner.plan_course(definition)
+		var features := planner.features()
+		var layout := planner.layout()
+		for problem in features.faults(layout):
+			_fault("%s track chaos, roll %d: %s" % [name, roll, problem])
+		var rows := features.rows()
+		for row in rows:
+			if (not features._in_a_fork(row)
+					and not features.hard_row_holds(layout, row, 0)):
+				_fault("%s track chaos, roll %d: the row at %.0f m cannot be reached by a car"
+					% [name, roll, row.offset])
+		var loose := rows.filter(func(r: TrackFeatures.Placement) -> bool:
+			return not features._in_a_fork(r))
+		counts = Vector2i(mini(counts.x, loose.size()), maxi(counts.y, loose.size()))
+		if loose.any(func(r: TrackFeatures.Placement) -> bool: return r.moves()):
+			trapped += 1
+		var plan := TrackVariant.plan(definition)
+		plans[plan] = true
+		# What is kept is everything that is not a loose row.
+		var fork_rows := _placed_without_loose_rows(definition, features)
+		if fork_rows != kept:
+			_fault("%s track chaos, roll %d: what the track keeps moved" % [name, roll])
+	if plans.size() < _rolls / 2:
+		_fault("%s track chaos: %d rolls made only %d different plans" % [name, _rolls, plans.size()])
+	planner.track_chaos_seed = 7
+	var again: TrackDefinition = (load(file) as GDScript).new()
+	planner.plan_course(again)
+	var first := TrackVariant.plan(again)
+	again = (load(file) as GDScript).new()
+	planner.plan_course(again)
+	if TrackVariant.plan(again) != first:
+		_fault("%s track chaos: the same seed rolled two different plans" % name)
+	planner.free()
+
+	# A retry: built with one roll, then rolled again in place.
+	track.track_file = file
+	track.variant = TrackVariant.TRACK_CHAOS
+	track.generate(3)
+	track.reroll_track_chaos(7)
+	if TrackVariant.plan(track.definition()) != first:
+		_fault("%s track chaos: a roll made in place is not the roll built from nothing" % name)
+	track.variant = TrackVariant.NORMAL
+	track.track_chaos_seed = 0
+	print("%-24s track chaos: %d-%d loose rows over %d rolls, traps in %d, %d different"
+		% [name, counts.x, counts.y, _rolls, trapped, plans.size()])
+
+
+## `_placed`, less the rows a track chaos roll puts down: every placement that
+## is not a loose row, which is what track chaos keeps of a track.
+func _placed_without_loose_rows(definition: TrackDefinition, features: TrackFeatures) -> String:
+	var kept := TrackDefinition.new()
+	for placement in definition.placements:
+		var loose := (placement.kind == TrackFeatures.TRAP
+				or (placement.kind == TrackFeatures.OBSTACLE and not placement.along))
+		if not (loose and not features._in_a_fork(placement)):
+			kept.placements.append(placement)
+	return _placed(kept)
 
 
 ## How many rows stand across a definition's road, and how many of them move.

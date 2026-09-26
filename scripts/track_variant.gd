@@ -29,12 +29,10 @@ const REVERSE := "reverse"
 ## In the order the track page shows them.
 const ALL := [NORMAL, HARD, TRACK_CHAOS, MIRROR, REVERSE]
 
-## The ways that can be made so far. Track chaos has a key and a board already,
-## but no transform yet: until it does, no track offers it, so nothing can
-## drive the base track while calling it track chaos. HARD is made by
-## `Track.plan_course` rather than `apply()`, since its rows are planned against
-## the finished layout.
-const BUILT := [NORMAL, MIRROR, REVERSE, HARD]
+## The ways that can be made. HARD and track chaos are made by
+## `Track.plan_course` rather than `apply()`, since their rows are planned
+## against the finished layout.
+const BUILT := [NORMAL, MIRROR, REVERSE, HARD, TRACK_CHAOS]
 
 ## How much harder HARD is: this many rows for every one the track has, and
 ## this share of the rows added turned into traps - never fewer than one trap.
@@ -56,26 +54,26 @@ const HARD_TRAP_SHARE := 0.3
 ## is reported, so a track does not quietly miss out on one. Bot roads are not
 ## here at all. The gate is one race against one road.
 const OFFERED := {
-	"01_first_light": [MIRROR, REVERSE, HARD],
-	"02_long_way_round": [MIRROR, REVERSE, HARD],
-	"03_the_weave": [MIRROR, REVERSE, HARD],
-	"04_cold_start": [MIRROR, REVERSE, HARD],
-	"05_overpass": [MIRROR, REVERSE, HARD],
-	"06_split_decision": [MIRROR, REVERSE, HARD],
-	"07_pinch": [MIRROR, REVERSE, HARD],
-	"08_switchback": [MIRROR, REVERSE, HARD],
-	"09_the_gauntlet": [MIRROR, REVERSE, HARD],
-	"10_long_haul": [MIRROR, REVERSE, HARD],
-	"11_the_hook": [MIRROR, REVERSE, HARD],
-	"12_leap_of_faith": [MIRROR, REVERSE, HARD],
-	"13_needle": [MIRROR, REVERSE, HARD],
-	"14_relentless": [MIRROR, REVERSE, HARD],
-	"15_rattlesnake": [MIRROR, REVERSE, HARD],
-	"16_grinder": [MIRROR, REVERSE, HARD],
-	"17_whiplash": [MIRROR, HARD],
-	"18_bottleneck": [MIRROR, REVERSE, HARD],
-	"19_the_wringer": [MIRROR, REVERSE, HARD],
-	"20_last_light": [MIRROR, HARD],
+	"01_first_light": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"02_long_way_round": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"03_the_weave": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"04_cold_start": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"05_overpass": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"06_split_decision": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"07_pinch": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"08_switchback": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"09_the_gauntlet": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"10_long_haul": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"11_the_hook": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"12_leap_of_faith": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"13_needle": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"14_relentless": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"15_rattlesnake": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"16_grinder": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"17_whiplash": [MIRROR, HARD, TRACK_CHAOS],
+	"18_bottleneck": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"19_the_wringer": [MIRROR, REVERSE, HARD, TRACK_CHAOS],
+	"20_last_light": [MIRROR, HARD, TRACK_CHAOS],
 	"a01_lift_off": [MIRROR],
 	"a02_sky_stairs": [MIRROR],
 	"a03_island_hopper": [MIRROR],
@@ -328,13 +326,18 @@ static func targets(base: Vector3, variant: String) -> Vector3:
 ## grid, the flag, the respawns and the jumps fall, and only a Track knows
 ## those - and a plan worked out anywhere else would be a second copy of the
 ## planner, free to drift from the one the race uses.
-static func described(track_file: String, variant: String) -> TrackDefinition:
+##
+## For track chaos, `roll_seed` is the run's roll; left at zero it is the track
+## with its loose rows taken up and none rolled, which is what a track chaos
+## time is fingerprinted against, since the rows are different every run.
+static func described(track_file: String, variant: String, roll_seed := 0) -> TrackDefinition:
 	var written := load(track_file) as GDScript
 	if written == null:
 		return null
 	var definition: TrackDefinition = written.new()
 	var track: Track = load("res://scenes/track/track.tscn").instantiate()
 	track.variant = variant
+	track.track_chaos_seed = roll_seed
 	track.plan_course(definition)
 	track.free()
 	return definition

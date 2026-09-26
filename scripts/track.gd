@@ -150,6 +150,11 @@ signal coin_taken
 ## `track_file` is empty: the endless course is rolled, and a mirrored random
 ## road is just another random road.
 @export var variant := TrackVariant.NORMAL
+## What track chaos rolled this run's rows from. Zero rolls nothing: the track
+## with its loose rows taken up, which is what a track chaos time is
+## fingerprinted against, since the rows are different every run. Not an
+## export: it is a run's, not the track's. See `reroll_track_chaos`.
+var track_chaos_seed := 0
 
 @export_group("Jumps")
 ## A ramp, a hole where there is no road, and a long run to come down on.
@@ -435,8 +440,7 @@ func lay_out(definition: TrackDefinition) -> void:
 	# drove it yesterday and knows where they are is remembering the road,
 	# which is the whole point of a road worth learning. A variant is a road of
 	# its own, so its coins are its own too, and still the same on every run.
-	_scatter_the_coins(hash(definition.track_name) if variant == TrackVariant.NORMAL
-		else hash("%s-%s" % [definition.track_name, variant]))
+	_scatter_the_coins(_coins_seed())
 	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
 	_build_branches(definition)
 	regenerated.emit()
@@ -482,12 +486,45 @@ func plan_course(definition: TrackDefinition) -> void:
 		"keep_out_radius": pad_keep_out,
 		"reserved": jump_spans(),
 	})
-	# Hard is rows on the road the track already has, so it is planned here,
-	# against the finished layout, rather than in `TrackVariant.apply` with the
-	# pieces. Seeded apart from everything else, for the reason coins are.
+	# Hard and track chaos are rows on the road the track already has, so they
+	# are planned here, against the finished layout, rather than in
+	# `TrackVariant.apply` with the pieces. Seeded apart from everything else,
+	# for the reason coins are.
 	if variant == TrackVariant.HARD:
 		_features.harden(_layout, hash("%s-%s" % [definition.track_name, variant]),
 			TrackVariant.HARD_MORE_ROWS, TrackVariant.HARD_TRAP_SHARE)
+	elif variant == TrackVariant.TRACK_CHAOS:
+		_features.strip_loose_rows()
+		if track_chaos_seed != 0:
+			_features.roll_track_chaos(_layout, track_chaos_seed, Chaos.TRAP_CHANCE)
+
+
+## Roll track chaos's rows again, from `roll_seed`, and put them on the road -
+## without building the road again. Solo's retry is instant because it does not
+## rebuild the track, and a retry on track chaos is still a new roll, so only
+## what stands on the road is thrown away: the rows, the traps and the coins.
+## The road, its rails, its embankment and the fork stay as they are.
+func reroll_track_chaos(roll_seed: int) -> void:
+	if variant != TrackVariant.TRACK_CHAOS or _features == null:
+		return
+	track_chaos_seed = roll_seed
+	_features.strip_loose_rows()
+	if track_chaos_seed != 0:
+		_features.roll_track_chaos(_layout, track_chaos_seed, Chaos.TRAP_CHANCE)
+	_scatter_the_coins(_coins_seed())
+	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
+
+
+## What this course's coins are scattered from: the track's name, with the
+## variant on the end for a variant - and for track chaos, this run's roll, so
+## its coins roll again with its rows.
+func _coins_seed() -> int:
+	var named := _definition.track_name if _definition != null else ""
+	if variant == TrackVariant.NORMAL:
+		return hash(named)
+	if variant == TrackVariant.TRACK_CHAOS:
+		return hash("%s-%s-%d" % [named, variant, track_chaos_seed])
+	return hash("%s-%s" % [named, variant])
 
 
 ## The high roads a track file split off the course, each a Track of its own
@@ -652,6 +689,11 @@ func _layout_tuning() -> Dictionary:
 ## than producing a broken track.
 func generate(track_seed: int) -> void:
 	if not track_file.is_empty():
+		# A laid-out track has its shape in its file, so the seed is not its
+		# road. On track chaos it is what the rows are rolled from, which is
+		# how two players on one track meet the same rows.
+		if variant == TrackVariant.TRACK_CHAOS:
+			track_chaos_seed = track_seed
 		var written := load(track_file) as GDScript
 		if written == null:
 			push_error("Track: %s is not a track" % track_file)

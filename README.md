@@ -2817,9 +2817,7 @@ and never has to ask where it came from.
 The ways are named constants, `NORMAL`, `MIRROR`, `REVERSE`, `HARD` and
 `TRACK_CHAOS`, rather than strings typed out where they are used, so a misspelt
 one is a compile error rather than a quiet extra board nobody can find.
-`NORMAL` is the track as written. `MIRROR`, `REVERSE` and `HARD` are built.
-Track chaos has a key and a board already, but no track offers it until it has
-a transform, so nothing can drive the base track while calling it track chaos.
+`NORMAL` is the track as written, and all four of the others are built.
 
 **Mirror** swaps left and right. Every corner turns the other way, and
 everything on the road - pads, rows, traps, the fork, rings, platforms, lifts,
@@ -2913,6 +2911,45 @@ fingerprint a Hard time, `TrackVariant.described` asks a `Track` that is never
 put in the world for the same plan. So the fingerprint covers exactly what the
 race is run on, worked out by the same code rather than by a second copy of
 it.
+
+**Track chaos is not chaos mode.** They share the word CHAOS on their buttons
+and nothing else. Chaos mode belongs to the endless course, and re-rolls the
+car, the sky and the road itself. Track chaos is a way of driving a laid-out
+track: the road is the track as written and the car is the tuned car, and only
+the hazards change - rolled again on every run, including an instant retry.
+The code and the notes always say *track chaos* for this one
+(`TrackVariant.TRACK_CHAOS`, kept under `<track>-track_chaos`), so the two are
+never mistaken for each other. Its button on the track page says CHAOS and
+turns through the colours the way chaos mode's does, and that is the one place
+they look alike.
+
+What track chaos keeps of a track is the road, the fork - its divider, its pad
+and the slalom in its fast lane - and every pad. `TrackFeatures.strip_loose_rows`
+takes up the rest of the rows and traps, and `roll_track_chaos` rolls new ones
+with `_place_obstacles`, the pass that lays rows on a rolled course. Traps come
+at a chance drawn from chaos mode's own range (`Chaos.TRAP_CHANCE`). The new
+rows keep off what Hard's keep off and are held to what Hard's are held to, so
+a roll is as fair as a Hard track, and a row that fails is taken back up. The
+coins roll again with the rows. The same seed always makes the same roll: two
+players on a split screen share one track, so they meet one roll, and a check
+can deal a roll again.
+
+A retry does not rebuild the road, because the road is the same road. So
+`Track.reroll_track_chaos` throws away and rebuilds only what stands on the
+road: the rows, the traps and the coins. It takes 6-26 ms, a frame or two, so
+retry stays instant. In two-player races every new race builds the track anyway,
+and each is a new roll.
+
+Track chaos has a best time and a board, like every other way, because that
+was asked for. What that costs is worth saying: two players' times on it were
+set against different rows, so the board ranks luck as well as driving. Its
+fingerprint cannot be taken over the rows, since they are different every run
+and every best time would be dropped the moment it was set. So it is taken over
+what is kept - the track with its loose rows taken up and none rolled - which
+is `TrackVariant.described` with no roll. It has no medals: a target measured
+on one roll of the hazards is only a target for that roll. It counts in
+Statistics as a completed race like any other time trial, and like every
+variant it does nothing for the medal gate.
 Which ways a track offers is a table in `TrackVariant` keyed by file name, and
 not a line in the track file. A time's fingerprint is taken over the whole of
 its track's file, so adding a line to all thirty would throw away every best
@@ -2966,7 +3003,12 @@ after it begins without moving any road. Hard has to be the same road as its
 track, with more rows or traps on it, and the same plan every time it is made.
 Everything the track put down has to still be where it was, or be a row turned
 into a trap in the same place. And a Hard row squeezed in two metres behind
-another, covering exactly the gap that row leaves, has to be refused. Every
+another, covering exactly the gap that row leaves, has to be refused. Track
+chaos is rolled 25 times on every normal track (`-- 100` for a hundred), and
+every roll has to pass every rule and keep Hard's. What is kept has to be the
+same under every roll, the rolls cannot all be the same, one seed has to make
+the same roll twice, and a roll made in place on a built track, the way a
+retry makes it, has to equal one built from nothing. Every
 hole in a reversed track has to
 be where a hole was, and the check is shown a jump that would have to climb
 five metres reversed and a run-up too short to land on, and has to refuse

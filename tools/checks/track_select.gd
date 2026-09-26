@@ -614,7 +614,9 @@ func _check_it_is_mirrored(track: Track) -> int:
 ## NORMAL.
 func _check_the_ways(settings: Node) -> int:
 	var faults := 0
-	var file: String = TrackRoster.FILES[0]
+	# Whiplash, because it offers every way but one: Reverse, which it has a
+	# reason written down for not offering.
+	var file := "res://tracks/17_whiplash.gd"
 	settings.track_file = ""
 	settings.track_variant = TrackVariant.NORMAL
 	var menu: Node = load("res://scenes/menu.tscn").instantiate()
@@ -622,7 +624,7 @@ func _check_the_ways(settings: Node) -> int:
 	for i in 20:
 		await Engine.get_main_loop().process_frame
 	menu.call("_open_track_grid", TrackRoster.NORMAL)
-	menu.call("_open_track_detail", 0)
+	menu.call("_open_track_detail", TrackRoster.index_of(file))
 	await Engine.get_main_loop().process_frame
 	var box := "TrackDetail/Page/Panel/Margin/Box/"
 	var play: Button = menu.get_node(box + "Body/You/Play")
@@ -671,7 +673,7 @@ func _check_the_ways(settings: Node) -> int:
 	# Back from a race: the way it was driven is held again, and one the track
 	# does not offer comes back as NORMAL rather than as a way PLAY refuses.
 	for pair in [[TrackVariant.MIRROR, TrackVariant.MIRROR],
-			[TrackVariant.TRACK_CHAOS, TrackVariant.NORMAL]]:
+			[TrackVariant.REVERSE, TrackVariant.NORMAL]]:
 		settings.track_file = file
 		settings.track_variant = pair[0]
 		var back: Node = load("res://scenes/menu.tscn").instantiate()

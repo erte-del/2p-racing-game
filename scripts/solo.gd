@@ -217,7 +217,8 @@ func _ready() -> void:
 	else:
 		_track.track_file = _track_file
 		_track.variant = _track_variant
-		_track.generate(0)
+		# The seed only matters to track chaos, where it is this run's rows.
+		_track.generate(_a_roll())
 		# A bot road keeps no time and hands out no medal, so there is nothing
 		# to read back and nothing to compare a run against. Left where they
 		# started - no best, no targets - which is what leaves the corner of the
@@ -581,9 +582,19 @@ func _restart() -> void:
 	# is the whole point of it.
 	if _endless:
 		_roll_a_course()
+	elif _track_variant == TrackVariant.TRACK_CHAOS:
+		# Still not a rebuilt track - the road stays - but a new roll of what
+		# stands on it, every run, including this one.
+		_track.reroll_track_chaos(_a_roll())
 	_place_on_the_line()
 	_camera.follow(_car)
 	_start_after_countdown()
+
+
+## A seed for track chaos's rows. Never zero, which is the track with no rows
+## rolled at all.
+func _a_roll() -> int:
+	return maxi(1, randi())
 
 
 ## Throw away the course and roll a new one.

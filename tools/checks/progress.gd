@@ -256,6 +256,25 @@ func _times_that_do_not_count() -> void:
 	if _progress.gate_open(1):
 		_fault("the gate opened on golds set on the tracks behind it")
 
+	# Golds on the ten in front of the gate, but driven another way: mirrored,
+	# reversed, hard, under track chaos. The gate asks whether the ten have been
+	# driven properly, and a mirror gold on a track already golded is the same
+	# skill counted twice - so none of these count, however many there are.
+	_from_nothing()
+	_lay_down_golds(needed - 1)
+	for index in block:
+		for variant: String in TrackVariant.ALL:
+			if variant != TrackVariant.NORMAL:
+				_times.record(TrackRoster.file(index),
+					TrackRoster.targets(index).x - 0.5, variant)
+	print("%d golds in %s, and a gold's time every other way on all ten: %s counts %d, gate %s"
+		% [needed - 1, _range(0), _range(0), _progress.golds_in(0),
+			"open" if _progress.gate_open(1) else "shut"])
+	if _progress.golds_in(0) != needed - 1:
+		_fault("golds driven another way are being counted towards the gate")
+	if _progress.gate_open(1):
+		_fault("the gate opened on golds driven another way")
+
 	# And the one that makes it up, set on a track that has been redrawn since.
 	# TrackTimes keeps a fingerprint of the road a time was set on beside the
 	# time; scribble on it and the store drops the lap the moment anything asks

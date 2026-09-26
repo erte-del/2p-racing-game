@@ -58,6 +58,7 @@ func _init() -> void:
 	_settings.chaos = false
 
 	await _a_finished_run()
+	await _a_track_chaos_run()
 	await _a_broken_run()
 	await _resets()
 	await _a_quit_run()
@@ -91,6 +92,29 @@ func _a_finished_run() -> void:
 	}, true)
 	print("  %d coins on the way, %d counted"
 		% [banked, _stats.coins_earned - int(before["coins_earned"])])
+	await _gone(solo)
+
+
+## The same track under track chaos, its rows rolled for the run: a completed
+## race like any other time trial, with the distance and the coins on it.
+## Nothing about a roll of the hazards makes a run count for less.
+func _a_track_chaos_run() -> void:
+	_settings.damage = false
+	_settings.track_file = FIRST
+	_settings.track_variant = TrackVariant.TRACK_CHAOS
+	var solo := await _solo()
+	if solo == null:
+		_settings.track_variant = TrackVariant.NORMAL
+		return
+	var before := _snapshot()
+	var coins_before: int = _purse.coins()
+	if not await _drive_to_the_flag(solo):
+		_fault("the car never finished %s under track chaos" % FIRST)
+	var banked: int = _purse.coins() - coins_before
+	_expect("a finished track chaos run", before, {
+		"races_completed": 1, "coins_earned": banked,
+	}, true)
+	_settings.track_variant = TrackVariant.NORMAL
 	await _gone(solo)
 
 

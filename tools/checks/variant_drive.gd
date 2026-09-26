@@ -16,6 +16,11 @@ extends SceneTree
 # The acrobatic tracks are not driven here. The bot drives roads, not rings and
 # lifts; tools/checks/acrobatic_drive.gd drives those, and takes `-- mirror`.
 #
+# Track chaos is driven on whatever roll it is dealt, from a seeded stream so a
+# roll the bot cannot finish can be dealt again. After it, retry is pressed the
+# way a player presses Enter: the rows have to change and the road must not
+# be built again, and the time the new roll takes is printed.
+#
 # Every jump on a normal track is level, so no reversed jump drops and none
 # needs a boosted car sent off it to see where it comes down. The day a track
 # with a jump that climbs offers Reverse, this is where that run goes.
@@ -38,6 +43,9 @@ func _init() -> void:
 
 	var args := OS.get_cmdline_user_args()
 	var files: Array = args if not args.is_empty() else TrackRoster.FILES
+	# Solo rolls track chaos from randi(), so this is what makes a failing roll
+	# one that can be run again.
+	seed(20260926)
 	var faults := 0
 	var runs := 0
 	for file: String in files:
@@ -48,6 +56,7 @@ func _init() -> void:
 			settings.track_variant = variant
 			var result: Dictionary = await _run(settings)
 			runs += 1
+			faults += result.get("retry_faults", 0)
 			if not result["finished"]:
 				faults += 1
 				print("  %s %s: did not reach the flag, stuck at %.0f m"
@@ -65,10 +74,10 @@ func _init() -> void:
 				as_written = seconds
 				line.append("NORMAL %s%s" % [RaceClock.format(seconds), put_back])
 			else:
-				line.append("%s %s (%+.1f%%)%s" % [TrackVariant.display_name(variant),
+				line.append("%s %s (%+.1f%%)%s%s" % [TrackVariant.display_name(variant),
 					RaceClock.format(seconds),
 					100.0 * (seconds / as_written - 1.0) if as_written > 0.0 else 0.0,
-					put_back])
+					put_back, result.get("retry", "")])
 		print("%-20s %s" % [file.get_file().get_basename(), "   ".join(line)])
 
 	settings.track_file = ""
@@ -120,6 +129,32 @@ func _run(settings: Node) -> Dictionary:
 				break
 	result["progress"] = bot.progress()
 	car.driver = null
+	if settings.track_variant == TrackVariant.TRACK_CHAOS and result["finished"]:
+		_check_the_retry(solo, track, result)
 	solo.queue_free()
 	await process_frame
 	return result
+
+
+## Retry on track chaos: the same road, not built again, with new rows on it -
+## in about the time a frame takes, since a retry that stops to think is not
+## instant any more.
+func _check_the_retry(solo: Node, track: Track, result: Dictionary) -> void:
+	var road := track.layout()
+	var before := TrackVariant.plan(track.definition())
+	var started := Time.get_ticks_usec()
+	solo.call("_restart")
+	var took := float(Time.get_ticks_usec() - started) / 1000.0
+	result["retry"] = " (retry %.0f ms)" % took
+	var faults := 0
+	if track.layout() != road:
+		print("  %s: retry built the road again" % track.definition().track_name)
+		faults += 1
+	if TrackVariant.plan(track.definition()) == before:
+		print("  %s: retry rolled the same rows again" % track.definition().track_name)
+		faults += 1
+	if not track.features().faults(track.layout()).is_empty():
+		print("  %s: the retry's roll has faults: %s"
+			% [track.definition().track_name, track.features().faults(track.layout())])
+		faults += 1
+	result["retry_faults"] = faults

@@ -68,6 +68,7 @@ func _init() -> void:
 		[true, "infinite", SOLO], [false, "infinite", COOP],
 		[true, "track", SOLO], [false, "track", COOP],
 		[true, "mirror", SOLO], [false, "mirror", COOP],
+		[true, "chaos", SOLO], [false, "chaos", COOP],
 		[true, "infinite", SOLO],
 	]:
 		var solo: bool = trial[0]
@@ -105,6 +106,8 @@ func _init() -> void:
 			menu.call("_start_infinite", false)
 		elif mode == "mirror":
 			menu.call("_start_track", TrackRoster.file(0), TrackVariant.MIRROR)
+		elif mode == "chaos":
+			menu.call("_start_track", TrackRoster.file(0), TrackVariant.TRACK_CHAOS)
 		else:
 			menu.call("_start_track", TrackRoster.file(0))
 		for i in 30:
@@ -130,11 +133,18 @@ func _init() -> void:
 				% ["solo" if solo else "co-op", mode,
 					"a laid-out track" if laid_out else "a rolled course"])
 			faults += 1
-		var wanted_way := TrackVariant.MIRROR if mode == "mirror" else TrackVariant.NORMAL
+		var wanted_way: String = {"mirror": TrackVariant.MIRROR,
+			"chaos": TrackVariant.TRACK_CHAOS}.get(mode, TrackVariant.NORMAL)
 		if settings.track_variant != wanted_way or (laid_out and track.variant != wanted_way):
 			print("  %s + %s is driven %s"
 				% ["solo" if solo else "co-op", mode, TrackVariant.display_name(
 					track.variant if laid_out else settings.track_variant)])
+			faults += 1
+		# Track chaos rolls its rows on the way in, in either scene. One track
+		# is shared by both halves of a split screen, so two players always meet
+		# the one roll; what has to be true is that there was a roll at all.
+		if mode == "chaos" and laid_out and track.track_chaos_seed == 0:
+			print("  %s + track chaos rolled no rows" % ("solo" if solo else "co-op"))
 			faults += 1
 		race.queue_free()
 		await process_frame
