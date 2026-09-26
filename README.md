@@ -1316,7 +1316,7 @@ so driving off one still rising throws it up a little.
 `tools/checks/lifts.gd` sends a car at a lift that rises 6 m from every quarter
 second of its seven-second cycle, two ways. Flat out the whole way over, it gets
 across from 7 of the 28; landing, braking to a stop, waiting for the top and
-pulling away with the keys, from 12. It has to get across from some and not all
+pulling away with the keys, from 11. It has to get across from some and not all
 of them both ways, since a lift nobody can cross is a wall and one everybody
 crosses is a floor:
 
@@ -1327,12 +1327,22 @@ Godot --path . --headless --fixed-fps 60 --script tools/checks/lifts.gd
 `acrobatic_drive.gd` waits for lifts: it stops 50 m before the ramp until
 setting off will bring it down on the lift while the lift is low - working out
 how long that takes from how far it is, flat out from a standstill - and once on
-it, stops and waits for the top, and once it has pulled away from the top it
-keeps going even if the lift starts back down under it. A car waiting is not a
-car stuck. A lift wants a level run up to wait on, and a hold at the top long
-enough to pull away in: Freefall's first lift had its run up ending on a grade
-and held the top 1.4 s, and a car waiting on the slope reached the lift late and
-one pulling off the top was still on it when it went back down.
+it, drives on to `LIFT_WAIT` (6 m) short of the far end, stops there and waits
+for the top, and once it has pulled away from the top it keeps going even if the
+lift starts back down under it. A car waiting is not a car stuck. A lift wants a
+level run up to wait on, and a hold at the top long enough to pull away in:
+Freefall's first lift had its run up ending on a grade and held the top 1.4 s,
+and a car waiting on the slope reached the lift late and one pulling off the top
+was still on it when it went back down.
+
+Where on the lift it waits matters as much. From 6 m short a car is off the lift
+about a second after it starts to pull away, on every lift on every track.
+The check used to stop wherever braking from the landing left it, and on
+Elevator's second lift, which holds the top 1.6 s, that was a margin of a few
+tenths: when the jump ramps were reshaped (`Track.ramp_curve`) the car came down
+on the lift a little slower, stopped 21 m short of the end instead of 17.5, and
+was still on it when it went down - every try, so Elevator never finished. The
+track had not changed; where a player would wait had.
 
 ### High roads
 
@@ -1467,11 +1477,12 @@ moving ring hanging in the air with the whole twenty-eight metres under it. The
 drop is the longest in the game, and `floating.gd` holds it to the rule every
 drop is held to: on the road and still driving at the bottom.
 
-Their targets are for now scaled from `tools/checks/acrobatic_drive.gd`, which
-laps Lift Off with the keys in 50.67 s, Sky Stairs in 1:04.42, Island Hopper in
-1:02.23, Tightrope in 52.33, Elevator in 1:14.10, High Road, Low Road in 1:15.13
-- always the long way round, since it never takes a kicker - Freefall in 1:10.95,
-Pinball in 1:06.83, Knot in 1:19.80 and Last Leap in 1:16.92. On Elevator it waits,
+Their targets are for now scaled from the laps `tools/checks/acrobatic_drive.gd`
+drove with the keys when they were set: Lift Off in 50.67 s, Sky Stairs in
+1:04.42, Island Hopper in 1:02.23, Tightrope in 52.33, Elevator in 1:14.10, High
+Road, Low Road in 1:15.13 - always the long way round, since it never takes a
+kicker - Freefall in 1:10.95, Pinball in 1:06.83, Knot in 1:19.80 and Last Leap
+in 1:16.92. On Elevator it waits,
 stopped, at both ends of both lifts, so a player who takes one flat out at the
 right moment beats its targets by a long way. The medals on an acrobatic track are set from
 the best time a player drives on it where they can be; where the check cannot

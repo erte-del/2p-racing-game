@@ -39,6 +39,12 @@ const LIFT_HOLD := 50.0
 ## lift has to stay low after that for it to be worth going.
 const LIFT_TOUCHDOWN := 15.0
 const LIFT_LOW_FOR := 0.8
+## Where it waits on a lift for the top: this far short of the lift's far end.
+## Pulling away from a standstill there it is off the lift in about a second,
+## well inside the shortest hold at the top it meets (1.6 s, Elevator's second
+## lift). Stopped wherever braking from the landing happened to leave it, it
+## was twenty-one metres back there, and still on the lift when it went down.
+const LIFT_WAIT := 6.0
 ## How hard it steers for a given angle to its aim, before the input clamps.
 const STEER_GAIN := 2.6
 ## How far down the road it looks for a bend to brake for, and the speed it
@@ -162,14 +168,19 @@ func _drive(solo: Node) -> Dictionary:
 		var allowed := lerpf(car.max_speed, BEND_SPEED, clampf(bend, 0.0, 1.0))
 
 		# Lifts: wait before the ramp until setting off lands it on the lift
-		# while the lift is low, and once on it, stop and wait for the top.
+		# while the lift is low, and once on it, drive on to LIFT_WAIT short of
+		# its end, stop there and wait for the top.
 		var now: float = solo.get("_time")
 		var hold := false
+		## How far on it waits: here, unless it is on a lift.
+		var wait_in := 0.0
 		var riding := _lift_at(track, offset) if car.is_on_floor() else null
 		if riding != null:
 			if riding.lift_at(now) >= riding.lift - 0.05:
 				leaving = riding
 			hold = riding != leaving
+			if hold:
+				wait_in = riding.offset + riding.length - LIFT_WAIT - offset
 		else:
 			leaving = null
 			var lift := _lift_ahead(track, offset, committed)
@@ -191,7 +202,11 @@ func _drive(solo: Node) -> Dictionary:
 				Input.action_press("solo_steer_left", clampf(angle * STEER_GAIN, 0.0, 1.0))
 			elif angle < -0.02:
 				Input.action_press("solo_steer_right", clampf(-angle * STEER_GAIN, 0.0, 1.0))
-			if speed > 0.3:
+			# On a lift, go on to where it waits rather than stop where it
+			# lands: brake once stopping from here would bring it there.
+			if speed * speed / (2.0 * car.braking) < wait_in - 1.0:
+				Input.action_press("solo_accelerate")
+			elif speed > 0.3:
 				Input.action_press("solo_brake")
 		elif car.is_on_floor():
 			if angle > 0.02:
@@ -216,7 +231,11 @@ func _drive(solo: Node) -> Dictionary:
 			if airborne > 20 and not car.on_the_road() and car.global_position.y < took_off_at - 2.0:
 				committed.clear()
 				_fell(solo, tries, banked.find(0))
-				furthest = track.offset_of(car.global_position)
+				# Where it was put back, not where it fell: left at the fall, the
+				# progress check below takes that as the furthest it has got and
+				# calls it stuck three seconds later, a second try for one fall.
+				offset = track.offset_of(car.global_position)
+				furthest = offset
 				furthest_at = step
 			airborne = 0
 		# Stranded on the grass, or no further along in three seconds: put back,
