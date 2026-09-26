@@ -169,6 +169,8 @@ func _ready() -> void:
 	# the one screen that is always moving always the same.
 	if not attract_mode:
 		_track.track_file = GameSettings.track_file
+		# Two players on a mirrored road is a mirrored race.
+		_track.variant = GameSettings.track_variant
 		_endless = GameSettings.track_file.is_empty()
 		_pause.restart_requested.connect(_restart)
 		_pause.quit_requested.connect(_on_pause_quit)

@@ -10,7 +10,8 @@ before anything is built from it. With twenty normal tracks and ten acrobatic
 ones, that comes to about a hundred timed configurations, and none of them had
 to be laid out.
 
-Written up 2026-09-25. **Nothing below is built yet.** The previous contents
+Written up 2026-09-25. **Built so far:** the track page (section 7) and build
+step 1, Mirror and its plumbing (2026-09-26). The previous contents
 of this file (the shop, customisation, statistics) were all built and are in
 the README. Git has the old text.
 
@@ -55,7 +56,7 @@ that. It is a function from one definition to another, applied in
 
 ```gdscript
 definition.describe()
-TrackVariant.apply(definition, variant)   # new - BASE does nothing
+TrackVariant.apply(definition, variant)   # NORMAL does nothing
 _definition = definition
 ```
 
@@ -65,12 +66,13 @@ respawns are, so they run one step later, against the adopted `TrackLayout`,
 and add placements through the planner that generated courses already use.
 Both hooks go in `lay_out()`, one on each side of `TrackLayout.adopt()`.
 
-- [ ] `scripts/track_variant.gd`, `class_name TrackVariant`: the constants
-	  `BASE`, `MIRROR`, `REVERSE`, `HARD`, `TRACK_CHAOS`; `apply()`; `offered()`;
-	  `suffix()`; `display_name()`. The variants are named constants rather
+- [x] `scripts/track_variant.gd`, `class_name TrackVariant`: the constants
+	  `NORMAL`, `MIRROR`, `HARD`, `TRACK_CHAOS`; `apply()`; `offered()`;
+	  `key()`/`split()`; `display_name()`; `BUILT`, the ways `apply()` can
+	  make so far. `REVERSE` is still to add. The variants are named constants rather
 	  than strings, so a misspelt variant is a compile error and not a quiet
 	  fifth kind of road.
-- [ ] `@export var variant := TrackVariant.BASE` on `Track`, next to
+- [x] `@export var variant := TrackVariant.NORMAL` on `Track`, next to
 	  `track_file`, and ignored when `track_file` is empty. The endless course
 	  is rolled, so it has no variants: a mirrored random road is just another
 	  random road.
@@ -94,9 +96,9 @@ corner. So the table lives in `TrackVariant`, keyed by file name, in the same
 order as `TrackRoster.FILES`. It holds the offered variants for each track and
 also the medal targets (see section 6).
 
-- [ ] `TrackVariant.offered(track_file) -> Array`, read from that table. The
+- [x] `TrackVariant.offered(track_file) -> Array`, read from that table. The
 	  menu calls this for every cell, so it has to be a lookup and not a build.
-- [ ] Bot roads offer nothing. The gate is one race against one road.
+- [x] Bot roads offer nothing. The gate is one race against one road.
 - [ ] Acrobatic tracks offer Mirror and nothing else. See each section for why.
 
 ### Identity: keys, fingerprints, signatures
@@ -105,31 +107,41 @@ A variant is a different road, so it gets its own time, its own board and its
 own medal. Nothing set on it may leak into the base track, and nothing set on
 the base track may leak into it.
 
-- [ ] **The key** is the file name plus a suffix: `01_first_light`,
+- [x] **The key** is the file name plus a suffix: `01_first_light`,
 	  `01_first_light-mirror`, `01_first_light-reverse`,
 	  `01_first_light-hard`. The suffix uses a hyphen because every track file
 	  name uses underscores, so the split is unambiguous. It is also safe in
 	  a PostgREST `eq.` filter and in a `ConfigFile` section name.
 	  `backend/schema.sql` needs **no change**: `track` is free text, and it
 	  is part of the primary key already.
-- [ ] **The fingerprint covers the variant's plan as well as the file.**
+- [x] **The fingerprint covers the variant's plan as well as the file.**
 	  The README says a fingerprint is taken over the file "rather than of the
 	  course built from it", and the reason is that the file is what an author
 	  edits. A variant's author is `TrackVariant` and the planner, and those
 	  can change with no track file changing. If a planner tweak moves every
 	  Hard barrier, every Hard time is now a time on a road that no longer
-	  exists. So for anything other than `BASE`, the fingerprint and signature
+	  exists. So for anything other than `NORMAL`, the fingerprint and signature
 	  are `GEOMETRY`, then the source text, then the suffix, then a
 	  serialisation of the finished pieces and placements rounded to the
-	  millimetre. The rounding matters because a signature has to agree
-	  between a Mac and a Windows machine.
-- [ ] **A base track's fingerprint does not move.** `BASE` hashes exactly what
+	  millimetre (`TrackVariant.plan()`, coins left out). The rounding
+	  matters because a signature has to agree between a Mac and a Windows
+	  machine.
+- [ ] **Track chaos cannot use that plan as it stands.** Its placements are
+	  rolled again every run, so a fingerprint over them would change every
+	  run and drop its best time each time. Its plan has to be the base plan
+	  with the loose rows and traps taken out - what is kept, not what is
+	  rolled. Today `apply()` does nothing for it, so its plan is the base
+	  plan; that changes the day its transform is built, which drops nothing
+	  because nothing can drive it yet.
+- [x] **A base track's fingerprint does not move.** `NORMAL` hashes exactly what
 	  it hashes today. That is the one number in this whole feature that must
 	  not change, and the check pins it.
 - [ ] Computing a Hard plan's fingerprint means building a `TrackLayout` (no
 	  meshes, just samples). Measure what that costs across twenty cells
 	  before the grid starts calling it. If it is noticeable, cache it for the
 	  session by key. The source file cannot change while the game is running.
+	  (Every plan is already cached by key in `TrackTimes._plans`. Mirror's
+	  costs one `describe()`; Hard's is the one still to measure.)
 
 ### Passing it around: an argument, not a string
 
@@ -139,7 +151,7 @@ The variant goes to the race in `GameSettings.track_variant`, next to
 
 `TrackTimes.best/record/adopt/forget/fingerprint/signature`,
 `Leaderboard.board/submit` and `Stats`' table each gain a `variant` argument
-that **defaults to `BASE`**, so every existing caller keeps meaning exactly
+that **defaults to `NORMAL`**, so every existing caller keeps meaning exactly
 what it means today.
 
 I also considered a composite id, `"res://tracks/01_first_light.gd#mirror"`,
@@ -149,17 +161,17 @@ up or hash `track_file` as a path (`load()`, `TrackRoster.index_of()`,
 learn to strip the suffix, and the one that forgot would load nothing, with
 no error anywhere near the cause.
 
-- [ ] `GameSettings.track_variant`, reset to `BASE` wherever `track_file` is
+- [x] `GameSettings.track_variant`, reset to `NORMAL` wherever `track_file` is
 	  cleared (infinite mode).
-- [ ] Both race scenes hand it to their `Track`. That is
+- [x] Both race scenes hand it to their `Track`. That is
 	  [scripts/solo.gd](scripts/solo.gd) and [scripts/main.gd](scripts/main.gd).
 	  Two players on a mirrored road is a mirrored race.
-- [ ] `Leaderboard`'s pull-on-sign-in ([scripts/leaderboard.gd:172](scripts/leaderboard.gd:172))
+- [x] `Leaderboard`'s pull-on-sign-in ([scripts/leaderboard.gd:172](scripts/leaderboard.gd:172))
 	  maps each server row back to a file by its `track` column. It has to
 	  split the suffix off and adopt the time into the right variant. Right now
 	  it would find no file called `01_first_light-mirror` and drop the row
 	  silently.
-- [ ] Coins are seeded off `hash(track_name)`
+- [x] Coins are seeded off `hash(track_name)`
 	  ([scripts/track.gd:457](scripts/track.gd:457)). A variant seeds off
 	  `hash(track_name + suffix)`, so its coins are its own and still the same
 	  on every run. Track chaos rolls them fresh with its hazards.
@@ -174,18 +186,18 @@ cheapest of the four and the one to build first, because it exercises the
 keys, the setting, the times, the board and the selector while the transform
 itself stays trivial.
 
-- [ ] Every `CORNER` piece: `turn = -turn`. Climbs and rises are untouched.
-- [ ] Every placement: `lateral = -lateral`, and every value in `phases`
+- [x] Every `CORNER` piece: `turn = -turn`. Climbs and rises are untouched.
+- [x] Every placement: `lateral = -lateral`, and every value in `phases`
 	  negated. That covers pads, rows, traps, the fork (divider, pad and
 	  lane marker), rings, platforms, lifts and kickers.
-- [ ] High roads: `BranchDefinition.lane = -lane`, and the branch's own
+- [x] High roads: `BranchDefinition.lane = -lane`, and the branch's own
 	  pieces and placements mirrored the same way. A high road's pieces
 	  have no corners, so that part is only its placements.
-- [ ] Offered on all twenty normal tracks and all ten acrobatic ones. Nothing
+- [x] Offered on all twenty normal tracks and all ten acrobatic ones. Nothing
 	  in a mirrored track can be undriveable if the base track is driveable,
 	  because the car is symmetric. The check still builds every one of them:
 	  "cannot be" is an argument, and the check produces a number.
-- [ ] One thing mirroring can change is where the road runs over the ground.
+- [x] One thing mirroring can change is where the road runs over the ground.
 	  A course that stays on the ground swinging right can run off it swinging
 	  left, if the ground is not symmetric about the start. `problems()` would
 	  report that, and the check reads it.
@@ -418,7 +430,8 @@ In the README a medal target is "a fact about the road", measured by driving
 it with `tools/lap_times.gd`. A variant is a different road, so its targets
 have to be measured, not assumed. The one exception is argued below.
 
-- [ ] **Mirror uses the base targets.** The car is symmetric, the road is the
+- [ ] **Mirror uses the base targets** (`TrackVariant.targets()`, done; the
+	  lap comparison below is not). The car is symmetric, the road is the
 	  same length with the same corners in the other direction, and a lap of
 	  one is a lap of the other. `lap_times.gd` runs both and reports the
 	  difference. If any track's mirror comes out more than about 1% off the
@@ -439,7 +452,7 @@ have to be measured, not assumed. The one exception is argued below.
 	  (`-- mirror`, `-- reverse`, `-- hard`) and prints a line per track in
 	  the form the table wants, so filling it in is a paste.
 - [ ] **The medal gate counts base tracks only.** `Progress.golds_in()`
-	  reads `TrackTimes.best()` with no variant, which means `BASE`, so this
+	  reads `TrackTimes.best()` with no variant, which means `NORMAL`, so this
 	  needs no change. It does need a sentence in the README and a case in
 	  `tools/checks/progress.gd`, because the day somebody passes a variant
 	  through, five mirror golds would open a block. Whether that is actually
@@ -507,7 +520,8 @@ from `/root` by name, `save_path` pointed at scratch, a fault count and a
 non-zero exit.
 
 - [ ] **`tools/checks/variants.gd`**, headless. This is the one that matters.
-	  For every track and every variant:
+	  Built for Mirror: everything below except what belongs to Reverse, Hard
+	  and track chaos. For every track and every variant:
 	- declared variants build with no `problems()`, `faults()` or
 	  `branch_problems()`, and undeclared variants that would pass are
 	  reported
@@ -624,10 +638,10 @@ this.
 
 ## 11. Build order
 
-1. **`TrackVariant` with only `BASE` and `MIRROR`**, the `variant`
+1. ~~**`TrackVariant` with only `NORMAL` and `MIRROR`**, the `variant`
    plumbing, keys and fingerprints, and `variants.gd` checking the mirror
-   involution and the unchanged base fingerprints. Nothing to look at yet,
-   and all of it can be tested.
+   involution and the unchanged base fingerprints.~~ Done 2026-09-26. All
+   thirty mirrors build clean.
 2. **The selector** on the track page, with `screen_fit.gd` deciding row vs.
    cycling button, and `track_select.gd` / `mode_routing.gd` extended.
    Mirror is playable end to end at this point: time, board and flipped

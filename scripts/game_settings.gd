@@ -104,6 +104,10 @@ var damage := false:
 ## back onto the last track someone tried would be answering a question
 ## nobody asked.
 var track_file := ""
+## Which way `track_file` is to be driven - see `TrackVariant`. Not written to
+## disk, for the reason `track_file` is not, and put back to NORMAL wherever
+## `track_file` is cleared.
+var track_variant := TrackVariant.NORMAL
 
 ## What each player's car is painted, player 1 first.
 ##

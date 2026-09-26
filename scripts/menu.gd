@@ -469,6 +469,7 @@ func _start_infinite(chaos: bool) -> void:
 	# Cleared, or an infinite race started after a track had been played would
 	# run that track over and over.
 	GameSettings.track_file = ""
+	GameSettings.track_variant = TrackVariant.NORMAL
 	GameSettings.chaos = chaos
 	# Settled at the start of the race rather than on every press, so opening
 	# and closing the choice is not a file write per click.
@@ -981,8 +982,9 @@ func _button_in(cell: Node) -> Button:
 	return null
 
 
-func _start_track(path: String) -> void:
+func _start_track(path: String, variant := TrackVariant.NORMAL) -> void:
 	GameSettings.track_file = path
+	GameSettings.track_variant = variant
 	# A track is a road to learn and a time to beat, so it is always run under
 	# the same rules. Chaos rerolls the cars for every race, and a time set by
 	# a car nobody will be given again is not a time.
@@ -1067,12 +1069,7 @@ func _show_the_detail_board(rows: Array) -> void:
 	# The time is this machine's record, coloured by what it is worth, with
 	# the medal's bar under it the way a cell on the grid has one.
 	var best := TrackTimes.best(TrackRoster.file(_detail_index), _detail_variant)
-	# A mirrored lap is the same lap turned round, so it is worth what the
-	# track's own is. HARD and track chaos are different roads whose targets
-	# have not been measured yet, and a medal nobody measured is made up.
-	var targets := Vector3.ZERO
-	if _detail_variant in [TrackVariant.NORMAL, TrackVariant.MIRROR]:
-		targets = TrackRoster.targets(_detail_index)
+	var targets := TrackVariant.targets(TrackRoster.targets(_detail_index), _detail_variant)
 	var medal := Medal.earned(best, targets)
 	_detail_time.text = RaceClock.format(best) if best >= 0.0 else "NO TIME"
 	_detail_time.add_theme_color_override("font_color",

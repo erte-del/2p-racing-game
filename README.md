@@ -2805,6 +2805,63 @@ name is still a name to a check that only asks whether there is one.
 Godot --path . --headless --script tools/checks/track_select.gd
 ```
 
+## Track variants
+
+A laid-out track can be driven more than one way, and none of the other ways is
+written by hand. A variant is the track's own file put through a transform in
+`TrackVariant`, applied by `Track.lay_out()` straight after `describe()` and
+before anything is built. Everything downstream of that - the road, the rails,
+the checkpoints, the furniture, the checks - is handed an ordinary definition
+and never has to ask where it came from.
+
+The ways are named constants, `NORMAL`, `MIRROR`, `HARD` and `TRACK_CHAOS`,
+rather than strings typed out where they are used, so a misspelt one is a
+compile error rather than a quiet extra board nobody can find. `NORMAL` is the
+track as written. Only `MIRROR` has a transform so far. `HARD` and track chaos
+have keys and boards already, but no track offers them until they have a
+transform, so nothing can drive the base track while calling it HARD.
+
+**Mirror** swaps left and right. Every corner turns the other way, and
+everything on the road - pads, rows, traps, the fork, rings, platforms, lifts,
+kickers and the high roads off them - stands on the other side. Climbs, jumps
+and lengths are untouched. The car is the same on both sides, so a mirrored lap
+is the same lap turned round, and it is worth the same medals as the track's
+own.
+
+Which ways a track offers is a table in `TrackVariant` keyed by file name, and
+not a line in the track file. A time's fingerprint is taken over the whole of
+its track's file, so adding a line to all thirty would throw away every best
+time on every track for a change that did not move a single corner. Bot roads
+are not in the table and offer nothing: the gate is one race against one road.
+A race asked to drive a way its track does not offer drives it as written.
+
+The way a race is driven travels in `GameSettings.track_variant`, next to
+`track_file`, and is not written to disk for the same reason. Both race scenes
+hand it to their `Track`, so two players on a mirrored road is a mirrored race.
+A high road is laid out as a `Track` of its own and is handed everything its
+course has except the file and the variant: the course's `lay_out()` has
+already mirrored it, and a second pass would mirror it back.
+
+A variant is a different road, so it keeps its own time, its own board and its
+own coins - see [Track times](#track-times) for how its time is kept apart. Its
+coins are seeded off the track's name with the variant on the end, so they are
+still the same on every run but are not the base track's coins moved across.
+
+`tools/checks/variants.gd` is the only thing that has ever looked at a variant,
+since nobody laid one out. It builds every way every track offers, the way a
+race does, and holds each to the rules a hand-made track is held to; a way that
+would build clean but is not offered is reported too, so no track quietly
+misses out. A mirror has to be its own inverse to the millimetre - mirrored
+twice is the track as written, which is the quickest way to catch a sign
+flipped twice or not at all - and the check is shown a mirror with one lane
+left unturned, to prove it can say no. It also works out every base track's
+fingerprint and signature the old way, by hand, and fails if either has moved:
+every best time anybody has set is held against them.
+
+```
+Godot --path . --headless --script tools/checks/variants.gd
+```
+
 ## Solo
 
 Solo is its own scene, and it runs either a laid-out track for a time or the
@@ -2902,6 +2959,19 @@ time written down with a fingerprint of 0 was set by a release from before the
 copy existed, which could read no track at all; it is kept and given the
 track's fingerprint as it is now, rather than every tester's times being thrown
 away for a fault that was not theirs.
+
+A [variant](#track-variants) is kept under the track's key with a hyphen and
+the variant on the end - `01_first_light-mirror` - so it has a section, a time
+and a board of its own. A hyphen, because every track file is named with
+underscores and the two halves can never be confused. A time on the track as
+written has exactly the key, fingerprint and signature it had before variants
+existed. A variant's fingerprint covers more than the file: it covers the road
+the variant makes of the file too, written out to the millimetre. A variant's
+author is `TrackVariant` as much as the track file, and a change there moves
+every mirrored road with no track file changing - a time set on the old one is
+a time on a road that is no longer there. That road is worked out once a
+session, since it means describing the track, and neither the file nor
+`TrackVariant` can change while the game is running.
 
 `adopt()` is `record()` without the announcement. It takes a time that was set
 somewhere else - the same player, on their other machine - and keeps it if it

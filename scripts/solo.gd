@@ -133,10 +133,12 @@ const BOT_COLOUR := Color(0.98, 0.55, 0.06)
 ## Ticking between GO and the line.
 var _running := false
 var _time := 0.0
-## Which track is being driven, and the best run on it so far - below zero
-## for a track nobody has finished. Held here as well as written down, so the
-## screen has something to compare against without reading a file per lap.
+## Which track is being driven and which way, and the best run on it so far -
+## below zero for a track nobody has finished. Held here as well as written
+## down, so the screen has something to compare against without reading a file
+## per lap.
 var _track_file := ""
+var _track_variant := TrackVariant.NORMAL
 var _best := -1.0
 ## True when nothing picked a track, which is the endless course: a fresh road
 ## every time, so there is no time to beat and nothing to write down. What the
@@ -186,6 +188,11 @@ func _ready() -> void:
 	_track_file = GameSettings.track_file
 	_endless = _track_file.is_empty()
 	_bot_race = TrackRoster.is_bot_road(_track_file)
+	# A way the track does not offer is not driven, whatever asked for it: it
+	# is a road nobody has checked, and a time on it would be a time on that.
+	_track_variant = GameSettings.track_variant
+	if _track_variant not in TrackVariant.offered(_track_file):
+		_track_variant = TrackVariant.NORMAL
 	# Nothing to draft behind and nothing to be shown an arrow to, until the bot
 	# race puts a second car on the road.
 	_car.rival = null
@@ -207,13 +214,14 @@ func _ready() -> void:
 		_roll_a_course()
 	else:
 		_track.track_file = _track_file
+		_track.variant = _track_variant
 		_track.generate(0)
 		# A bot road keeps no time and hands out no medal, so there is nothing
 		# to read back and nothing to compare a run against. Left where they
 		# started - no best, no targets - which is what leaves the corner of the
 		# screen and the badge empty.
 		if not _bot_race:
-			_best = TrackTimes.best(_track_file)
+			_best = TrackTimes.best(_track_file, _track_variant)
 			_targets = _track_targets()
 
 	# Told rather than left to read the setting, the same way the wood is. The
@@ -650,7 +658,7 @@ func _finish() -> void:
 
 	# Offered to the record before anything is said about it, so what appears
 	# on the screen is what was actually written down.
-	var beaten := TrackTimes.record(_track_file, _time)
+	var beaten := TrackTimes.record(_track_file, _time, _track_variant)
 	# A time trial is completed and never won - it has nobody to beat. What it
 	# earns instead is a medal, and that is counted as a medal.
 	Stats.race_finished(false, false)
@@ -797,6 +805,11 @@ func _on_next_track() -> void:
 	if next < 0:
 		return
 	GameSettings.track_file = TrackRoster.file(next)
+	# Driven the same way, where the next track offers it: a player working
+	# through the mirrored tracks wants the next mirrored one.
+	GameSettings.track_variant = (_track_variant
+		if _track_variant in TrackVariant.offered(GameSettings.track_file)
+		else TrackVariant.NORMAL)
 	get_tree().reload_current_scene()
 
 

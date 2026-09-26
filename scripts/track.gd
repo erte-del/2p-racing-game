@@ -146,6 +146,10 @@ signal coin_taken
 ## builds it and ignores the seed it was given: everything about the shape of
 ## the course comes from the file instead.
 @export_file("*.gd") var track_file := ""
+## Which way the track file is driven - see `TrackVariant`. Ignored when
+## `track_file` is empty: the endless course is rolled, and a mirrored random
+## road is just another random road.
+@export var variant := TrackVariant.NORMAL
 
 @export_group("Jumps")
 ## A ramp, a hole where there is no road, and a long run to come down on.
@@ -438,6 +442,7 @@ func lay_out(definition: TrackDefinition) -> void:
 	definition.lift_drop = lift_drop
 	definition.landing_length = landing_length
 	definition.describe()
+	TrackVariant.apply(definition, variant)
 	_definition = definition
 
 	_layout = TrackLayout.adopt(definition.pieces, _layout_tuning())
@@ -453,8 +458,10 @@ func lay_out(definition: TrackDefinition) -> void:
 	# a definition can be handed straight to this, with no file behind it at
 	# all - so a track always has its coins in the same places. A player who
 	# drove it yesterday and knows where they are is remembering the road,
-	# which is the whole point of a road worth learning.
-	_scatter_the_coins(hash(definition.track_name))
+	# which is the whole point of a road worth learning. A variant is a road of
+	# its own, so its coins are its own too, and still the same on every run.
+	_scatter_the_coins(hash(definition.track_name) if variant == TrackVariant.NORMAL
+		else hash("%s-%s" % [definition.track_name, variant]))
 	_furniture.build(_points, _rights, _half_widths, sample_step, _features)
 	_build_branches(definition)
 	regenerated.emit()
@@ -489,7 +496,9 @@ func _build_branches(definition: TrackDefinition) -> void:
 		road.is_branch = true
 		for property in get_property_list():
 			if property["usage"] & PROPERTY_USAGE_SCRIPT_VARIABLE and property["usage"] & PROPERTY_USAGE_STORAGE:
-				if property["name"] != "track_file":
+				# Nor the variant: the course's own `lay_out` has already put
+				# the high road through it, and twice would put it back.
+				if property["name"] not in ["track_file", "variant"]:
 					road.set(property["name"], get(property["name"]))
 		add_child(road)
 		road.transform = Transform3D(Basis.looking_at(forward, Vector3.UP),

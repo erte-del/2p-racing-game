@@ -41,6 +41,8 @@ var save_path := Sandbox.path(SAVE_PATH)
 ## Track key -> seconds, and track key -> the fingerprint it was set on.
 var _best := {}
 var _fingerprints := {}
+## Track key -> the road that variant makes of it; see `_plan`.
+var _plans := {}
 
 
 func _ready() -> void:
@@ -90,13 +92,17 @@ func record(track_file: String, seconds: float, variant := TrackVariant.NORMAL) 
 ## if they changed the track.
 ##
 ## A variant's fingerprint has the variant in it as well, so the same file
-## driven two ways is two roads. NORMAL's is exactly what it always was, which
-## is what keeps every time set before variants existed standing.
+## driven two ways is two roads, and the road the variant makes of the file.
+## Its author is `TrackVariant` as much as the file: a change there moves the
+## road a variant is driven on with no track file changing, and a time set on
+## the old road stands for nothing on the new one. NORMAL's is exactly what it
+## always was, which is what keeps every time set before variants existed
+## standing.
 func fingerprint(track_file: String, variant := TrackVariant.NORMAL) -> int:
 	var text := source(track_file)
 	if text.is_empty():
 		return 0
-	return hash(_material(text, variant))
+	return hash(_material(track_file, text, variant))
 
 
 ## What a track is, as a string every machine agrees on.
@@ -111,14 +117,25 @@ func signature(track_file: String, variant := TrackVariant.NORMAL) -> String:
 	var text := source(track_file)
 	if text.is_empty():
 		return ""
-	return _material(text, variant).sha256_text()
+	return _material(track_file, text, variant).sha256_text()
 
 
 ## What both hashes are taken over.
-func _material(text: String, variant: String) -> String:
+func _material(track_file: String, text: String, variant: String) -> String:
 	if variant == TrackVariant.NORMAL:
 		return "%d\n%s" % [GEOMETRY, text]
-	return "%d\n%s\n%s" % [GEOMETRY, variant, text]
+	return "%d\n%s\n%s\n%s" % [GEOMETRY, text, variant, _plan(track_file, variant)]
+
+
+## The road a variant makes of a track, as `TrackVariant.plan` writes it out.
+## Worked out once per session: it means describing the track, and neither the
+## file nor `TrackVariant` can change while the game is running.
+func _plan(track_file: String, variant: String) -> String:
+	var key := _key(track_file, variant)
+	if not _plans.has(key):
+		var definition := TrackVariant.described(track_file, variant)
+		_plans[key] = TrackVariant.plan(definition) if definition != null else ""
+	return _plans[key]
 
 
 ## A track's file as its author wrote it, or empty for one that is not there.
