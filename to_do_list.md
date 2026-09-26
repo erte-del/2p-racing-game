@@ -1,625 +1,648 @@
 # To do
 
-Five things to add to the game, written out properly: what each one is, why it
-is worth having, the rules it has to obey, and the files it lands in. Damage
-mode and traps are built (2026-09-16), the acrobatic tracks with them
-(2026-09-18), the bot and the medal gate after those (2026-09-22), and the
-coins, the shop and car customisation after those (2026-09-23). **All of it is
-built.** Statistics, section 10, came after all of that, and was written up and
-built on 2026-09-24.
+## Track variants
 
-The order below is the order they should be built in, and that order is not
-arbitrary - damage needs nothing, traps need nothing, but the bot needs a
-driver that does not exist, the medal gate needs the bot to be the thing it
-gates, the shop needs coins to spend and customisation needs a shop to be
-bought from. Anything built out of order ends up waiting on something.
+The twenty laid-out tracks can each be driven more than one way: mirrored,
+backwards, with more hazards on them, and with their hazards moved somewhere
+new on every run. None of these needs a road written by hand. Each is the
+track file that already exists, put through a transform after `describe()` and
+before anything is built from it. With twenty normal tracks and ten acrobatic
+ones, that comes to about a hundred timed configurations, and none of them had
+to be laid out.
 
-Each feature follows the same shape the rest of the game already has:
+Written up 2026-09-25. **Nothing below is built yet.** The previous contents
+of this file (the shop, customisation, statistics) were all built and are in
+the README. Git has the old text.
 
-- a setting or a store in `scripts/`, saved to `user://`, announced by signal
-- rules that hold on every course, checked by a script in `tools/checks/`
-- a README section saying what it does and why it is the way it is
+Everything here follows the same shape as the rest of the game:
 
-A feature without its check is half a feature. Everything in this game that
-can be got wrong quietly - whether a course can be driven, what a lap is
-worth, whether chaos actually rerolls anything - has a headless script that
-drives it and says so, and none of the five below is an exception.
+- the transform in one place, `scripts/track_variant.gd`, and nowhere else
+- rules that hold on every variant of every track, checked by a script in
+  `tools/checks/`
+- a README section saying what each variant does and why it is the way it is
+
+A variant that is not checked is worse than no variant. Nobody authored it, so
+nobody has ever looked at it. The check is the only thing that has.
 
 ## Contents
-6. [The shop](#6-the-shop)
-7. [Car customisation](#7-car-customisation)
-8. [What all of this touches](#what-all-of-this-touches)
-9. [Questions worth settling first](#questions-worth-settling-first)
-10. [Statistics](#10-statistics)
 
-## 6. The shop
-
-**Built 2026-09-23.** See [The shop](README.md) in the README for what landed
-and why. The screen, the button, the price table and the buying are all there,
-and the stock it opened with is paint - the other two kinds below are blocked
-on something other than this screen, and are noted as such where they are
-described.
-
-### What it is
-
-A button on the title screen, beside Garage and Settings, opening a screen
-where coins buy things.
-
-### What it sells
-
-- **Cars.** *Not built.* The game already has a garage that holds any number of
-  models and dresses a car from an id
-  ([scripts/garage.gd:1](scripts/garage.gd:1)), and `GameSettings.car_id`
-  already picks per player. A bought car is a model in the build that the
-  garage lists once it has been paid for. This needs a few models that do not
-  exist yet - that is the real cost of this item, not the code, and it is why
-  this was not the stock the shop opened with. A row in `Shop.stock()` is all
-  the screen, the purse and the check need to carry one.
-- **The customisation slot**, at 50 coins - see the next section. *Built.*
-  First in `Shop.stock()`, because a player reading down a price list should
-  meet the thing that changes what the game lets them do before they meet the
-  sixth shade of grey. It is the anchor the paint price was set against.
-- **Paints.** *Built.* Six at 20 coins - SAND, RUST, OLIVE, SLATE, PLUM, ICE -
-  appended after the free twelve in
-  ([scripts/paints.gd:20](scripts/paints.gd:20)) with `Paints.FREE` marking
-  where the halves meet. The twelve stay free, because selling those would be
-  taking something away. The six are deliberately not more of the same wheel
-  but the muted shades off it.
-- Not: speed, grip, acceleration, or anything else that changes how a car
-  drives. Every time on every board was set in the same car, and the leaderboard
-  means what it means because of that. A shop that sells a faster car ends the
-  leaderboard.
-
-That last point is stated in the README and again at the top of
-`scripts/shop.gd`, because it is the sort of thing that looks like an obvious
-next feature to whoever picks this up later.
-
-### What to build
-
-- [x] `scenes/shop.tscn` and `scripts/shop_menu.gd`, following
-	  `garage_menu.gd`: it lays over the title rather than replacing it, the
-	  backdrop keeps turning, `closed` is emitted so the caller takes focus
-	  back.
-- [x] A Shop button on the title, stacked with the others. The stack moved from
-	  60% down to **54%**, which is what a fifth button costs; `screen_fit.gd`
-	  now measures the column itself, and Account lands at 732 of the 750 there
-	  is, so this can no longer go wrong quietly.
-- [x] Prices in one table in one file, so balancing is one edit -
-	  `scripts/shop.gd`, and the paints are read off `Paints` rather than
-	  written down a second time.
-- [x] Buying is: enough coins, take them, write it to the purse, show it owned.
-	  Owned things never un-own. `Purse.buy` already did all of this; the
-	  screen adds only the words a player reads.
-- [x] An empty purse can look at everything and see the prices. BUY stays
-	  pressable when it cannot be afforded, because a disabled button cannot
-	  take the keyboard and an empty purse would otherwise be a page the
-	  cursor cannot land on.
-- [x] `tools/checks/shop.gd` and `tools/checks/shop_shot.gd`, because a
-	  feature without its check is half a feature.
+1. [What a variant is](#1-what-a-variant-is)
+2. [Mirror](#2-mirror)
+3. [Reverse](#3-reverse)
+4. [Hard](#4-hard)
+5. [Track chaos](#5-track-chaos)
+6. [Medals on a variant](#6-medals-on-a-variant)
+7. [Choosing one](#7-choosing-one)
+8. [The checks](#8-the-checks)
+9. [What all of this touches](#9-what-all-of-this-touches)
+10. [Questions worth settling first](#10-questions-worth-settling-first)
+11. [Build order](#11-build-order)
 
 ---
 
-## 7. Car customisation
+## 1. What a variant is
 
-**Built 2026-09-23.** See [Car customisation](README.md) in the README for what
-landed and why. Two decisions came out differently from the design below and
-are recorded there: it is **a tab inside the garage** rather than
-`scenes/customise.tscn`, because both halves of that screen are about the same
-car; and a stripe is worn as an **extra material pass** rather than as a
-texture composited into the paint, which keeps a brought-in model's own
-paintwork and makes the chaos cycle a property to set rather than a picture to
-draw again.
+### A transform over a definition, not a new file
 
-**The tab was rebuilt on 2026-09-24**, and the part of the design below about
-placing things on a flat drawing of the side of a car is no longer what the
-game does. Everything is put on the model itself now: the car is turned and
-zoomed with the mouse, a sticker lands on whichever of its four panels is being
-looked at, and a word is written straight onto the paintwork a stroke at a
-time. See [The car is the page](README.md), [The four panels](README.md) and
-[The pen](README.md). The silhouette survives as the small picture on a livery's
-row, which is the job it was always better at. The tab also grew the car's own
-paint, in a row under the car - free, and nothing to do with the slot, but the
-same question about the same car, and until then the only place to ask it was
-the paint screen over a paused race. See [The car's own paint](README.md).
+A track file builds a `TrackDefinition`: a chain of `Piece`s and a list of
+`Placement`s ([scripts/track_definition.gd](scripts/track_definition.gd)).
+Everything downstream of that, meaning `TrackLayout.adopt()`,
+`TrackFeatures.adopt()`, the mesh, the rails, the checkpoints and the checks,
+neither knows nor cares where the definition came from. A variant makes use of
+that. It is a function from one definition to another, applied in
+`Track.lay_out()` right after `definition.describe()`
+([scripts/track.gd:423](scripts/track.gd:423)):
 
-**Liveries came after it, the same day**, and were not in this design at all: a
-decoration saved as a design in its own right, kept beside the cars in the
-garage, put on any car, and shared the way a car is. See
-[Liveries](README.md) and [Sharing a livery](README.md). The one thing worth
-knowing before reading either: a livery is a line of text rather than a file,
-so it needs no storage bucket - the row on the server *is* the livery - and
-`backend/schema.sql` has to be run again on a project set up before it
-existed.
+```gdscript
+definition.describe()
+TrackVariant.apply(definition, variant)   # new - BASE does nothing
+_definition = definition
+```
 
-### What it is
+Mirror and Reverse are pure data transforms. They touch pieces and placements
+and build nothing. Hard and track chaos need to know where the straights and
+respawns are, so they run one step later, against the adopted `TrackLayout`,
+and add placements through the planner that generated courses already use.
+Both hooks go in `lay_out()`, one on each side of `TrackLayout.adopt()`.
 
-For 50 coins, a slot that lets a car be decorated as well as painted: stripes,
-pre-made stickers, and words the player writes by hand.
+- [ ] `scripts/track_variant.gd`, `class_name TrackVariant`: the constants
+	  `BASE`, `MIRROR`, `REVERSE`, `HARD`, `TRACK_CHAOS`; `apply()`; `offered()`;
+	  `suffix()`; `display_name()`. The variants are named constants rather
+	  than strings, so a misspelt variant is a compile error and not a quiet
+	  fifth kind of road.
+- [ ] `@export var variant := TrackVariant.BASE` on `Track`, next to
+	  `track_file`, and ignored when `track_file` is empty. The endless course
+	  is rolled, so it has no variants: a mirrored random road is just another
+	  random road.
 
-### The three kinds
+### Which tracks offer which
 
-**Stripes.** A small set of shapes - a centre stripe, twin stripes, a side
-flash, a bonnet band - each in a colour the player picks from the existing
-twelve. Chosen from a list, not drawn. Stripes want to sit on the car's shape
-and the game does not know the car's shape, so they are laid on in the car's
-own space and clip where they clip.
+A variant can be impossible on a given track. Reverse cannot turn a ring round,
+and cannot turn a jump that drops six metres into one that climbs six. So each
+track declares what it offers, and the check holds it to that:
 
-**Stickers.** A set the game ships: numbers, a flame, a star, an arrow, a
-chequer. Each placed on the car, rotated, sized. Placement is the bit that
-takes real UI work - see below.
+- A declared variant must build with no `problems()`, no `faults()` and no
+  `branch_problems()`, and the bot must be able to drive it to the flag.
+- A variant that would pass but is not declared is reported by the check, so
+  that a track does not quietly miss out on one.
 
-**Hand-written words.** The player draws, with the mouse, in a box, and what
-they draw goes on the car. Drawn rather than typed, on purpose: a typed name
-in the game's font is the game's writing, and a scrawl is theirs.
+**The declaration does not go in the track file.** A time's fingerprint is a
+hash of the whole track file ([scripts/track_times.gd:91](scripts/track_times.gd:91)).
+Adding a line to all twenty files would throw away every best time on every
+track and empty every board, all for a change that did not move a single
+corner. So the table lives in `TrackVariant`, keyed by file name, in the same
+order as `TrackRoster.FILES`. It holds the offered variants for each track and
+also the medal targets (see section 6).
 
-### How they are actually drawn on the car
+- [ ] `TrackVariant.offered(track_file) -> Array`, read from that table. The
+	  menu calls this for every cell, so it has to be a lookup and not a build.
+- [ ] Bot roads offer nothing. The gate is one race against one road.
+- [ ] Acrobatic tracks offer Mirror and nothing else. See each section for why.
 
-This is the hard part and it needs deciding before any UI is built.
+### Identity: keys, fingerprints, signatures
 
-The car's paint is one material by name - `PAINT_MATERIAL`, every surface using
-it recoloured ([scripts/car_shell.gd:31](scripts/car_shell.gd:31)) - and that
-works on a model the game has never seen. Decoration cannot rely on the model
-having sensible UVs, because a player's model might have none worth using.
+A variant is a different road, so it gets its own time, its own board and its
+own medal. Nothing set on it may leak into the base track, and nothing set on
+the base track may leak into it.
 
-Two routes:
+- [ ] **The key** is the file name plus a suffix: `01_first_light`,
+	  `01_first_light-mirror`, `01_first_light-reverse`,
+	  `01_first_light-hard`. The suffix uses a hyphen because every track file
+	  name uses underscores, so the split is unambiguous. It is also safe in
+	  a PostgREST `eq.` filter and in a `ConfigFile` section name.
+	  `backend/schema.sql` needs **no change**: `track` is free text, and it
+	  is part of the primary key already.
+- [ ] **The fingerprint covers the variant's plan as well as the file.**
+	  The README says a fingerprint is taken over the file "rather than of the
+	  course built from it", and the reason is that the file is what an author
+	  edits. A variant's author is `TrackVariant` and the planner, and those
+	  can change with no track file changing. If a planner tweak moves every
+	  Hard barrier, every Hard time is now a time on a road that no longer
+	  exists. So for anything other than `BASE`, the fingerprint and signature
+	  are `GEOMETRY`, then the source text, then the suffix, then a
+	  serialisation of the finished pieces and placements rounded to the
+	  millimetre. The rounding matters because a signature has to agree
+	  between a Mac and a Windows machine.
+- [ ] **A base track's fingerprint does not move.** `BASE` hashes exactly what
+	  it hashes today. That is the one number in this whole feature that must
+	  not change, and the check pins it.
+- [ ] Computing a Hard plan's fingerprint means building a `TrackLayout` (no
+	  meshes, just samples). Measure what that costs across twenty cells
+	  before the grid starts calling it. If it is noticeable, cache it for the
+	  session by key. The source file cannot change while the game is running.
 
-1. **A decal texture composited at runtime and used as the paint material's
-   albedo.** All three kinds - stripe shapes, sticker images, the drawn
-   scrawl - are drawn into one `Image` on top of the flat paint colour, made
-   into an `ImageTexture`, and handed to the material. Cheap, one texture, one
-   material, works with the existing paint path. **Depends entirely on the
-   model having usable UVs.** On the stock car this is fine. On a car someone
-   exported out of Blender without unwrapping, decoration lands as noise.
-2. **Projected decal nodes** (`Decal` in Godot 4), floated over the car in its
-   own space. No UVs needed at all, works on any model, projects onto whatever
-   is under it - which is the whole problem this feature has. More nodes, more
-   fiddling to place, and they project onto the road too if they are not
-   clipped to the car's layers.
+### Passing it around: an argument, not a string
 
-**Start with 2 for stickers and writing, and 1 for stripes**, because stripes
-are the one kind that has to follow the body's shape to look right, and the
-stock car - the car nearly everyone will decorate - has UVs. Write down which
-route each kind took; the next person will ask.
+The variant goes to the race in `GameSettings.track_variant`, next to
+`GameSettings.track_file`, and is not written to disk, for the same reason
+`track_file` is not.
 
-*That is what was built, with one change to route 1: the stripe is not
-composited into the albedo but hung on the paint material as an extra
-transparent pass, one per stripe. The shape is in the mask's alpha and the
-colour is the pass's own `albedo_color`. So the body keeps whatever albedo it
-had - including a texture a model arrived with, which compositing would have
-eaten - and the chaos cycle costs a property set rather than an image redrawn.
-Written up under [Car customisation](README.md).*
+`TrackTimes.best/record/adopt/forget/fingerprint/signature`,
+`Leaderboard.board/submit` and `Stats`' table each gain a `variant` argument
+that **defaults to `BASE`**, so every existing caller keeps meaning exactly
+what it means today.
 
-### Where it is stored
+I also considered a composite id, `"res://tracks/01_first_light.gd#mirror"`,
+passed around as `track_file`. It was rejected because 27 places load, look
+up or hash `track_file` as a path (`load()`, `TrackRoster.index_of()`,
+`is_bot_road()`, `TrackTimes.source()`, ...). Each of them would have to
+learn to strip the suffix, and the one that forgot would load nothing, with
+no error anywhere near the cause.
 
-A decoration belongs to a car, not to a player, so it is keyed by garage id.
-Note the stock car's id is the empty string and it has no folder
-([scripts/garage.gd:25](scripts/garage.gd:25)), so decorations cannot simply
-live in the car's folder - they need their own store:
-
-- [x] `user://decals.cfg`, a section per car id, `stock` for the empty id -
-	  the garage already uses that exact word for where the stock car's
-	  portrait goes, so reuse it rather than inventing a second name.
-- [x] Hand-drawn strokes stored as points, not as a picture: it scales, it
-	  stays small, and it can be redrawn at whatever size the car needs.
-- [x] A car deleted from the garage takes its decoration with it.
-- [x] Two players in the same model both see that model's decoration. That is
-	  correct - it is one car - but it means the paint is the only thing
-	  telling them apart, so **the split-screen readability rule still holds**:
-	  the paint menu already refuses to let both players take one colour
-	  ([scripts/paint_menu.gd:17](scripts/paint_menu.gd:17)) and decoration
-	  must not undermine that. A sticker that covers most of the body is a
-	  sticker that makes a split screen unreadable; cap how much of the car
-	  can be covered.
-
-### The drawing screen
-
-*Built as a tab in the garage rather than a screen of its own - see the note at
-the top of this section.*
-
-- [x] ~~`scenes/customise.tscn` / `scripts/customise_menu.gd`, opened from the
-	  garage on a car that has the slot paid for.~~ `scripts/decoration_page.gd`,
-	  the garage's second tab, with `scripts/car_stage.gd` for the live car.
-- [x] A live view of the car being decorated, turning, the way the garage
-	  already shows a car ([scripts/car_portrait.gd](scripts/car_portrait.gd)).
-	  Applied as it is chosen, not on the way out - the paint screen made that
-	  choice for exactly the right reason and this is the same situation.
-- [x] A drawing box for the handwriting: click and drag to draw, a colour from
-	  the twelve, undo, clear. Undo is not optional - a player drawing with a
-	  mouse will make a mess on the first stroke.
-- [x] Sticker placement: pick one, then drag it around a flat view of the car's
-	  side with a size and rotation control. Do not try to make the player
-	  place a sticker on a rotating 3D model with a mouse.
-- [x] Both players get to decorate their own car, which means the screen asks
-	  whose car first when two are playing.
-
-### In chaos
-
-The requirement, and it is a good one: **the stripes, stickers and writing stay
-exactly as they were drawn, and their colour changes constantly.**
-
-That is a different thing from what chaos does to the cars today. Chaos repaints
-the bodies once at the line and holds them there, deliberately - the two cars
-get hues on opposite sides of the wheel and do not shift while anyone is
-driving, because telling your car from the other one is the one thing about a
-chaotic race not allowed to be chaotic
-([scripts/chaos.gd:153](scripts/chaos.gd:153)).
-
-So the decoration is the part that cycles, and the body is not. What it should
-look like is the trees: each kind turns from its own place in the cycle, so the
-field shimmers instead of pulsing as one ([README.md, What chaos looks like](README.md)).
-Apply the same idea - each decal starts at its own place in the hue cycle and
-turns continuously.
-
-- [x] The cycle runs on the decal material only. The body keeps its rolled
-	  colour.
-- [x] Each decal gets its own phase, so a car with three stickers shimmers.
-- [x] Like everything else chaotic, this is **told to the car by whatever built
-	  the race**, not read from `GameSettings.chaos` - because the title screen
-	  backdrop is a race scene too, and a strobing sticker behind the menu is
-	  not what the menu is for. `chaos_colour.gd` already checks exactly this
-	  distinction and should be extended to cover decals.
-- [x] The readability rule again: a decal cycling through hues must never land
-	  close enough to the other player's body colour to confuse a glance across
-	  a split screen. Keep decal value and saturation away from the body's.
-
-### The check
-
-Extend `tools/checks/chaos_colour.gd`: decals cycle in a chaotic race, hold
-still in an ordinary one, hold still on the title screen, and each starts from
-its own phase. Add `tools/checks/decals.gd`: a decoration saved and loaded is
-the same decoration; a deleted car's decoration goes; the stock car's
-decoration survives; a decoration never covers more than the cap.
+- [ ] `GameSettings.track_variant`, reset to `BASE` wherever `track_file` is
+	  cleared (infinite mode).
+- [ ] Both race scenes hand it to their `Track`. That is
+	  [scripts/solo.gd](scripts/solo.gd) and [scripts/main.gd](scripts/main.gd).
+	  Two players on a mirrored road is a mirrored race.
+- [ ] `Leaderboard`'s pull-on-sign-in ([scripts/leaderboard.gd:172](scripts/leaderboard.gd:172))
+	  maps each server row back to a file by its `track` column. It has to
+	  split the suffix off and adopt the time into the right variant. Right now
+	  it would find no file called `01_first_light-mirror` and drop the row
+	  silently.
+- [ ] Coins are seeded off `hash(track_name)`
+	  ([scripts/track.gd:457](scripts/track.gd:457)). A variant seeds off
+	  `hash(track_name + suffix)`, so its coins are its own and still the same
+	  on every run. Track chaos rolls them fresh with its hazards.
 
 ---
 
+## 2. Mirror
 
-- **Customisation** needs nothing - it is paint.
+Left and right swap. The same road, the same length, the same jumps, the same
+number of everything, except every corner turns the other way. This is the
+cheapest of the four and the one to build first, because it exercises the
+keys, the setting, the times, the board and the selector while the transform
+itself stays trivial.
 
-If more than one bump is unavoidable, do them in one release. Players forgive
-losing their times once.
+- [ ] Every `CORNER` piece: `turn = -turn`. Climbs and rises are untouched.
+- [ ] Every placement: `lateral = -lateral`, and every value in `phases`
+	  negated. That covers pads, rows, traps, the fork (divider, pad and
+	  lane marker), rings, platforms, lifts and kickers.
+- [ ] High roads: `BranchDefinition.lane = -lane`, and the branch's own
+	  pieces and placements mirrored the same way. A high road's pieces
+	  have no corners, so that part is only its placements.
+- [ ] Offered on all twenty normal tracks and all ten acrobatic ones. Nothing
+	  in a mirrored track can be undriveable if the base track is driveable,
+	  because the car is symmetric. The check still builds every one of them:
+	  "cannot be" is an argument, and the check produces a number.
+- [ ] One thing mirroring can change is where the road runs over the ground.
+	  A course that stays on the ground swinging right can run off it swinging
+	  left, if the ground is not symmetric about the start. `problems()` would
+	  report that, and the check reads it.
+- [ ] Thumbnail: the same overhead shot with `flip_h = true`. There is no new
+	  picture to draw or check in.
 
-### Saved files, after all of this
+Medals: the same as the base track's. See section 6.
+
+---
+
+## 3. Reverse
+
+The grid goes where the finish was, and the track is driven back to where it
+started. The road is the same shape. Every corner, climb and hazard is met in
+the opposite order and from the opposite side.
+
+### The transform
+
+- [ ] Pieces in reverse order. A corner keeps its turn sign but flips
+	  handedness because the car is travelling the other way, so `turn = -turn`.
+	  A climb, or a corner with a rise, has `rise = -rise`. Each piece keeps
+	  its own `half_width`, and the width blending already copes with seams in
+	  either order.
+- [ ] Placements: `offset = L - (offset + length)`, `lateral = -lateral`,
+	  and `phases` negated. `L` is the old length.
+- [ ] **The fork's pad has to be moved, not just flipped.** `fork()` puts
+	  the pad `pad_at` (4 m) inside the lane from the entry, so that the split
+	  and the reward arrive together (README, *The fork*). Reversed, it would
+	  sit at the far end of the lane, where it is a reward for having already
+	  made the choice. So a `BOOST_PAD` inside a `FORK` marker's span is put
+	  back at `pad_at` from the new entry. The slalom rows in the lane stay
+	  where they are and are held to `faults()` like every other row.
+- [ ] Traps keep their `dwell` and `travel`. A reversed trap is reached at a
+	  different moment after GO, so its rhythm on the reversed road is a new
+	  rhythm. That is fine: the trap checks already test every phase against
+	  every phase, not the phase the clock happens to line up.
+
+### Jumps are the hard part
+
+Every one of the twenty normal tracks has at least one jump (First Light has
+one; The Wringer, Whiplash, Leap of Faith and Last Light have three each). So
+Reverse is only possible at all if jumps can be turned round.
+
+A `JUMP` piece is `ramp (15 m) + hole (17 m) + landing (90 m)`. Read
+backwards, that is a long flat run, a hole, and then 15 m of road where the
+ramp was, with no ramp facing the car. A reversed jump is therefore built from
+different parts:
+
+- [ ] The old landing, less `ramp_length`, becomes level road. Its last 15 m
+	  becomes the new ramp.
+- [ ] The hole is the same hole.
+- [ ] The new landing is the old ramp's 15 m **plus the level straight that
+	  came before the jump** (its run-up), merged into one `jump(landing=...)`.
+	  `jump()` refuses a landing under 55 m, so the old run-up must be a
+	  straight of at least 40 m. Tracks are written with a run-up of 45 m or
+	  more, so this should hold, and the check confirms it.
+- [ ] `rise = -rise`. A jump that landed high is now a jump that lands low,
+	  which `jump()` allows "down as far as a track likes". A jump that
+	  dropped more than 3.5 m would need to climb more than 3.5 m reversed,
+	  which is more than a level jump can reach. **A track with a jump like
+	  that does not offer Reverse.** That is a rule of the jump, not of the
+	  variant.
+- [ ] A jump landing lower than it took off flies further. The 55 m landing
+	  rule was set for a level landing: "a car on a boost comes down 48 m past
+	  the hole". The drive check runs a boosted car off every reversed jump
+	  that drops, and `jump_flight.gd`'s measurements are extended to cover it.
+- [ ] Anything that ends up on a new ramp or in a hole is a fault.
+	  `TrackFeatures.adopt()` is already handed `jump_spans()` as `reserved`,
+	  so the check reads that. The Wringer and Last Light both put a trap in a
+	  ramp's landing, and reversed, that trap sits in the run-up to a ramp.
+	  That is allowed as long as it stays off the ramp itself.
+
+### Grid and flag
+
+- [ ] The new grid is on the old finish straight, and the new flag is at the
+	  old grid. Tracks start on a straight "long enough to reach it in a
+	  straight line" and end on a run to the line, so both ends should be
+	  long enough. `problems()` already says "not enough straight for the grid
+	  or the flag" if they are not.
+
+### Where it is not offered
+
+- [ ] **Acrobatic tracks: never.** Rings are one-way by definition (a ring
+	  "gone through backwards does not count"), platforms and lifts are timed
+	  around where the ramp throws the car, and a high road drops off its end
+	  onto the course. None of those has a reverse that is the same kind of
+	  thing.
+- [ ] A normal track whose reverse fails any of the above just does not offer
+	  it. Its cell is greyed, and the tooltip says why in one line: *a jump on
+	  this road drops too far to be climbed*.
+
+Thumbnail: the same shot. The road is the same shape.
+
+---
+
+## 4. Hard
+
+The same road with more to get past: more rows of barriers, and some of them
+moving. Hard is fixed. It is seeded, so a Hard track has the same rows in the
+same places on every run, on every machine. That is what makes a Hard time
+something worth writing down.
+
+### What is added
+
+- [ ] **More loose rows.** They go on straights that are clear of the
+	  existing rows, the respawns (`keep_out`), the jumps (`reserved`), the
+	  grid, the flag and the fork. They are laid down by the same planner code
+	  that places rows on a generated course
+	  (`_row_at()`, [scripts/track_features.gd:627](scripts/track_features.gd:627)): each
+	  row is placed, narrowed to leave `clear_lane`, and pushed downstream
+	  until it is reachable from the row before it. The rules stay the same.
+	  Only the density goes up.
+- [ ] **Some static rows become traps.** This reuses the pass that chaos
+	  mode (the endless course's, not track chaos) uses, which "turns a row into a trap wherever that still passes every rule"
+	  (`_make_sure_of_a_trap()`, [scripts/track_features.gd:684](scripts/track_features.gd:684)). Two
+	  traps may still not stand side by side, and rows in a fork's fast lane
+	  stay as they are.
+- [ ] Target: about half as many rows again as the base track, and at least
+	  one trap. Put both numbers in named constants in `TrackVariant` so they
+	  can be tuned in one place. Tune them against lap times rather than by
+	  eye.
+- [ ] Seeded from `hash(track_name + "-hard")`, with its own
+	  `RandomNumberGenerator`. It must not draw from anything else's stream,
+	  for the reason coins are seeded apart: a shared stream would move every
+	  roll after it.
+- [ ] Planned in a new `TrackFeatures.harden(layout, seed, tuning)`, called
+	  in `Track.lay_out()` after the base placements are adopted. It returns
+	  the finished list, and `faults()` runs over all of it.
+
+### What Hard does not do
+
+- It never touches the car. Speed, grip and braking are what every board
+  assumes, and the shop refuses to sell them for the same reason.
+- It never narrows a way past below `clear_lane` or spaces rows tighter than
+  the dodge rule allows. A Hard course is harder to read, not impossible.
+  "Hard" that means "sometimes cannot be finished" is just broken.
+- It does not add jumps or change the road. The road is the track and the
+  hazards are the variant.
+
+### Where it is offered
+
+- [ ] All twenty normal tracks, wherever the planner finds room. A track
+	  already dense with rows (Rattlesnake has 22, Last Light 20) may take only
+	  a few more. It is still offered as long as the result has more rows or
+	  traps than the base. If the planner cannot add anything, it is not
+	  offered, because a Hard track identical to the base track is a lie on the
+	  selector.
+- [ ] **Acrobatic tracks: not offered.** Their checkpoints are rings, most
+	  of the course is in the air, and a barrier on a landing is a different
+	  and much meaner thing than a barrier on a straight.
+
+Thumbnail: the same shot. The overhead shots are about the shape of the road.
+
+---
+
+## 5. Track chaos
+
+**Track chaos is not chaos mode.** They share the word CHAOS on their buttons
+and nothing else, and everything here, in the code and in the README, says
+*track chaos* for this one so the two are never confused:
+
+- **Chaos mode** is the one that already exists. It belongs to the endless
+  course, and re-rolls the car's speed, gravity, grip and paint, the time of
+  day and the shape of the course (README, *Choosing a mode*, *What chaos
+  looks like*). It is `GameSettings.chaos` and [scripts/chaos.gd](scripts/chaos.gd),
+  and a laid-out track always turns it off.
+- **Track chaos** is one of the four ways of driving a laid-out track. The
+  road is the track as written and the car is the tuned car; only the hazards
+  change, rolled again on **every run**, including an instant retry with
+  Enter. In code it is `TrackVariant.TRACK_CHAOS`, and its times are kept
+  under `<track>-track_chaos`.
+
+Its button on the track page says CHAOS and turns through the colours the way
+chaos mode's button does. That was asked for, and it is the one place the two
+look alike.
+
+### It has a leaderboard
+
+*Changed 2026-09-26.* This section used to say track chaos records nothing,
+from the README's rule that a trap is "timed, not random". It has a best time
+and a board of its own, like the other three ways, because that was asked for.
+What that costs is worth writing down: two players' times on it were set
+against different barriers, so the board ranks luck as well as driving.
+
+- [x] Its own key, fingerprint and board, `TrackVariant.TRACK_CHAOS`, kept
+	  apart from NORMAL's (built with the page, see section 7).
+- [ ] No medal until question 2 is answered. A target measured against one
+	  roll of the dice is a target for that roll.
+- [ ] It counts in `Stats` as a completed race, with distance driven and
+	  coins picked up.
+- [ ] It does not count toward the medal gate.
+
+### The transform
+
+- [ ] Take the base definition. Remove every loose `OBSTACLE` row and every
+	  `TRAP`. Keep the fork's divider, pad and marker, and the rows inside the
+	  fork's fast lane. Keep pads.
+- [ ] Re-plan rows and traps with the planner, using the `TRAP_CHANCE` range
+	  chaos mode already rolls traps at ([scripts/chaos.gd](scripts/chaos.gd)), from a seed
+	  rolled at the start of the run. The fork lane's slalom stays as written
+	  in the first version. Re-rolling it is a later improvement.
+- [ ] Coins roll again with it.
+- [ ] Both players on a split screen get the same roll. A race where each
+	  car meets different barriers is not a race.
+
+### Every run, including a retry
+
+Solo's retry does not rebuild the track: "it is the same track, and
+rebuilding it would cost a second of watching a road appear"
+([scripts/solo.gd:545](scripts/solo.gd:545)). Track chaos needs the hazards to
+change without the road being rebuilt.
+
+- [ ] `Track.reroll_track_chaos(seed)`: throw away and rebuild the furniture only, not
+	  the road mesh, rails or embankment. `_furniture.build()` already takes
+	  the features plan on its own. Measure how long it takes on the densest
+	  track. If it is under a frame or two, retry stays instant.
+- [ ] `solo.gd` and `main.gd` call it from `_restart()` when the variant is
+	  track chaos, before the countdown.
+
+### Where it is offered
+
+- [ ] All twenty normal tracks. Acrobatic tracks: no, for the reason Hard is
+	  not offered there.
+
+---
+
+## 6. Medals on a variant
+
+In the README a medal target is "a fact about the road", measured by driving
+it with `tools/lap_times.gd`. A variant is a different road, so its targets
+have to be measured, not assumed. The one exception is argued below.
+
+- [ ] **Mirror uses the base targets.** The car is symmetric, the road is the
+	  same length with the same corners in the other direction, and a lap of
+	  one is a lap of the other. `lap_times.gd` runs both and reports the
+	  difference. If any track's mirror comes out more than about 1% off the
+	  base lap, that argument is wrong for that track, and it gets targets of
+	  its own.
+- [ ] **Reverse and Hard get their own targets**, in the `TrackVariant` table
+	  and not in the track file, because the track file's text is the base
+	  track's fingerprint (section 1). They are set by the same rule the base
+	  targets were: gold a little under the best the road allows, with silver
+	  and bronze spaced further apart on harder roads, all from the one
+	  measured ratio.
+- [ ] Until a variant's row exists, it has **no medals**. It still has a
+	  time and a board. That is already how a track with no `medals()` line
+	  behaves ([scripts/medal.gd](scripts/medal.gd)), so the variants can ship
+	  before every target is measured, and nothing ever shows a gold that was
+	  guessed.
+- [ ] `tools/lap_times.gd` takes the variant as an argument after `--`
+	  (`-- mirror`, `-- reverse`, `-- hard`) and prints a line per track in
+	  the form the table wants, so filling it in is a paste.
+- [ ] **The medal gate counts base tracks only.** `Progress.golds_in()`
+	  reads `TrackTimes.best()` with no variant, which means `BASE`, so this
+	  needs no change. It does need a sentence in the README and a case in
+	  `tools/checks/progress.gd`, because the day somebody passes a variant
+	  through, five mirror golds would open a block. Whether that is actually
+	  wrong is question 4.
+
+---
+
+## 7. Choosing one
+
+### The track's own page
+
+*Built for First Light, 2026-09-26.* The design first had a selector row over
+the track grid. What was built instead is a page of the track's own, opened by
+pressing its cell: the track's name and blurb, a wide overhead shot, and under
+it the four ways of driving it, held down one at a time:
 
 ```
-user://settings.cfg    GameSettings - volume, sky, solo, chaos, damage, paint, cars
-user://times.cfg       TrackTimes - a best per track, with its fingerprint
-user://progress.cfg    Progress - bot races won, blocks open
-user://purse.cfg       Purse - coins, and what has been bought
-user://stats.cfg       Stats - lifetime totals, one section of counters
-user://decals.cfg      Decals - decoration, a section per car id
-user://liveries.cfg    Liveries - designs saved on their own
-user://cars/<id>/      Garage - a folder per car the player added
+NORMAL   HARD   CHAOS   MIRROR
 ```
 
-A store per kind of thing rather than one, and on purpose: settings are things a player chose
-and can change back, and the rest are things that happened. `Sandbox.path()`
-must be used for every new one ([scripts/sandbox.gd](scripts/sandbox.gd)), or a
-headless check will write into a real player's purse.
+HARD is written in red. CHAOS is track chaos, and turns through the colours
+the way chaos mode's button does. MIRROR is written mirrored. Beside the
+picture is the board for the way held down, and beside that the player's time
+and place on it, with PLAY under them and BACK across the bottom.
 
+- [x] The page, `TrackDetail` in `scenes/menu.tscn`, opened from First Light
+	  only while it is being designed. Checked by `screen_fit.gd`,
+	  `track_select.gd` and `track_select_shot.gd`.
+- [x] A board per way of driving, and the player's time and place on it.
+- [ ] The other nineteen tracks, and the acrobatic ones with only NORMAL and
+	  MIRROR.
+- [ ] PLAY drives the way held down. It drives NORMAL whatever is held until
+	  the variants are built.
+- [ ] REVERSE. It is in the plan and not on the page.
+- [ ] A way a track does not offer is dimmed, with one line saying why.
+- [ ] `GameSettings.track_variant` is set by PLAY, next to `track_file`, and
+	  coming back from a race opens the page with the same way held down.
+- [ ] Shut blocks stay shut in every way. A variant is a way of driving a
+	  track the player has already opened, not a way around the gate.
 
-### The title screen
+### The other pages
 
-~~Gains a Shop button, making six: Play, Garage, Shop, Settings, Account, and
-the mode row.~~ Done. The stack moved from 60% to 54% to pay for it, and
-`tools/checks/screen_fit.gd` now measures the column as well as the panels, so
-the next button added to it fails a check rather than falling off a screen.
+- [ ] **Leaderboard** opens on the track *and variant* the grid is showing,
+	  worked out from focus and the selector, the same way the track is
+	  worked out today. It gets the same selector, because a player reading
+	  one board is nearly always about to read the next.
+- [ ] **Statistics'** table of best times gets a column per timed variant
+	  (STANDARD, MIRROR, REVERSE, HARD) if that fits at the largest interface
+	  size, with a medal colour on each time. If it does not fit, it gets the
+	  selector. `screen_fit.gd` decides here too.
+- [ ] Statistics' "tracks with a time" stays a count of the twenty base
+	  tracks. A number that can reach a hundred hides whether the twenty have
+	  been driven.
+- [ ] The finish screen and the corner name the variant beside the track
+	  name, `FIRST LIGHT · MIRROR`, so that a time read off a screenshot says
+	  which road it was set on.
+
+---
+
+## 8. The checks
+
+These follow the shape everything under `tools/checks/` already has: a
+`SceneTree` script with its command line in its header, autoloads fetched
+from `/root` by name, `save_path` pointed at scratch, a fault count and a
+non-zero exit.
+
+- [ ] **`tools/checks/variants.gd`**, headless. This is the one that matters.
+	  For every track and every variant:
+	- declared variants build with no `problems()`, `faults()` or
+	  `branch_problems()`, and undeclared variants that would pass are
+	  reported
+	- mirror of mirror equals the base, and reverse of reverse equals the
+	  base, piece for piece and placement for placement, to the millimetre.
+	  An involution that is not one is the quickest way to catch a sign that
+	  was flipped twice or not at all.
+	- mirror and reverse are the same length as the base
+	- Hard has more rows or traps than the base, the same plan when built
+	  twice, and a way past every row at every phase
+	- a hundred track chaos seeds are all fault-free and are not all the same
+	- every variant key, fingerprint and signature differs from every other
+	- **every base fingerprint is exactly what it was before this feature**.
+	  The check computes it by the old route, with no variant argument, and
+	  compares.
+	- nothing lands on a ramp or in a hole
+- [ ] It also hands the validator plans that are **wrong on purpose**, in the
+	  habit of `barrier_layout.gd` and `trap_layout.gd`: a reversed jump that
+	  would need to climb 5 m, a reversed run-up of 30 m, and a Hard row pushed
+	  inside the dodge distance. A validator that has never rejected anything
+	  has not been shown to work.
+- [ ] **`tools/checks/variant_drive.gd`**, headless, `--fixed-fps 60`. The bot
+	  drives every declared timed variant from the grid to the flag in `Solo`,
+	  and a boosted car goes off every reversed jump that drops. Then there is
+	  one two-player run on a mirrored track in `Main`, to prove the variant
+	  reaches the second scene. This is what turns "declared" into "driven".
+- [ ] `tools/checks/track_times.gd`: a time on Mirror does not touch the base
+	  time. Editing the base file drops the variant's times as well. A Hard
+	  plan that changes drops the Hard time and leaves the others alone.
+- [ ] `tools/checks/track_select.gd`: the selector redraws the cells, a cell
+	  that does not offer the variant cannot be pressed, the variant arrives in
+	  the race's `Track`, and coming back lands on the same track and variant.
+- [ ] `tools/checks/mode_routing.gd`: a variant survives both routes, solo
+	  and two-player.
+- [ ] `tools/checks/progress.gd`: golds on variants do not open a gate.
+- [ ] `tools/checks/stats_race.gd`: a track chaos run adds a completed race.
+- [ ] `tools/checks/screen_fit.gd` opens the track page with the selector in
+	  place and the Statistics page with its new columns, at every window
+	  shape and the largest interface size.
+- [ ] `tools/checks/track_select_shot.gd`, not headless: one shot of the grid
+	  per variant, so a flipped thumbnail and the "not offered" cell can be
+	  looked at.
+
+---
+
+## 9. What all of this touches
+
+| File | What changes |
+| --- | --- |
+| `scripts/track_variant.gd` | **new**: the constants, `apply()`, the offered/targets table, keys |
+| `scripts/track.gd` | `variant` export, the two hooks in `lay_out()`, `reroll_track_chaos()`, coin seed |
+| `scripts/track_features.gd` | `harden()`, and the planner's row and trap passes callable on an authored layout |
+| `scripts/track_times.gd` | `variant` argument, keyed suffix, fingerprint over the plan |
+| `scripts/leaderboard.gd` | `variant` argument, and splitting the suffix on pull |
+| `scripts/game_settings.gd` | `track_variant`, unsaved, cleared with `track_file` |
+| `scripts/solo.gd`, `scripts/main.gd` | hand the variant to `Track`, reroll track chaos on retry, name it on screen |
+| `scripts/menu.gd` | the selector, the fourth cell look, focus seams |
+| `scripts/leaderboard_menu.gd`, `scripts/stats_menu.gd` | the variant on each page |
+| `tools/lap_times.gd` | the variant as an argument |
+| `tools/checks/…` | `variants.gd` and `variant_drive.gd` are new; six others extended (section 8) |
+
+**Nothing new in `user://`.** Variant times are more sections in
+`user://times.cfg`, keyed with a suffix. **Nothing changes on the server.**
+**No `GEOMETRY` bump**, and that is the point: no player loses a base time to
+this.
 
 ### README
 
-Every feature here needs its own section, in the same voice as the rest: what
-it does, what the numbers are, why they are those numbers, what was tried and
-did not work, and the command that checks it. The README is the design document
-for this project and a feature that is not in it is a feature the next person
-will re-decide from scratch.
-
-### Build order
-
-1. ~~Damage - self-contained, nothing depends on it.~~ Done.
-2. ~~Coins and the purse - the shop cannot exist without them.~~ Done.
-3. ~~The shop - needs the purse.~~ Done.
-4. ~~Customisation - needs the shop to be bought from, and chaos work.~~ Done.
-5. ~~Traps - needs the validator work, which is the riskiest part here.~~ Done.
-6. Acrobatic tracks - needs the jump scale, and wants traps to exist first.
-7. The bot driver - the biggest single piece of new code.
-8. Progress and the medal gate - needs the bot to be the thing it gates.
+- [ ] A `## Track variants` section after `## Choosing a track`, with a
+	  subsection per variant: what the transform is, why each variant is or is
+	  not offered where it is, what Reverse does to a jump, why Hard is seeded
+	  and track chaos is not, how track chaos differs from chaos mode, and the
+	  command for each check.
+- [ ] `## Track times`: the key suffix, and why a variant's fingerprint covers
+	  its plan when a base track's covers only its file.
+- [ ] `## Medals`: Mirror shares the base targets and the argument for it;
+	  the others come from the table.
+- [ ] `## The medal gate`: base golds only.
+- [ ] `## Choosing a track`: the selector and the fourth cell look.
+- [ ] `## Adding a track`: a new track gets its variants from the check, and
+	  one line in the `TrackVariant` table. That makes it four steps, not
+	  three.
+- [ ] `## Layout`: `scripts/track_variant.gd`.
 
 ---
 
-## 10. Statistics
+## 10. Questions worth settling first
 
-**Built 2026-09-24.** See [Statistics](README.md) in the README for what
-landed and why. Two things differ from the plan below: distance is counted from
-`absf(Car.speed())`, since the speed is signed and reversing is driving too;
-and the "every few seconds" flush is five seconds of *driving* rather than a
-wall-clock timer, which is the same thing for a count that only moves while
-driving and needs no node to run it.
+1. ~~**What is the "Chaos" variant called?**~~ Settled: **track chaos**,
+   always, in the notes and the code, so it is never mistaken for chaos mode.
+   Its button says CHAOS.
+2. **Does track chaos get medals?** It has a time and a board (section 5). A
+   medal would need a target, and a target measured on one roll of the
+   hazards is only a target for that roll. Recommended: no medals.
+3. **Can variants stack?** Mirror stacks cleanly with everything, since it
+   works on laterals and turns and nothing else looks at those. Mirror +
+   Reverse, Mirror + Hard and Reverse + Hard would add about 60 more timed
+   configurations. Recommended: ship single variants first and add stacking
+   later as a second selector toggle, because each stack is one more column
+   of medal targets to measure.
+4. **Do variant golds count toward the medal gate?** Recommended: no. The
+   gate asks whether "you have driven half of these properly", and a mirror
+   gold on a track already golded is the same skill counted twice.
+5. **Are variants open as soon as their base track is?** Recommended: yes.
+   An alternative is Reverse and Hard opening after any medal on the base,
+   which gives the medals another use but adds a fifth state to a cell that
+   already has four.
+6. **Hard's density.** "Half as many again, at least one trap" is a starting
+   guess. Settle it by driving three tracks at 1.3×, 1.5× and 2× before
+   measuring targets on all twenty, because the targets have to be measured
+   again whenever it moves.
 
-### What it is
+---
 
-A page of lifetime totals: how far the cars have been driven, how many races
-were finished and how many won, how many cars were wrecked, how many coins
-were picked up. Below them, a table of the best time and medal on every track.
-All of it is kept on this machine and about this machine - one record, for the
-reason there is one purse.
+## 11. Build order
 
-### What a number means
+1. **`TrackVariant` with only `BASE` and `MIRROR`**, the `variant`
+   plumbing, keys and fingerprints, and `variants.gd` checking the mirror
+   involution and the unchanged base fingerprints. Nothing to look at yet,
+   and all of it can be tested.
+2. **The selector** on the track page, with `screen_fit.gd` deciding row vs.
+   cycling button, and `track_select.gd` / `mode_routing.gd` extended.
+   Mirror is playable end to end at this point: time, board and flipped
+   thumbnail.
+3. **Reverse**, starting with the jump rebuild, then `variant_drive.gd`.
+   Expect the check to find a few tracks whose reverse does not work. That is
+   the check doing its job, not the feature failing.
+4. **Hard**: `harden()`, settling the density (question 6), then the drive
+   check.
+5. **Track chaos**: `reroll_track_chaos()`, timed against the densest
+   track, and its count in `Stats`.
+6. **Targets**: `lap_times.gd` per variant, filling the table. Mirror's
+   argument is confirmed or dropped here.
+7. **The other pages** (Leaderboard, Statistics), then the README.
 
-Every one of these is settled before any code is written, because a question
-left until then gets answered by whichever branch was easiest to reach.
-
-- **A race is completed when a result is announced**, whichever scene
-  announces it. In `solo.gd` that is `_finish()`, `_break_down()`,
-  `_won_the_race()`, `_lost_the_race()` and `_bot_broke_down()`; in `main.gd`
-  it is `_finish_course()` and `_break_down()`. A run quit from the pause
-  screen, or restarted, announced nothing and completes nothing.
-- **A broken-down run is completed**, and is a wreck as well. It ended in a
-  result, just a bad one. A count that only moves when the player succeeds
-  cannot tell "I have played a lot" from "I am good".
-- **A win is beating somebody**: the bot in a bot race, or the other car on a
-  two-player course - including by being the car that did not break down. A
-  solo time trial has nobody to beat and is never a win. What a solo run earns
-  instead is a medal, and that is already counted, as a medal. Without this
-  written down the number quietly turns into "runs finished".
-- **A two-player course is one race and at most one win**, whichever half of
-  the keyboard took it. There is one record on this machine, not two - the
-  answer the purse already gave for coins ([scripts/purse.gd](scripts/purse.gd)).
-- **A wreck is a car worn to nothing**, `Car.is_broken()`, and the row says
-  **CARS WRECKED**, not crashes. Three numbers were candidates, and they are
-  different features wearing one word: a car destroyed, any contact that took
-  condition off, and any trip back to a checkpoint. Only the first is something
-  the game already announces, so it is the only one the page can never
-  disagree with the race about. Contact needs rules of its own before it can
-  be counted - is one long scrape along a barrier one hit or forty? - and is
-  left for later under its own key. Resets are cheap and have no such
-  question, so they go in now, as `resets`, beside wrecks rather than inside
-  them.
-- **Only cars a person drove are wrecked.** The bot's car breaking is the
-  player's win, not the player's wreck. On a split screen both cars had a
-  person in them, so both breaking at once is two wrecks.
-- **With damage off, nothing is ever wrecked.** Damage is off by default, so
-  most players will look at a zero there for good. The row is greyed, with a
-  line saying damage is off, rather than a zero with no reason given.
-- **Distance is distance raced**: counted only while `_running` (solo) or
-  `_racing` (two-player) is true. A car can be driven during the hold before
-  the start and after the flag, and a player idling on a finished course must
-  not be able to farm kilometres.
-- **The player's distance, not the bot's.** Nobody drove the bot. On a split
-  screen it is both cars', since both were driven, and the comment says so,
-  so the number is never later read as "how far player one has driven".
-- **Distance survives an abandoned run**, for the reason a coin does: it was
-  driven. Holding it back until the flag would punish exactly the players who
-  spin, give up and start again.
-- **The endless course counts.** Its distance counts, and each course crossed
-  is a completed race. Medals and wins do not apply. The completed count
-  climbing steadily in infinite mode surprises nobody who has read this and
-  everybody who has not, so the README says it.
-- **Chaos counts.** A chaos race is still driving.
-- **Checks never count**, and that is already answered: `Sandbox.path()` sends
-  the file into `user://sandbox/`.
-- **Coins earned is coins ever earned**, not what is in the purse. The two part
-  company the first time anything is bought. What is in the purse is the
-  shop's number and already lives in the shop's store; what was ever picked up
-  is what a page of totals is for.
-- **Nothing goes to the server.** Times go to
-  [scripts/leaderboard.gd](scripts/leaderboard.gd) because a time means the
-  same thing on every machine. A lifetime total does not, and syncing one
-  would need a rule for merging every counter. The file's header says this was
-  decided, not forgotten.
-
-### Where it is stored
-
-`user://stats.cfg`, through a new autoload, `Stats`, in `scripts/stats.gd`,
-registered after `Progress` and before `Backend`.
-
-Kept apart from `GameSettings` because a total is something that happened, not
-something chosen. Kept apart from `TrackTimes` because a total is not a record:
-it is never beaten, only added to. The best times are not copied in - they
-live in `TrackTimes` already, and a second copy is a second thing to disagree
-with the first.
-
-One section, `[totals]`, rather than a section per thing the way `TrackTimes`
-and `Progress` do it. Those grow a section per track or per block; this is a
-fixed handful of counters that grows by nothing, so a section per key would be
-noise. The comment says so, since it departs from both neighbours.
-
-No fingerprint. A lap time stops meaning anything when the track under it is
-edited; a distance does not. The kilometres driven on the old track seven were
-still driven.
-
-- [x] `const SAVE_PATH := "user://stats.cfg"` and
-	  `var save_path := Sandbox.path(SAVE_PATH)` - a var, so a check can point
-	  it at scratch, as `Progress` does.
-- [x] The counters as named variables, not a free-form dictionary, so a
-	  misspelt key is a compile error rather than a quiet second stat:
-	  `distance_metres`, `time_driven_seconds`, `races_completed`,
-	  `races_contested`, `races_won`, `cars_wrecked`, `resets`, `coins_earned`.
-	  `races_contested` is the races that could have been won - bot races and
-	  two-player courses - and it exists for the win rate below.
-- [x] Not a counter: tracks finished. That is how many tracks have a best
-	  time, and `TrackTimes` already knows it.
-- [x] One signal, `changed`, as `Progress` has, so an open page can follow a
-	  count that moves under it.
-- [x] A narrow API, one call per thing that happens: `add_distance(metres,
-	  seconds)`, `race_finished(contested, won)`, `wrecked()`, `reset_taken()`,
-	  `coins_collected(count)`, and `forget()` for checks and for the day a
-	  page offers to start again. Each saves what it changed - except distance.
-- [x] Distance and time driven are not written every physics step, which would
-	  be sixty writes a second. They are held in memory and flushed when a
-	  result is announced, when the pause screen opens, when a run is quit or
-	  restarted, from the race scene's `_exit_tree()`, on
-	  `NOTIFICATION_WM_CLOSE_REQUEST`, and every few seconds on a timer. A hard
-	  kill loses at most those few seconds, which is fine; grinding the disk is
-	  not. The comment lists the flush points.
-- [x] A defensive load: a missing key is zero, and so is a negative or
-	  non-finite one. A damaged file must not be able to put `-nan KM` on the
-	  page.
-
-### Where the counts come from
-
-**Solo and bot races**, [scripts/solo.gd](scripts/solo.gd):
-
-- [x] Distance: in `_physics_process`, inside the `_running` branch, after the
-	  car has moved - `_car.speed() * delta`. `Car.speed()` is the game's one
-	  idea of speed; do not add a second.
-- [x] `_finish()` on an ordinary course: one completed race, after
-	  `TrackTimes.record()`, so the run is offered to the record before
-	  anything else is said about it.
-- [x] `_finish()` on the endless course: one completed race, before
-	  `_and_on_to_the_next()`.
-- [x] `_won_the_race()`: completed, contested, won. `_lost_the_race()`:
-	  completed, contested. Not inside `_write_the_win_down()` - that is about
-	  `Progress` opening a block, and a drawn bot race is a completed race that
-	  is neither a win nor a `Progress` win.
-- [x] `_break_down()`: completed, one wreck.
-- [x] `_bot_broke_down()` has three outcomes and each needs its line. The bot
-	  broke: completed, contested, won. The player broke: completed,
-	  contested, one wreck. Both broke: completed, contested, one wreck (the
-	  player's), no win. The draw is the one that gets forgotten.
-- [x] Resets where the player presses `p1_reset` in `_physics_process`, not
-	  inside `_back_to_checkpoint()`: the bot asking to be put back goes down
-	  that same path, and the bot pressing the key is not the player.
-- [x] `_on_pause_quit()` and `_restart()`: flush distance, count nothing else.
-	  The comment says distance surviving an abandoned run is on purpose.
-- [x] `_exit_tree()` flushes, so closing the window mid-race does not lose the
-	  session's driving.
-
-**Two-player races**, [scripts/main.gd](scripts/main.gd):
-
-- [x] **Nothing in this scene touches `Stats` while `attract_mode` is set.**
-	  The title screen's moving backdrop is this scene, instanced by
-	  [scenes/menu.tscn](scenes/menu.tscn), and a player who leaves the game
-	  on the title must not come back to a thousand kilometres. Today its cars
-	  are frozen by `_dress_for_the_title_screen()`, which is what makes this
-	  safe now - and exactly why it is the riskiest item in the section: the
-	  next change to the backdrop can unfreeze them without anyone thinking of
-	  statistics. So every call is gated on `attract_mode` rather than on the
-	  cars happening to stand still, and a check drives the backdrop to prove
-	  it.
-- [x] Distance: in `_physics_process`, while `_racing`, both cars.
-- [x] `_finish_course(winner)`: completed, contested, won.
-- [x] `_break_down(broken)`: completed, contested, and one wreck per broken
-	  car. One car broken is also a win, for the car still going. Both broken
-	  is two wrecks and a draw.
-- [x] Resets where each player's `_reset` key is read, before
-	  `_reset_to_checkpoint()`.
-- [x] `_on_pause_quit()` and `_restart()`: flush distance, count nothing else.
-- [x] An `_exit_tree()` that flushes. This scene has none yet.
-
-**Coins**, [scripts/track_furniture.gd](scripts/track_furniture.gd):
-
-- [x] `coins_collected(1)` beside `purse.bank()` in `_on_coin_entered()`, the
-	  one place a coin is banked for both scenes, fetched from `/root` the way
-	  `_the_purse()` fetches the purse. That puts it on abandoned runs for
-	  free, as the purse already is. Not hung off `Purse.changed`, which
-	  fires when something is bought as well.
-- [x] The coin pickup has no `attract_mode` gate of its own - the purse is
-	  protected on the title only by the backdrop's cars being frozen. Stats
-	  inherits that, and so the title-screen check below watches the coin
-	  count as well as the distance.
-
-### Best times, read and never stored
-
-- [x] Per slot, `TrackTimes.best(TrackRoster.file(index))`, read the way
-	  `Progress.golds_in()` reads it, with
-	  `Medal.earned(best, TrackRoster.targets(index))` beside it, so the table
-	  says how the player is doing and not only what the clock said.
-- [x] Below zero means no time: a dash, never `-1.00`. A time dropped because
-	  its track was edited also comes back below zero, silently, from the same
-	  call. That is right, and the page's comment says so, so the next reader
-	  does not "fix" it.
-- [x] Acrobatic tracks in a group of their own, under their own heading.
-	  `TrackRoster.kind_of()` tells them apart, `Progress.golds_in()` already
-	  leaves them out, and the track picker already gives them a grid of their
-	  own.
-- [x] Locked tracks keep their row and their name. A best time on one is
-	  impossible anyway, and a table that grows as the player unlocks things
-	  keeps changing shape under them.
-
-### The page
-
-- [x] `scenes/stats.tscn` and `scripts/stats_menu.gd`, `class_name StatsMenu`,
-	  in the shape of `LeaderboardMenu`: a `closed` signal, `open()` and
-	  `close()`, `ui_cancel` in `_input`, hidden at the end of `_ready`.
-	  Instanced into `scenes/menu.tscn` as `StatsScreen`, on the shared
-	  `menu_theme.tres`.
-- [x] **The button goes beside Boards on the track screen, not on the title.**
-	  The title already stacks five - Play, Garage, Shop, Settings, Account -
-	  and the fifth was paid for by moving the stack from 60% to 54%, with
-	  Account landing at 732 of the 750 there is (section 6). A sixth there is
-	  a layout change, not a button. Beside Boards is also where the question
-	  is already being asked: half this page is a table of times and medals per
-	  track. The cost, accepted: the lifetime totals are a level deeper than a
-	  player looking for them by name will first try.
-- [x] Wired in `scripts/menu.gd` the way Boards is: the reference, `pressed`
-	  and `closed`, a branch in the `ui_cancel` handler in `_input()` so
-	  Escape backs out of it like every other page, and focus back on the
-	  Stats button on close, as `_on_boards_closed()` does. The keyboard is
-	  never left on nothing.
-- [x] `Stats.changed` connected, so an open page follows a change. It will
-	  rarely fire while the page is up; it is one line, and it is what the
-	  other pages do.
-- [x] The totals in a block at the top and the table scrolling below it, with
-	  `LeaderboardMenu._fit_the_list()` as the model - the same problem, a
-	  fixed header over a list that has to give way on a short screen.
-- [x] One formatting helper per unit. Distance in metres under a kilometre,
-	  then kilometres to one decimal - no miles, because the game has no units
-	  setting to follow, and the README says so. Times through
-	  `RaceClock.format()`. Time driven in hours and minutes. Counts as plain
-	  integers.
-- [x] The win rate is `races_won / races_contested`, worked out on the page and
-	  never stored. Not over `races_completed`, which includes solo runs that
-	  can never be won - a player who mostly races the clock would read as
-	  someone who mostly loses. No contested races yet shows a dash, not `nan%`.
-- [x] A fresh profile is the first thing a new player sees, so it reads as a
-	  page and not as a grid of zeros: something like NOTHING DRIVEN YET where
-	  the totals will be.
-- [x] CARS WRECKED greyed, with its note, while damage is off.
-- [x] `tools/checks/screen_fit.gd` opens the page, at every window shape it
-	  tries and the largest interface size - see
-	  [Screen sizes](README.md) in the README.
-
-### The checks
-
-In the shape everything under `tools/checks/` already has: a `SceneTree`
-script with its exact command line in its header, autoloads fetched out of
-`/root` by name because they are not identifiers under `--script`,
-`save_path` pointed at scratch, scratch deleted on the way out, a fault count
-and a non-zero exit.
-
-- [x] `tools/checks/stats.gd`, headless - the store on its own. A fresh
-	  profile is all zeros. Each call raises the thing it names and nothing
-	  else. Totals survive a save and a load. `forget()` clears everything. A
-	  damaged or partial file loads as zeros, without throwing and without a
-	  negative. Distance held in memory is on disk after each flush point.
-- [x] `tools/checks/stats_race.gd`, headless - the counts from real runs,
-	  after `solo_run.gd` and `bot_race.gd`. A finished solo run adds one
-	  completed race and some distance, and no win. A broken-down run adds one
-	  completed race and one wreck. A won bot race adds one win; a lost one
-	  adds none. A drawn bot race adds a completed race, one wreck and no win.
-	  A reset adds one reset, and a bot reset adds none. A quit run adds
-	  distance and nothing else. **The title-screen backdrop, left running for
-	  several seconds, adds nothing at all** - no distance, no coins, no race.
-- [x] `tools/checks/stats_shot.gd`, not headless, after `settings_shot.gd`:
-	  open the track screen, press Stats, shoot the page empty, seed some
-	  totals, shoot it full, back out.
-
-### README and the rest
-
-- [x] A `## Statistics` section after `## Track times`, its nearest
-	  neighbour: what is counted, what each number means, what is deliberately
-	  not counted - the title screen, the bot, anything but distance on an
-	  abandoned run - and where the file lives.
-- [x] `## Menu` gains the Stats button beside Boards.
-- [x] `## Layout` gains `scripts/stats.gd` and the autoload.
-- [x] `user://stats.cfg` goes into *Saved files, after all of this*, above.
-
-### Build order
-
-1. The store and `tools/checks/stats.gd`. There is nothing to look at yet, and
-   all of it can be tested.
-2. The counts, the title-screen gate first, with `tools/checks/stats_race.gd`.
-3. The page, reading its times straight from `TrackTimes`, with `screen_fit.gd`.
-4. `tools/checks/stats_shot.gd`, and the README.
-
-Coins are not waiting on anything: the purse was built on 2026-09-23 and the
-call goes in with the rest of the counts.
+Each step can ship without the steps after it. A variant with no targets has
+no medals and still works, and a variant the table does not offer does not
+appear.

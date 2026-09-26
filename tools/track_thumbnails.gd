@@ -4,6 +4,12 @@ extends SceneTree
 # puts on its buttons.
 #   Godot --path . --script tools/track_thumbnails.gd
 #   Godot --path . --script tools/track_thumbnails.gd -- res://tracks/acrobatic/a01_lift_off.gd
+#   Godot --path . --script tools/track_thumbnails.gd -- --wide res://tracks/01_first_light.gd
+#
+# `--wide` draws the long picture the track's own page shows instead of the
+# square one on its button, into `assets/tracks/wide/`. A road is rarely as
+# tall as it is wide, and a square frame round a long one is mostly grass; the
+# wide shot turns the road so its long side runs across the picture.
 #
 # Run this after laying out a track or changing the shape of one. The shots
 # are checked in rather than drawn at load: a menu that built twenty tracks to
@@ -16,21 +22,30 @@ extends SceneTree
 
 const OUT := "res://assets/tracks"
 const SIZE := 512
+const WIDE_OUT := "res://assets/tracks/wide"
+const WIDE_SIZE := Vector2i(1024, 512)
 
 
 func _init() -> void:
 	await process_frame
-	root.size = Vector2i(SIZE, SIZE)
+	var wanted: Array = OS.get_cmdline_user_args()
+	var wide := wanted.has("--wide")
+	wanted.erase("--wide")
+	var out := WIDE_OUT if wide else OUT
+	root.size = WIDE_SIZE if wide else Vector2i(SIZE, SIZE)
 	var settings := root.get_node_or_null(^"/root/GameSettings")
 	if settings != null:
 		settings.chaos = false
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT))
+		# Pinned to day, whatever the sandbox's settings were left at by the
+		# last check to run: a shot drawn at night is a dark road on dark grass.
+		settings.time_of_day = settings.ALWAYS_DAY
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(out))
 
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	for i in 30:
 		await process_frame
-	for hidden in ["Hud", "Progress", "Countdown", "Result", "Split",
+	for hidden in ["Hud", "Progress", "Lost", "Countdown", "Result", "Split",
 			"Surroundings", "Trees", "Car1", "Car2"]:
 		main.get_node(hidden).hide()
 
@@ -57,20 +72,31 @@ func _init() -> void:
 	# never drawn as a cell with an overhead shot in it - the select screen
 	# gives it its own face - so a picture of one is a picture nothing hangs.
 	# Named explicitly it is still drawn, because that is what naming it means.
-	var wanted: Array = OS.get_cmdline_user_args()
+	var aspect := float(root.size.x) / float(root.size.y)
 	for path in (wanted if not wanted.is_empty()
 			else TrackRoster.FILES + TrackRoster.ACROBATIC_FILES):
 		track.track_file = path
 		track.generate(0)
 		await process_frame
 		var bounds := _bounds(track)
-		camera.size = maxf(bounds[1].x - bounds[0].x, bounds[1].y - bounds[0].y) + 70.0
+		var across: float = bounds[1].x - bounds[0].x
+		var down: float = bounds[1].y - bounds[0].y
+		# The camera's size is the height of what it sees, and the width is
+		# that times the picture's aspect. A wide picture of a road that runs
+		# north to south is turned a quarter first, so the road fills it.
+		var turned := wide and down > across
+		camera.rotation = Vector3(-PI * 0.5, PI * 0.5 if turned else 0.0, 0.0)
+		if turned:
+			var swap := across
+			across = down
+			down = swap
+		camera.size = maxf(down, across / aspect) + 70.0
 		camera.position = track.global_transform * Vector3(
 			(bounds[0].x + bounds[1].x) * 0.5, 0.0,
 			(bounds[0].y + bounds[1].y) * 0.5) + Vector3.UP * 500.0
 		for i in 12:
 			await process_frame
-		var file := "%s/%s.png" % [OUT, String(path).get_file().get_basename()]
+		var file := "%s/%s.png" % [out, String(path).get_file().get_basename()]
 		root.get_texture().get_image().save_png(
 			ProjectSettings.globalize_path(file))
 		print("%-22s %5.0f m, %4.0f m across -> %s"

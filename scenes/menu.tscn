@@ -377,6 +377,199 @@ text = "STATISTICS"
 layout_mode = 2
 text = "BACK"
 
+[node name="TrackDetail" type="Control" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="ColorRect" parent="TrackDetail"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.62)
+
+[node name="Page" type="CenterContainer" parent="TrackDetail"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="TrackDetail/Page"]
+layout_mode = 2
+
+[node name="Margin" type="MarginContainer" parent="TrackDetail/Page/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 34
+theme_override_constants/margin_top = 26
+theme_override_constants/margin_right = 34
+theme_override_constants/margin_bottom = 26
+
+[node name="Box" type="VBoxContainer" parent="TrackDetail/Page/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Heading" type="Label" parent="TrackDetail/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "FIRST LIGHT"
+horizontal_alignment = 1
+theme_override_font_sizes/font_size = 44
+
+[node name="Blurb" type="Label" parent="TrackDetail/Page/Panel/Margin/Box"]
+layout_mode = 2
+horizontal_alignment = 1
+autowrap_mode = 3
+theme_override_colors/font_color = Color(0.72, 0.75, 0.82, 1)
+theme_override_font_sizes/font_size = 20
+
+[node name="Body" type="HBoxContainer" parent="TrackDetail/Page/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/separation = 28
+
+[node name="Left" type="VBoxContainer" parent="TrackDetail/Page/Panel/Margin/Box/Body"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Picture" type="TextureRect" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left"]
+custom_minimum_size = Vector2(600, 300)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Variants" type="HBoxContainer" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Normal" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "NORMAL"
+
+[node name="Hard" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "HARD"
+theme_override_colors/font_color = Color(0.95, 0.3, 0.3, 1)
+theme_override_colors/font_hover_color = Color(1, 0.4, 0.4, 1)
+theme_override_colors/font_focus_color = Color(1, 0.4, 0.4, 1)
+theme_override_colors/font_pressed_color = Color(1, 0.4, 0.4, 1)
+theme_override_colors/font_hover_pressed_color = Color(1, 0.4, 0.4, 1)
+
+[node name="TrackChaos" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "CHAOS"
+
+[node name="Mirror" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+
+[node name="Word" type="Label" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Mirror"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+text = "MIRROR"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Board" type="VBoxContainer" parent="TrackDetail/Page/Panel/Margin/Box/Body"]
+custom_minimum_size = Vector2(330, 0)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Heading" type="Label" parent="TrackDetail/Page/Panel/Margin/Box/Body/Board"]
+layout_mode = 2
+text = "LEADERBOARD"
+theme_override_colors/font_color = Color(0.72, 0.75, 0.82, 1)
+theme_override_font_sizes/font_size = 18
+
+[node name="Scroll" type="ScrollContainer" parent="TrackDetail/Page/Panel/Margin/Box/Body/Board"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="TrackDetail/Page/Panel/Margin/Box/Body/Board/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="Note" type="Label" parent="TrackDetail/Page/Panel/Margin/Box/Body/Board"]
+custom_minimum_size = Vector2(330, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.58, 0.66, 1)
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 3
+
+[node name="You" type="VBoxContainer" parent="TrackDetail/Page/Panel/Margin/Box/Body"]
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="TimeHeading" type="Label" parent="TrackDetail/Page/Panel/Margin/Box/Body/You"]
+layout_mode = 2
+text = "YOUR TIME"
+theme_override_colors/font_color = Color(0.72, 0.75, 0.82, 1)
+theme_override_font_sizes/font_size = 18
+
+[node name="Time" type="Label" parent="TrackDetail/Page/Panel/Margin/Box/Body/You"]
+layout_mode = 2
+text = "NO TIME"
+theme_override_font_sizes/font_size = 40
+
+[node name="Medal" type="ColorRect" parent="TrackDetail/Page/Panel/Margin/Box/Body/You"]
+custom_minimum_size = Vector2(0, 5)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Gap" type="Control" parent="TrackDetail/Page/Panel/Margin/Box/Body/You"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="PlaceHeading" type="Label" parent="TrackDetail/Page/Panel/Margin/Box/Body/You"]
+layout_mode = 2
+text = "YOUR PLACE"
+theme_override_colors/font_color = Color(0.72, 0.75, 0.82, 1)
+theme_override_font_sizes/font_size = 18
+
+[node name="Place" type="Label" parent="TrackDetail/Page/Panel/Margin/Box/Body/You"]
+layout_mode = 2
+text = "—"
+theme_override_font_sizes/font_size = 40
+
+[node name="PlaceNote" type="Label" parent="TrackDetail/Page/Panel/Margin/Box/Body/You"]
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.55, 0.58, 0.66, 1)
+theme_override_font_sizes/font_size = 16
+autowrap_mode = 3
+
+[node name="Spacer" type="Control" parent="TrackDetail/Page/Panel/Margin/Box/Body/You"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="Play" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/You"]
+layout_mode = 2
+text = "PLAY"
+
+[node name="Back" type="Button" parent="TrackDetail/Page/Panel/Margin/Box"]
+layout_mode = 2
+text = "BACK"
+
 [node name="SettingsScreen" parent="." instance=ExtResource("4_settings")]
 visible = false
 

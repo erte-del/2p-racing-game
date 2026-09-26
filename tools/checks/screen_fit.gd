@@ -84,6 +84,24 @@ func _check(window: Vector2i, laid_out_least: Vector2) -> int:
 	for i in 10:
 		await process_frame
 	faults += _fits("choosing a track", menu.get_node("TrackChoice"), laid_out)
+	# Every track's own page: the picture, its board and the player's place,
+	# three columns across, which makes it the widest page the menu has. All of
+	# them rather than one, because the name and the line under it are each
+	# track's own, and the longest is the one that decides.
+	var pages := 0
+	for index in TrackRoster.TOTAL:
+		if not menu.call("_has_a_page", index):
+			continue
+		menu.call("_open_track_detail", index)
+		for i in 4:
+			await process_frame
+		var fault := _fits("%s's page" % TrackRoster.track_name(index),
+			menu.get_node("TrackDetail"), laid_out, false)
+		faults += fault
+		if fault == 0:
+			pages += 1
+		menu.call("_close_track_detail")
+	print("  %d track pages fit" % pages)
 	menu.call("_close_track_choice")
 	for i in 5:
 		await process_frame
@@ -216,7 +234,9 @@ func _column_fits(menu: Node, laid_out: Vector2) -> int:
 
 ## Everything with a frame round it, inside the room there is. Panels are what
 ## the pages are made of, and a panel that fits took its contents with it.
-func _fits(what: String, where: Node, laid_out: Vector2) -> int:
+## `say` is false for a page tried many times over, which reports a count of
+## its own rather than a line for every one that fits.
+func _fits(what: String, where: Node, laid_out: Vector2, say := true) -> int:
 	var faults := 0
 	var seen := 0
 	for node in where.find_children("*", "PanelContainer", true, false):
@@ -231,6 +251,6 @@ func _fits(what: String, where: Node, laid_out: Vector2) -> int:
 				% [what, corner.position.x, corner.position.y, corner.end.x,
 					corner.end.y, laid_out.x, laid_out.y])
 			faults += 1
-	if seen > 0 and faults == 0:
+	if say and seen > 0 and faults == 0:
 		print("  %s fits" % what)
 	return faults

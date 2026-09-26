@@ -86,6 +86,45 @@ func _init() -> void:
 		await _look_at_the_gate(menu, scroll, blocks, "%s/07_gate_won.png" % out)
 		print("the door reads '%s'" % menu.call("_doors")[0].text)
 
+	# A track's own page, opened the way pressing its cell opens it: the wide
+	# shot of the road and the ways it can be driven under it.
+	menu.call("_open_track_detail", 0)
+	# A made-up board, since a check runs with no server: enough rows to show
+	# the column filling and scrolling, with the player's own row among them.
+	# The player's row is their own best, so the page agrees with itself.
+	var board := [{"name": "YOU", "mine": true,
+		"seconds": times.best(TrackRoster.file(0)) if times != null else 36.0}]
+	for place in 11:
+		board.append({"name": ["ALEX", "SAMI", "JORDAN", "KAI", "RIO", "NOOR",
+			"ELLIS", "MIKA", "QUINN", "ROBIN", "SKY"][place],
+			"seconds": 30.4 + place * 1.37, "mine": false})
+	board.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return a["seconds"] < b["seconds"])
+	menu.call("_show_the_detail_board", board)
+	for i in 12:
+		await process_frame
+	root.get_texture().get_image().save_png("%s/08_track_page.png" % out)
+	# HARD held down: its own board, which nobody is on yet, and no time.
+	var hard: Button = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Hard")
+	hard.button_pressed = true
+	hard.pressed.emit()
+	for i in 12:
+		await process_frame
+	root.get_texture().get_image().save_png("%s/09_track_page_hard.png" % out)
+	# The last normal track, and the first acrobatic one, which is driven only
+	# NORMAL or MIRROR and so has two ways on its page rather than four.
+	menu.call("_close_track_detail")
+	menu.call("_open_track_detail", TrackRoster.COUNT - 1)
+	for i in 12:
+		await process_frame
+	root.get_texture().get_image().save_png("%s/10_track_page_last.png" % out)
+	menu.call("_close_track_detail")
+	menu.call("_open_track_detail", TrackRoster.first(TrackRoster.ACROBATIC))
+	for i in 12:
+		await process_frame
+	root.get_texture().get_image().save_png("%s/11_track_page_acrobatic.png" % out)
+	menu.call("_close_track_detail")
+
 	# Said as well as drawn: a name cut off at one end of twenty is easy to
 	# look straight past in a picture.
 	var too_long := 0

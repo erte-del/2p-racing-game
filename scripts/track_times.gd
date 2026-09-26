@@ -51,8 +51,8 @@ func _ready() -> void:
 ##
 ## A time set on a track that has since been edited is not returned and not
 ## kept: it is quietly dropped the first time anything asks for it.
-func best(track_file: String) -> float:
-	var key := _key(track_file)
+func best(track_file: String, variant := TrackVariant.NORMAL) -> float:
+	var key := _key(track_file, variant)
 	if not _best.has(key):
 		return -1.0
 	var standing := int(_fingerprints.get(key, 0))
@@ -61,9 +61,9 @@ func best(track_file: String) -> float:
 		# could not read a track and so wrote every time down against nothing.
 		# Taken as set on the track as it is now: the alternative is throwing
 		# away every time those players drove, and they drove these roads.
-		_fingerprints[key] = fingerprint(track_file)
+		_fingerprints[key] = fingerprint(track_file, variant)
 		save_times()
-	elif standing != fingerprint(track_file):
+	elif standing != fingerprint(track_file, variant):
 		_best.erase(key)
 		_fingerprints.erase(key)
 		save_times()
@@ -73,13 +73,13 @@ func best(track_file: String) -> float:
 
 ## Offer a time. Returns true if it was better than what was there, in which
 ## case it has been written down.
-func record(track_file: String, seconds: float) -> bool:
-	var standing := best(track_file)
+func record(track_file: String, seconds: float, variant := TrackVariant.NORMAL) -> bool:
+	var standing := best(track_file, variant)
 	if standing >= 0.0 and seconds >= standing:
 		return false
-	var key := _key(track_file)
+	var key := _key(track_file, variant)
 	_best[key] = seconds
-	_fingerprints[key] = fingerprint(track_file)
+	_fingerprints[key] = fingerprint(track_file, variant)
 	save_times()
 	beaten.emit(key, seconds)
 	return true
@@ -88,11 +88,15 @@ func record(track_file: String, seconds: float) -> bool:
 ## What a track is, as one number. The file itself rather than the course
 ## built from it: the file is what an author edits, and it changes if and only
 ## if they changed the track.
-func fingerprint(track_file: String) -> int:
+##
+## A variant's fingerprint has the variant in it as well, so the same file
+## driven two ways is two roads. NORMAL's is exactly what it always was, which
+## is what keeps every time set before variants existed standing.
+func fingerprint(track_file: String, variant := TrackVariant.NORMAL) -> int:
 	var text := source(track_file)
 	if text.is_empty():
 		return 0
-	return hash("%d\n%s" % [GEOMETRY, text])
+	return hash(_material(text, variant))
 
 
 ## What a track is, as a string every machine agrees on.
@@ -103,11 +107,18 @@ func fingerprint(track_file: String) -> int:
 ## from it. This one is sha256, so the number a Mac computes for track seven
 ## is the number a Windows machine computes for track seven, this year and
 ## next.
-func signature(track_file: String) -> String:
+func signature(track_file: String, variant := TrackVariant.NORMAL) -> String:
 	var text := source(track_file)
 	if text.is_empty():
 		return ""
-	return ("%d\n%s" % [GEOMETRY, text]).sha256_text()
+	return _material(text, variant).sha256_text()
+
+
+## What both hashes are taken over.
+func _material(text: String, variant: String) -> String:
+	if variant == TrackVariant.NORMAL:
+		return "%d\n%s" % [GEOMETRY, text]
+	return "%d\n%s\n%s" % [GEOMETRY, variant, text]
 
 
 ## A track's file as its author wrote it, or empty for one that is not there.
@@ -134,21 +145,21 @@ func source(track_file: String) -> String:
 ## a new best in the middle of the menu and send it straight back where it
 ## came from. Nothing is emitted and nothing is pushed; the local record just
 ## quietly catches up with what the player has actually done.
-func adopt(track_file: String, seconds: float) -> bool:
-	var standing := best(track_file)
+func adopt(track_file: String, seconds: float, variant := TrackVariant.NORMAL) -> bool:
+	var standing := best(track_file, variant)
 	if standing >= 0.0 and seconds >= standing:
 		return false
-	var key := _key(track_file)
+	var key := _key(track_file, variant)
 	_best[key] = seconds
-	_fingerprints[key] = fingerprint(track_file)
+	_fingerprints[key] = fingerprint(track_file, variant)
 	save_times()
 	return true
 
 
 ## Forget a track's time. Nothing in the game calls this yet; it is here for
 ## the day a screen offers to.
-func forget(track_file: String) -> void:
-	var key := _key(track_file)
+func forget(track_file: String, variant := TrackVariant.NORMAL) -> void:
+	var key := _key(track_file, variant)
 	_best.erase(key)
 	_fingerprints.erase(key)
 	save_times()
@@ -177,6 +188,7 @@ func load_times() -> void:
 
 
 ## Tracks are keyed by their file name rather than their path, so moving the
-## tracks folder does not lose everything anyone has driven.
-func _key(track_file: String) -> String:
-	return track_file.get_file().get_basename()
+## tracks folder does not lose everything anyone has driven. A variant is kept
+## under its own key; see `TrackVariant.key`.
+func _key(track_file: String, variant := TrackVariant.NORMAL) -> String:
+	return TrackVariant.key(track_file, variant)

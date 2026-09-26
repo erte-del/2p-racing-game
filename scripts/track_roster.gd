@@ -100,6 +100,10 @@ const BOT_FILES := [
 ## Where the overhead shots live. Built by tools/track_thumbnails.gd, one per
 ## track, named after the track file.
 const THUMBNAILS := "res://assets/tracks/%s.png"
+## The long shot a track's own page shows, drawn by the same tool with
+## `--wide`. Kept apart from the square ones because it is a different picture
+## rather than a bigger copy: it is turned so the road runs across it.
+const WIDE_SHOTS := "res://assets/tracks/wide/%s.png"
 
 
 ## Every slot there is: the normal tracks, the acrobatic ones, the bot roads.
@@ -232,6 +236,30 @@ static func targets(index: int) -> Vector3:
 	var definition: TrackDefinition = written.new()
 	definition.describe()
 	return definition.targets
+
+
+## What a track says about itself, in one sentence. Read off the track the way
+## its name is, for the same reason.
+static func blurb(index: int) -> String:
+	if not exists(index):
+		return ""
+	var written := load(file(index)) as GDScript
+	if written == null:
+		return ""
+	var definition: TrackDefinition = written.new()
+	definition.describe()
+	return definition.blurb
+
+
+## The wide shot for a track's own page, or the square one where no wide one
+## has been drawn yet, so a page is never left with nothing to show.
+static func wide_shot(index: int) -> Texture2D:
+	if not exists(index):
+		return null
+	var path: String = WIDE_SHOTS % file(index).get_file().get_basename()
+	if ResourceLoader.exists(path):
+		return load(path) as Texture2D
+	return thumbnail(index)
 
 
 ## The overhead shot for a slot, or null for a track with none yet.

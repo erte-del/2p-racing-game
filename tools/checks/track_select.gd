@@ -94,6 +94,12 @@ func _init() -> void:
 		quit(1)
 		return
 	first.pressed.emit()
+	await process_frame
+	# A track with a page of its own opens that first, and the race starts off
+	# the page's PLAY.
+	if menu.get_node("TrackDetail").visible:
+		print("pressing %s opens its own page" % TrackRoster.track_name(0))
+		menu.get_node("TrackDetail/Page/Panel/Margin/Box/Body/You/Play").pressed.emit()
 	for i in 40:
 		await process_frame
 
@@ -347,26 +353,18 @@ func _check_coming_back() -> int:
 	if settings == null:
 		return 0
 
-	# As it is on the way out of a track: one is still picked.
-	settings.track_file = TrackRoster.file(0)
-	var menu: Node = load("res://scenes/menu.tscn").instantiate()
-	Engine.get_main_loop().root.add_child(menu)
-	for i in 20:
-		await Engine.get_main_loop().process_frame
+	# As it is on the way out of a track: one is still picked. Off any track
+	# it is that track's own page that opens, with the cursor on PLAY, and
+	# backing out of the page puts the cursor on the track in its grid. Tried
+	# off a track partway into the normal grid and off an acrobatic one,
+	# since those two are counted from different ends of the roster.
+	for index in [6, TrackRoster.first(TrackRoster.ACROBATIC)]:
+		faults += await _check_coming_back_to(settings, index)
 
-	if not menu.get_node("TrackChoice").visible:
-		print("  coming back from a track did not open on the tracks")
-		faults += 1
-	var focused := menu.get_viewport().gui_get_focus_owner()
-	var wanted: Button = _first_live(menu.call("_track_cells"))
-	if focused != wanted:
-		print("  the cursor did not come back to the track that was driven")
-		faults += 1
-	else:
-		print("coming back opens on the grid, on %s"
-			% TrackRoster.track_name(0))
-	menu.queue_free()
-	await Engine.get_main_loop().process_frame
+	# Every track in both grids opens its own page when pressed, named for
+	# itself and showing its own wide shot rather than falling back to the
+	# square one on its button.
+	faults += await _check_every_page(settings)
 
 	# And a fresh start, with nothing picked, still opens on the title.
 	settings.track_file = ""
@@ -492,3 +490,90 @@ func _first_live(cells: Array) -> Button:
 
 func _wipe(path: String) -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+func _check_coming_back_to(settings: Node, index: int) -> int:
+	var faults := 0
+	var called := TrackRoster.track_name(index)
+	var kind := TrackRoster.kind_of(index)
+	settings.track_file = TrackRoster.file(index)
+	var menu: Node = load("res://scenes/menu.tscn").instantiate()
+	Engine.get_main_loop().root.add_child(menu)
+	for i in 20:
+		await Engine.get_main_loop().process_frame
+	var play: Button = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Body/You/Play")
+	if not menu.get_node("TrackDetail").visible:
+		print("  coming back from %s did not open its page" % called)
+		faults += 1
+	elif menu.get_viewport().gui_get_focus_owner() != play:
+		print("  coming back to %s's page left the cursor off PLAY" % called)
+		faults += 1
+	else:
+		menu.call("_close_track_detail")
+		await Engine.get_main_loop().process_frame
+		var cell: Node = menu.call("_track_cells")[index - TrackRoster.first(kind)]
+		if (not menu.get_node("TrackChoice").visible
+				or menu.get_viewport().gui_get_focus_owner() != menu.call("_button_in", cell)):
+			print("  backing out of %s's page did not land on it" % called)
+			faults += 1
+		else:
+			print("coming back opens %s's page, and backing out lands on it" % called)
+	menu.queue_free()
+	await Engine.get_main_loop().process_frame
+	return faults
+
+
+func _check_every_page(settings: Node) -> int:
+	var faults := 0
+	settings.track_file = ""
+	var menu: Node = load("res://scenes/menu.tscn").instantiate()
+	Engine.get_main_loop().root.add_child(menu)
+	for i in 20:
+		await Engine.get_main_loop().process_frame
+	var variants := "TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/"
+	var picture: TextureRect = menu.get_node(
+		"TrackDetail/Page/Panel/Margin/Box/Body/Left/Picture")
+	var opened := 0
+	for kind in [TrackRoster.NORMAL, TrackRoster.ACROBATIC]:
+		menu.call("_open_track_grid", kind)
+		await Engine.get_main_loop().process_frame
+		var cells: Array = menu.call("_track_cells")
+		for at in cells.size():
+			var index: int = TrackRoster.first(kind) + at
+			var button: Button = menu.call("_button_in", cells[at])
+			if button == null or not TrackRoster.exists(index):
+				continue
+			var called := TrackRoster.track_name(index)
+			# A shut track cannot be pressed, and its page is only ever opened
+			# once it is open; asked for directly here, since what is on the
+			# page does not depend on the gate.
+			if button.disabled:
+				menu.call("_open_track_detail", index)
+			else:
+				button.pressed.emit()
+			await Engine.get_main_loop().process_frame
+			var heading: Label = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Heading")
+			if not menu.get_node("TrackDetail").visible:
+				print("  pressing %s did not open its page" % called)
+				faults += 1
+			elif heading.text != called.to_upper():
+				print("  %s's page is headed %s" % [called, heading.text])
+				faults += 1
+			elif picture.texture == null or not picture.texture.resource_path.contains("/wide/"):
+				print("  %s's page has no wide shot of its own" % called)
+				faults += 1
+			else:
+				opened += 1
+			# HARD and track chaos are for the normal tracks only.
+			var both: bool = (menu.get_node(variants + "Hard").visible
+				and menu.get_node(variants + "TrackChaos").visible)
+			if both != (kind == TrackRoster.NORMAL):
+				print("  %s's page %s HARD and CHAOS" % [called,
+					"hides" if kind == TrackRoster.NORMAL else "shows"])
+				faults += 1
+			menu.call("_close_track_detail")
+		menu.call("_close_track_choice")
+	print("%d pages open, each with its own name and wide shot" % opened)
+	menu.queue_free()
+	await Engine.get_main_loop().process_frame
+	return faults

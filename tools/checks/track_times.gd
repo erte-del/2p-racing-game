@@ -93,6 +93,56 @@ func _init() -> void:
 		print("  a track that is not there fingerprinted as something")
 		faults += 1
 
+	faults += _check_the_variants(times)
+
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(SCRATCH))
 	print("%d faults" % faults)
 	quit(1 if faults > 0 else 0)
+
+
+## Each way of driving a track keeps a time of its own, and NORMAL keeps the
+## one it always had. The last is the one that matters most: if a NORMAL
+## fingerprint moved, every time anybody has ever set would be dropped the next
+## time the game asked for it.
+func _check_the_variants(times: Node) -> int:
+	var faults := 0
+	times.forget(TRACK)
+	for variant in ["hard", "track_chaos", "mirror"]:
+		times.forget(TRACK, variant)
+
+	var text: String = times.source(TRACK)
+	var as_it_was := hash("%d\n%s" % [times.GEOMETRY, text])
+	if times.fingerprint(TRACK) != as_it_was:
+		print("  NORMAL's fingerprint is not the one every standing time was set against")
+		faults += 1
+	if times.signature(TRACK) != ("%d\n%s" % [times.GEOMETRY, text]).sha256_text():
+		print("  NORMAL's signature moved, so every board would empty")
+		faults += 1
+
+	times.record(TRACK, 40.0)
+	times.record(TRACK, 50.0, "hard")
+	if times.best(TRACK) != 40.0 or times.best(TRACK, "hard") != 50.0:
+		print("  a HARD time and a NORMAL time landed on each other")
+		faults += 1
+	if times.best(TRACK, "mirror") >= 0.0 or times.best(TRACK, "track_chaos") >= 0.0:
+		print("  a time set on one way of driving showed up on another")
+		faults += 1
+	times.load_times()
+	if times.best(TRACK, "hard") != 50.0:
+		print("  a HARD time did not survive the game closing")
+		faults += 1
+
+	var seen := {}
+	for variant in ["", "hard", "track_chaos", "mirror"]:
+		seen[times.signature(TRACK, variant)] = true
+		var key := TrackVariant.key(TRACK, variant)
+		var back := TrackVariant.split(key)
+		if back[0] != TRACK.get_file().get_basename() or back[1] != variant:
+			print("  %s does not come apart into what it was made of" % key)
+			faults += 1
+	if seen.size() != 4:
+		print("  two ways of driving share a board")
+		faults += 1
+	if faults == 0:
+		print("each way of driving keeps its own time and board, and NORMAL's are untouched")
+	return faults

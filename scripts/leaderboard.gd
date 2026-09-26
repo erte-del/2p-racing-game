@@ -70,17 +70,20 @@ func available() -> bool:
 ##
 ## Readable signed out. A player deciding whether an account is worth making
 ## should be able to see what they would be joining.
-func board(track_file: String, force: bool = false) -> Array:
+##
+## Each way of driving a track has a board of its own, kept under its own key.
+func board(track_file: String, force: bool = false,
+		variant := TrackVariant.NORMAL) -> Array:
 	if not available():
 		return []
-	var key := track_file.get_file().get_basename()
+	var key := TrackVariant.key(track_file, variant)
 
 	var held: Dictionary = _boards.get(key, {})
 	if not force and not held.is_empty():
 		if Time.get_ticks_msec() / 1000.0 - float(held["at"]) < CACHE_SECONDS:
 			return held["rows"]
 
-	var signature := TrackTimes.signature(track_file)
+	var signature := TrackTimes.signature(track_file, variant)
 	if signature.is_empty():
 		return []
 
@@ -112,14 +115,15 @@ func board(track_file: String, force: bool = false) -> Array:
 ## a twentieth, and whether it is actually an improvement, are both the
 ## server's business - it is the one holding the record, and it is the only
 ## one whose answer cannot be edited by whoever is holding the keyboard.
-func submit(track_file: String, seconds: float, refresh: bool = true) -> void:
+func submit(track_file: String, seconds: float, refresh: bool = true,
+		variant := TrackVariant.NORMAL) -> void:
 	if not available():
 		return
-	var key := track_file.get_file().get_basename()
+	var key := TrackVariant.key(track_file, variant)
 	if not Backend.is_signed_in():
 		_hold(key, seconds)
 		return
-	var signature := TrackTimes.signature(track_file)
+	var signature := TrackTimes.signature(track_file, variant)
 	if signature.is_empty():
 		return
 
@@ -141,7 +145,7 @@ func submit(track_file: String, seconds: float, refresh: bool = true) -> void:
 	# is now the board as it was before the player got on it.
 	_boards.erase(key)
 	if refresh:
-		board(track_file, true)
+		board(track_file, true, variant)
 
 
 ## Bring this machine and the server back into line: everything done here that
@@ -176,16 +180,18 @@ func _pull_own_times() -> void:
 	var moved := false
 	for row in answer.data:
 		var entry: Dictionary = row
-		var file := _file_for(str(entry.get("track", "")))
+		var where := _where(str(entry.get("track", "")))
+		var file: String = where[0]
+		var variant: String = where[1]
 		if file.is_empty():
 			continue
 		# A time set on a version of the track this copy of the game does not
 		# have is not this player's best on the track in front of them. It
 		# stays on the server, where it is still their record on the road it
 		# was set on, and it is simply not what is shown here.
-		if str(entry.get("signature", "")) != TrackTimes.signature(file):
+		if str(entry.get("signature", "")) != TrackTimes.signature(file, variant):
 			continue
-		if TrackTimes.adopt(file, float(entry.get("seconds", 0.0))):
+		if TrackTimes.adopt(file, float(entry.get("seconds", 0.0)), variant):
 			moved = true
 
 	# Anything better here than what came back is something the server has not
@@ -207,13 +213,14 @@ func _push_local_bests(known: Array) -> void:
 		theirs[str(entry.get("track", ""))] = float(entry.get("seconds", 0.0))
 
 	for file: String in TrackRoster.all_files():
-		var mine := TrackTimes.best(file)
-		if mine < 0.0:
-			continue
-		var key := file.get_file().get_basename()
-		if theirs.has(key) and mine >= float(theirs[key]):
-			continue
-		await submit(file, mine, false)
+		for variant: String in TrackVariant.ALL:
+			var mine := TrackTimes.best(file, variant)
+			if mine < 0.0:
+				continue
+			var key := TrackVariant.key(file, variant)
+			if theirs.has(key) and mine >= float(theirs[key]):
+				continue
+			await submit(file, mine, false, variant)
 
 
 ## Turn what the database sent into what a board shows.
@@ -239,10 +246,10 @@ func _read_board(rows: Array) -> Array:
 ## A run just beat this machine's record. Whether it beats what the server
 ## holds is not this function's business to decide.
 func _on_beaten(track: String, seconds: float) -> void:
-	var file := _file_for(track)
-	if file.is_empty():
+	var where := _where(track)
+	if (where[0] as String).is_empty():
 		return
-	submit(file, seconds)
+	submit(where[0], seconds, true, where[1])
 
 
 func _on_signed_in() -> void:
@@ -271,13 +278,13 @@ func _release(key: String, seconds: float) -> void:
 
 func _flush_outbox() -> void:
 	for key in _outbox.keys():
-		var file := _file_for(key)
-		if file.is_empty():
+		var where := _where(key)
+		if (where[0] as String).is_empty():
 			# A time for a track this build no longer has. Nothing can be done
 			# with it and keeping it means retrying it forever.
 			_outbox.erase(key)
 			continue
-		await submit(file, float(_outbox[key]), false)
+		await submit(where[0], float(_outbox[key]), false, where[1])
 
 
 func _save_outbox() -> void:
@@ -305,3 +312,12 @@ func _file_for(key: String) -> String:
 		if file.get_file().get_basename() == key:
 			return file
 	return ""
+
+
+## A key taken back to the track file and the way it was driven, as
+## `[file, variant]`, with an empty file for a key this build knows nothing
+## about. Every key that travels - on the beaten signal, in the outbox, off
+## the server - may carry a variant on the end.
+func _where(key: String) -> Array:
+	var parts := TrackVariant.split(key)
+	return [_file_for(parts[0]), parts[1]]

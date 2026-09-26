@@ -198,6 +198,24 @@ const WON_COLOUR := Color(0.44, 0.85, 0.52)
 @onready var _track_choice: Control = $TrackChoice
 @onready var _track_blocks: VBoxContainer = $TrackChoice/Page/Panel/Margin/Box/Scroll/Blocks
 @onready var _track_back: Button = $TrackChoice/Page/Panel/Margin/Box/Back
+@onready var _track_detail: Control = $TrackDetail
+@onready var _detail_heading: Label = $TrackDetail/Page/Panel/Margin/Box/Heading
+@onready var _detail_blurb: Label = $TrackDetail/Page/Panel/Margin/Box/Blurb
+@onready var _detail_picture: TextureRect = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Picture
+@onready var _detail_normal: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Normal
+## Track chaos, not chaos mode - see `TrackVariant.TRACK_CHAOS`.
+@onready var _detail_track_chaos: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/TrackChaos
+@onready var _detail_hard: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Hard
+@onready var _detail_mirror: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Mirror
+@onready var _detail_play: Button = $TrackDetail/Page/Panel/Margin/Box/Body/You/Play
+@onready var _detail_back: Button = $TrackDetail/Page/Panel/Margin/Box/Back
+@onready var _detail_board_heading: Label = $TrackDetail/Page/Panel/Margin/Box/Body/Board/Heading
+@onready var _detail_rows: VBoxContainer = $TrackDetail/Page/Panel/Margin/Box/Body/Board/Scroll/Rows
+@onready var _detail_note: Label = $TrackDetail/Page/Panel/Margin/Box/Body/Board/Note
+@onready var _detail_time: Label = $TrackDetail/Page/Panel/Margin/Box/Body/You/Time
+@onready var _detail_medal: ColorRect = $TrackDetail/Page/Panel/Margin/Box/Body/You/Medal
+@onready var _detail_place: Label = $TrackDetail/Page/Panel/Margin/Box/Body/You/Place
+@onready var _detail_place_note: Label = $TrackDetail/Page/Panel/Margin/Box/Body/You/PlaceNote
 @onready var _world: Node3D = $World
 @onready var _orbit: Camera3D = $Orbit
 
@@ -206,6 +224,14 @@ var _flavour_tween: Tween
 var _kind_tween: Tween
 ## Which grid of tracks the page is showing, normal or acrobatic.
 var _track_kind := TrackRoster.NORMAL
+## The slot whose own page is open, or was last.
+var _detail_index := 0
+## Bumped every time the page asks for a board, so an answer for a track the
+## player has already left is dropped rather than drawn under another name.
+var _detail_asked := 0
+## Which way of driving it is held down: whose board and whose time the page
+## is showing.
+var _detail_variant := TrackVariant.NORMAL
 var _mode_tween: Tween
 ## True once one of the two has been picked and the modes have rolled out.
 ## While that is so, the slot is held to the height of its own contents, which
@@ -237,6 +263,31 @@ func _ready() -> void:
 	_normal_tracks_button.pressed.connect(_open_track_grid.bind(TrackRoster.NORMAL))
 	_acrobatic_button.pressed.connect(_open_track_grid.bind(TrackRoster.ACROBATIC))
 	_track_back.pressed.connect(_close_track_choice)
+	# The four ways of driving it are a choice held down, one at a time, and
+	# PLAY is what starts the race: picking how to drive a track and setting
+	# off are two different presses, so a player can look at each before going.
+	#
+	# Holding one down puts that way's board up, and the player's time and
+	# place on it: each way is a road of its own, with a board of its own.
+	var ways := ButtonGroup.new()
+	var buttons := _detail_normal.get_parent().get_children()
+	for at in buttons.size():
+		var way := buttons[at] as Button
+		way.button_group = ways
+		way.pressed.connect(_choose_detail_variant.bind(TrackVariant.ALL[at]))
+	_detail_play.pressed.connect(_start_detail_track)
+	_detail_back.pressed.connect(_close_track_detail)
+	# MIRROR is written mirrored, flipped left to right about its own middle
+	# so it reads the way the word would in a mirror. It is a label inside the
+	# button rather than the button's own text, because the row a button sits
+	# in puts its scale back to one every time it lays it out; nothing lays
+	# out a label hung inside a button. The middle moves whenever the button
+	# is resized, so it is re-centred then rather than set once.
+	var word: Label = _detail_mirror.get_node("Word")
+	word.add_theme_font_size_override("font_size",
+		_detail_mirror.get_theme_font_size("font_size"))
+	word.scale.x = -1.0
+	word.resized.connect(func() -> void: word.pivot_offset = word.size * 0.5)
 	_account_button.pressed.connect(_on_account_pressed)
 	_account_screen.closed.connect(_on_account_closed)
 	_boards_button.pressed.connect(_on_boards_pressed)
@@ -291,6 +342,10 @@ func _open_where_they_left_off() -> void:
 		return
 	_open_track_grid(kind)
 	_focus_track(index - TrackRoster.first(kind))
+	# Back onto the track's own page if it has one, since that is where the
+	# player pressed to drive it and where they are about to press again.
+	if _has_a_page(index):
+		_open_track_detail(index)
 
 
 func _process(delta: float) -> void:
@@ -311,6 +366,22 @@ func _process(delta: float) -> void:
 	# hovered or focused, which is most of the time it is on the screen.
 	_chaos_button.modulate = Color.from_hsv(
 		fmod(_elapsed / chaos_cycle_seconds, 1.0), chaos_tint, 1.0)
+	# The track page's CHAOS turns the same way. It is track chaos, a different
+	# thing from the chaos mode the button above belongs to, but it is the one
+	# way of driving a track that refuses to sit still, so it says so the same
+	# way.
+	_detail_track_chaos.modulate = _chaos_button.modulate
+	# A label does not know it is inside a button, so it is told which of the
+	# button's colours to wear: the same word a plain button would show.
+	var word: Label = _detail_mirror.get_node("Word")
+	var state := "font_color"
+	if _detail_mirror.button_pressed:
+		state = "font_pressed_color"
+	elif _detail_mirror.has_focus():
+		state = "font_focus_color"
+	elif _detail_mirror.is_hovered():
+		state = "font_hover_color"
+	word.add_theme_color_override("font_color", _detail_mirror.get_theme_color(state))
 	# While the modes are out, the slot holding them is exactly as tall as
 	# they are. That is what lets the flavour buttons slide out inside it: the
 	# inner grows as they roll down, and the slot grows with it, instead of
@@ -565,7 +636,10 @@ func _a_track_cell(index: int) -> VBoxContainer:
 		button.add_child(_a_lock(lock_size, GATE_COLOUR))
 	button.tooltip_text = _what_it_asks(index, called, targets)
 	if not button.disabled:
-		button.pressed.connect(_start_track.bind(TrackRoster.file(index)))
+		if _has_a_page(index):
+			button.pressed.connect(_open_track_detail.bind(index))
+		else:
+			button.pressed.connect(_start_track.bind(TrackRoster.file(index)))
 	cell.add_child(button)
 
 	# A bar of the medal's colour directly under the picture. Colouring
@@ -917,6 +991,141 @@ func _start_track(path: String) -> void:
 	get_tree().change_scene_to_file(_scene_for_the_players())
 
 
+## Whether pressing a track opens its own page rather than starting it.
+##
+## Every track in either grid has one. A bot road does not: it is a door, one
+## race against one road, and has no ways of being driven to choose between.
+func _has_a_page(index: int) -> bool:
+	return TrackRoster.exists(index) and TrackRoster.kind_of(index) != TrackRoster.BOT
+
+
+## A track's own page: its name, a wide shot of the road, and the ways it can
+## be driven. The grid steps aside for it, as the mode page does for the grid.
+func _open_track_detail(index: int) -> void:
+	_detail_index = index
+	_detail_heading.text = TrackRoster.track_name(index).to_upper()
+	_detail_blurb.text = TrackRoster.blurb(index)
+	_detail_blurb.visible = not _detail_blurb.text.is_empty()
+	_detail_picture.texture = TrackRoster.wide_shot(index)
+	# An acrobatic track is driven NORMAL or MIRROR and nothing else. HARD would
+	# stand barriers on its landings, and track chaos would roll them there,
+	# and a barrier on a landing is a much meaner thing than one on a straight.
+	var acrobatic := TrackRoster.kind_of(index) == TrackRoster.ACROBATIC
+	_detail_hard.visible = not acrobatic
+	_detail_track_chaos.visible = not acrobatic
+	_track_choice.hide()
+	_track_detail.show()
+	# NORMAL is held down to start with, and the cursor is on PLAY, so Enter
+	# straight away drives the track the way it has always been driven.
+	_detail_normal.button_pressed = true
+	_detail_variant = TrackVariant.NORMAL
+	_detail_play.grab_focus()
+	_fetch_the_detail_board()
+
+
+## Hold a way of driving down and put its board up.
+func _choose_detail_variant(variant: String) -> void:
+	if variant == _detail_variant:
+		return
+	_detail_variant = variant
+	_fetch_the_detail_board()
+
+
+## Put the track's board up beside its picture, and the player's own time and
+## place beside that. The time is this machine's and is there at once; the
+## board comes off the server and lands whenever it lands, so the page is never
+## held still waiting for it.
+func _fetch_the_detail_board() -> void:
+	_detail_board_heading.text = "LEADERBOARD · %s" % TrackVariant.display_name(_detail_variant)
+	_show_the_detail_board([])
+	if not Leaderboard.available():
+		_detail_note.text = "This copy of the game has no server, so there is no board."
+		return
+	_detail_note.text = "Loading…"
+	_detail_asked += 1
+	var asked := _detail_asked
+	var rows: Array = await Leaderboard.board(
+		TrackRoster.file(_detail_index), false, _detail_variant)
+	if asked != _detail_asked or not _track_detail.visible:
+		return
+	_show_the_detail_board(rows)
+
+
+## The board's rows, and where the player stands on it.
+func _show_the_detail_board(rows: Array) -> void:
+	for row in _detail_rows.get_children():
+		_detail_rows.remove_child(row)
+		row.queue_free()
+	var mine_at := -1
+	for place in rows.size():
+		var row: Dictionary = rows[place]
+		if bool(row.get("mine", false)):
+			mine_at = place
+		_detail_rows.add_child(LeaderboardMenu.line(place + 1, row, 18))
+	_detail_note.text = "" if not rows.is_empty() else "Nobody has set a time here yet."
+
+	# The time is this machine's record, coloured by what it is worth, with
+	# the medal's bar under it the way a cell on the grid has one.
+	var best := TrackTimes.best(TrackRoster.file(_detail_index), _detail_variant)
+	# A mirrored lap is the same lap turned round, so it is worth what the
+	# track's own is. HARD and track chaos are different roads whose targets
+	# have not been measured yet, and a medal nobody measured is made up.
+	var targets := Vector3.ZERO
+	if _detail_variant in [TrackVariant.NORMAL, TrackVariant.MIRROR]:
+		targets = TrackRoster.targets(_detail_index)
+	var medal := Medal.earned(best, targets)
+	_detail_time.text = RaceClock.format(best) if best >= 0.0 else "NO TIME"
+	_detail_time.add_theme_color_override("font_color",
+		Medal.colour(medal) if best >= 0.0 else Color(0.55, 0.58, 0.66))
+	_detail_medal.color = Medal.colour(medal)
+	_detail_medal.modulate.a = 1.0 if medal != Medal.NONE else 0.0
+
+	# The place is the row the server has for the player where there is one.
+	# Where there is not, it is where their time would land among the rows
+	# that are up, and the line under it says why it is not on the board.
+	_detail_place_note.text = ""
+	if mine_at >= 0:
+		_detail_place.text = _ordinal(mine_at + 1)
+	elif best < 0.0:
+		_detail_place.text = "—"
+		_detail_place_note.text = "Set a time to get a place."
+	elif not Leaderboard.available():
+		_detail_place.text = "—"
+	else:
+		var ahead := rows.filter(func(row: Dictionary) -> bool:
+			return float(row.get("seconds", 0.0)) < best).size()
+		if ahead >= Leaderboard.BOARD_SIZE:
+			_detail_place.text = "—"
+			_detail_place_note.text = "Outside the top %d." % Leaderboard.BOARD_SIZE
+		else:
+			_detail_place.text = _ordinal(ahead + 1)
+			_detail_place_note.text = ("Sign in to put it on the board."
+				if not Backend.is_signed_in() else "Not on the board yet.")
+
+
+## 1st, 2nd, 3rd, 4th ... 11th, 12th, 13th ... 21st.
+static func _ordinal(place: int) -> String:
+	var suffix := "th"
+	if place % 100 < 11 or place % 100 > 13:
+		match place % 10:
+			1: suffix = "st"
+			2: suffix = "nd"
+			3: suffix = "rd"
+	return "%d%s" % [place, suffix]
+
+
+func _close_track_detail() -> void:
+	_track_detail.hide()
+	_track_choice.show()
+	_focus_track(_detail_index - TrackRoster.first(_track_kind))
+
+
+## Only NORMAL is built so far, so whichever way is held down the race is the
+## track as it is written. The other three are there to be looked at.
+func _start_detail_track() -> void:
+	_start_track(TrackRoster.file(_detail_index))
+
+
 func _close_track_choice() -> void:
 	_track_choice.hide()
 	_mode_choice.show()
@@ -1059,10 +1268,13 @@ func _input(event: InputEvent) -> void:
 		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
-	# One thing at a time, innermost first: off the track grid, then off the
-	# flavour choice or the kinds of track, then off the modes, then off the
-	# page.
-	if _track_choice.visible:
+	# One thing at a time, innermost first: off a track's own page, then off
+	# the track grid, then off the flavour choice or the kinds of track, then
+	# off the modes, then off the page.
+	if _track_detail.visible:
+		get_viewport().set_input_as_handled()
+		_close_track_detail()
+	elif _track_choice.visible:
 		get_viewport().set_input_as_handled()
 		_close_track_choice()
 	elif _flavour_slot.visible:
@@ -1149,6 +1361,8 @@ func _on_stats_closed() -> void:
 func _on_times_changed() -> void:
 	if _track_choice.visible:
 		_refresh_the_track_grid()
+	if _track_detail.visible:
+		_fetch_the_detail_board()
 
 
 ## The track the cursor is on, or an empty string if it is not on one. Worked

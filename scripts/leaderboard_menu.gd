@@ -232,7 +232,7 @@ func _show_board(rows: Array) -> void:
 	for place in rows.size():
 		var row: Dictionary = rows[place]
 		found_me = found_me or bool(row.get("mine", false))
-		_rows.add_child(_line(place + 1, row))
+		_rows.add_child(line(place + 1, row))
 
 	if not Backend.is_signed_in():
 		_note.text = "Sign in to put your times up here."
@@ -250,8 +250,10 @@ func _show_board(rows: Array) -> void:
 			_note.text = "You have not set a time on this one yet."
 
 
-## One place on the board.
-func _line(place: int, row: Dictionary) -> Control:
+## One place on the board. Static, because a track's own page puts the same
+## rows up beside its picture, smaller, and two ways of drawing one row would
+## drift apart.
+static func line(place: int, row: Dictionary, font_size := 24) -> Control:
 	var line := HBoxContainer.new()
 	line.add_theme_constant_override("separation", 12)
 	var mine := bool(row.get("mine", false))
@@ -279,7 +281,7 @@ func _line(place: int, row: Dictionary) -> Control:
 	# The player's own row is picked out, because the one thing anybody
 	# actually looks for on a leaderboard is themselves.
 	for label in [number, name, time]:
-		(label as Label).add_theme_font_size_override("font_size", 24)
+		(label as Label).add_theme_font_size_override("font_size", font_size)
 		if mine:
 			(label as Label).add_theme_color_override("font_color", MINE)
 	return line
