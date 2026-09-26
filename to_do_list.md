@@ -11,8 +11,8 @@ ones, that comes to about a hundred timed configurations, and none of them had
 to be laid out.
 
 Written up 2026-09-25. **Built so far:** the track page (section 7) and build
-steps 1 to 5: Mirror, Reverse, Hard and track chaos, all playable off the
-page (2026-09-26). The previous contents
+steps 1 to 6: Mirror, Reverse, Hard and track chaos, all playable off the
+page, and Reverse's medal targets measured (2026-09-26). The previous contents
 of this file (the shop, customisation, statistics) were all built and are in
 the README. Git has the old text.
 
@@ -457,27 +457,41 @@ In the README a medal target is "a fact about the road", measured by driving
 it with `tools/lap_times.gd`. A variant is a different road, so its targets
 have to be measured, not assumed. The one exception is argued below.
 
-- [ ] **Mirror uses the base targets** (`TrackVariant.targets()`, done; the
-	  lap comparison below is not). The car is symmetric, the road is the
+- [x] **Mirror uses the base targets.** The car is symmetric, the road is the
 	  same length with the same corners in the other direction, and a lap of
 	  one is a lap of the other. `lap_times.gd` runs both and reports the
 	  difference. If any track's mirror comes out more than about 1% off the
 	  base lap, that argument is wrong for that track, and it gets targets of
 	  its own.
+	  *Measured 2026-09-26:* every normal mirror within 0.6% (Rattlesnake the
+	  most), every acrobatic mirror that finishes cleanly within 0.7%
+	  (`acrobatic_drive.gd -- mirror`). The argument holds on all thirty.
 - [ ] **Reverse and Hard get their own targets**, in the `TrackVariant` table
 	  and not in the track file, because the track file's text is the base
 	  track's fingerprint (section 1). They are set by the same rule the base
 	  targets were: gold a little under the best the road allows, with silver
 	  and bronze spaced further apart on harder roads, all from the one
 	  measured ratio.
-- [ ] Until a variant's row exists, it has **no medals**. It still has a
+	  *As built:* `TrackVariant.TARGETS`, the track's own ladder stretched
+	  by the ratio of the bot's two laps and rounded to the second.
+	  **Reverse is done**, all eighteen (-4.1% Cold Start to +3.1% Leap of
+	  Faith). **Hard is not**: the bot dodges every row and its Hard lap is
+	  within 0-4% of the base, so measured by it Hard's targets would be the
+	  base targets. Waits on a person driving Hard (question 6).
+	  `variants.gd` holds every offered Reverse to having a row, every row
+	  to a way the track offers, and every ladder to gold < silver < bronze.
+- [x] Until a variant's row exists, it has **no medals**. It still has a
 	  time and a board. That is already how a track with no `medals()` line
 	  behaves ([scripts/medal.gd](scripts/medal.gd)), so the variants can ship
 	  before every target is measured, and nothing ever shows a gold that was
 	  guessed.
-- [ ] `tools/lap_times.gd` takes the variant as an argument after `--`
+- [x] `tools/lap_times.gd` takes the variant as an argument after `--`
 	  (`-- mirror`, `-- reverse`, `-- hard`) and prints a line per track in
 	  the form the table wants, so filling it in is a paste.
+	  *As built:* with a variant, both laps are the game's bot's
+	  (`BotDriver`), not the tool's crude driver, which does not finish half
+	  the tracks as written. A lap with a put-back is left out. Normal tracks
+	  only: the bot does not drive rings. Hard prints no block to paste.
 - [ ] **The medal gate counts base tracks only.** `Progress.golds_in()`
 	  reads `TrackTimes.best()` with no variant, which means `NORMAL`, so this
 	  needs no change. It does need a sentence in the README and a case in
@@ -699,8 +713,10 @@ this.
 5. ~~**Track chaos**: `reroll_track_chaos()`, timed against the densest
    track, and its count in `Stats`.~~ Done 2026-09-26. Offered on all twenty
    normal tracks; every roll checked is clean and the bot drives one of each.
-6. **Targets**: `lap_times.gd` per variant, filling the table. Mirror's
-   argument is confirmed or dropped here.
+6. ~~**Targets**: `lap_times.gd` per variant, filling the table. Mirror's
+   argument is confirmed or dropped here.~~ Done 2026-09-26. Mirror's
+   argument holds on all thirty; Reverse has targets on all eighteen. Hard's
+   wait on a person driving it (question 6).
 7. **The other pages** (Leaderboard, Statistics), then the README.
 
 Each step can ship without the steps after it. A variant with no targets has

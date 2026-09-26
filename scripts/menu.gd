@@ -1117,7 +1117,8 @@ func _show_the_detail_board(rows: Array) -> void:
 	# The time is this machine's record, coloured by what it is worth, with
 	# the medal's bar under it the way a cell on the grid has one.
 	var best := TrackTimes.best(TrackRoster.file(_detail_index), _detail_variant)
-	var targets := TrackVariant.targets(TrackRoster.targets(_detail_index), _detail_variant)
+	var targets := TrackVariant.targets(TrackRoster.file(_detail_index),
+		TrackRoster.targets(_detail_index), _detail_variant)
 	var medal := Medal.earned(best, targets)
 	_detail_time.text = RaceClock.format(best) if best >= 0.0 else "NO TIME"
 	_detail_time.add_theme_color_override("font_color",

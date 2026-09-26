@@ -473,7 +473,7 @@ func plan_course(definition: TrackDefinition) -> void:
 	definition.landing_length = landing_length
 	definition.jump_keep_out = jump_keep_out
 	definition.describe()
-	TrackVariant.apply(definition, variant)
+	TrackVariant.apply(definition, variant, track_file)
 	_definition = definition
 
 	_layout = TrackLayout.adopt(definition.pieces, _layout_tuning())

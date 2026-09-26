@@ -2825,7 +2825,10 @@ kickers and the high roads off them - stands on the other side. Climbs, jumps
 and lengths are untouched. The car is the same on both sides, so a mirrored lap
 is the same lap turned round, and it is worth the same medals as the track's
 own. The bot's laps back that up: on every normal track its mirrored lap is
-within 0.6% of its lap of the track as written.
+within 0.6% of its lap of the track as written, and on every acrobatic track
+it finishes cleanly both ways, within 0.7%. `tools/lap_times.gd -- mirror`
+asks again, and names any track more than 1% out, which would need targets of
+its own.
 
 **Reverse** drives the track the other way: the grid is on the old finish
 straight and the flag where the grid was. Every corner, climb and hazard is met
@@ -2858,8 +2861,17 @@ climb.
 The acrobatic tracks offer Mirror and nothing else, and their page does not
 show the rest. Rings, platforms, lifts and high roads are all aimed at where a
 ramp throws a car, and none of them has a reverse that is the same kind of
-thing. Reverse's medals are its own to measure, so until they are, a reversed
-track has a time and a board and no medal.
+thing.
+
+Reverse's medals are its own, because backwards is a different road to drive:
+a climb that was taken slowly is now a descent, and a hairpin met out of a
+straight is now met out of a corner. The bot drives each track both ways, and
+the ratio of its two laps stretches the track's own gold, silver and bronze,
+rounded to the second. Cold Start is 4% quicker backwards and asks for 36/40/46
+rather than 38/42/48. Leap of Faith is 3% slower and asks for 53/59/65 rather
+than 51/57/63. The targets are the `TARGETS` table in `TrackVariant`, for the
+reason the list of ways is kept there rather than in the track files, and
+`tools/lap_times.gd -- reverse` prints that table to paste in.
 
 **Hard** is the same road with more on it: half as many rows of barriers
 again, and some of them moving. It never touches the car and never changes the
@@ -2903,6 +2915,13 @@ Rattlesnake takes 31 rows where it asked for 33, which is all the room it has.
 Hard is offered on all twenty normal tracks and none of the acrobatic ones,
 where most of the course is in the air and a barrier on a landing is a meaner
 thing than one on a straight.
+
+Hard has no medals yet. Its targets would be measured the way Reverse's are,
+but the bot sees every row a long way off and dodges it without lifting, so its
+Hard lap is within a few per cent of its lap of the track as written. Measured
+that way, Hard's gold would be the track's gold, which says the rows cost
+nothing. They cost a person reading them a great deal more than that, so the
+targets wait on a person driving it.
 
 A Hard plan depends on where the grid, the flag, the respawns and the jumps
 fall, which only a `Track` knows. So it is planned in `Track.plan_course`, the
@@ -3443,10 +3462,24 @@ The lap it drives is a bad one - flat out, aimed fourteen metres ahead on the
 centreline, giving back speed wherever that point is not straight in front of
 it - and on the harder tracks it does not finish at all, because driving the
 centreline into a slalom is driving into a barrier. What makes it useful is
-that it is the same bad lap everywhere: on First Light it comes home in 34.78,
+that it is the same bad lap everywhere: on First Light it comes home in 34.85,
 against the 33 the track asks for gold. Gold is a little under the best the
 road allows, silver and bronze are spaced further apart the harder the track
 gets, and the whole ladder is set from that one ratio.
+
+A way of driving a track that is a different road has targets of its own, and
+those are measured against the track rather than from nothing. Given a
+variant, the tool drives each normal track that offers it twice, as written and
+then that way, and stretches the track's ladder by the ratio of the two laps:
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/lap_times.gd -- reverse
+```
+
+Those two laps are the game's own bot's rather than the crude driver's, which
+does not finish half the tracks, and a ratio needs both laps. A lap the bot
+was put back during is left out, since it would be measuring the put-back as
+much as the road. See *Track variants* for what each way's targets are.
 
 ## The bot
 

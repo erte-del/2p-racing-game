@@ -86,6 +86,48 @@ const OFFERED := {
 	"a10_last_leap": [MIRROR],
 }
 
+## What a lap is worth on each way of driving that is a different road to
+## drive, by file name: gold, silver and bronze, as a track's own `medals()`
+## line has them.
+##
+## Measured, not guessed. `tools/lap_times.gd -- reverse` has the game's bot
+## drive each track as written and then the other way round, and the ratio of
+## the two laps stretches the track's own ladder, rounded to the second - the
+## block it prints at the end is this one. Driven backwards, a track is a few
+## per cent quicker or slower depending on which way its climbs and hairpins
+## face (Cold Start is 4% quicker, Leap of Faith 3% slower), which is exactly
+## what a target copied from the track as written would get wrong.
+##
+## Here and not in the track files, for the reason `OFFERED` is. MIRROR has no
+## row: it shares the track's own, see `targets`. HARD and track chaos have
+## none yet, so they have a time and a board and no medals. The bot dodges
+## every row it can see and its Hard lap comes out within a few per cent of the
+## track's, so a Hard target measured by it would be the track's target again;
+## it waits on a person driving it. A track chaos target would be a target for
+## one roll of the rows.
+const TARGETS := {
+	REVERSE: {
+		"01_first_light": Vector3(33.0, 39.0, 43.0),
+		"02_long_way_round": Vector3(37.0, 41.0, 45.0),
+		"03_the_weave": Vector3(39.0, 43.0, 47.0),
+		"04_cold_start": Vector3(36.0, 40.0, 46.0),
+		"05_overpass": Vector3(42.0, 47.0, 52.0),
+		"06_split_decision": Vector3(44.0, 49.0, 54.0),
+		"07_pinch": Vector3(43.0, 48.0, 54.0),
+		"08_switchback": Vector3(45.0, 50.0, 56.0),
+		"09_the_gauntlet": Vector3(42.0, 48.0, 53.0),
+		"10_long_haul": Vector3(55.0, 62.0, 69.0),
+		"11_the_hook": Vector3(49.0, 54.0, 61.0),
+		"12_leap_of_faith": Vector3(53.0, 59.0, 65.0),
+		"13_needle": Vector3(56.0, 62.0, 69.0),
+		"14_relentless": Vector3(54.0, 61.0, 69.0),
+		"15_rattlesnake": Vector3(59.0, 66.0, 73.0),
+		"16_grinder": Vector3(56.0, 62.0, 71.0),
+		"18_bottleneck": Vector3(55.0, 63.0, 72.0),
+		"19_the_wringer": Vector3(70.0, 79.0, 88.0),
+	},
+}
+
 ## Why a track that has a way built for it still does not offer it, in the line
 ## the track page shows over PLAY. Written when the check finds a way a track
 ## cannot be driven, so the reason is the check's and not a guess. Acrobatic
@@ -136,13 +178,14 @@ static func why_not(track_file: String, variant: String) -> String:
 ## Called by `Track.lay_out()` straight after `describe()`, before anything is
 ## built, so everything downstream - the road, the rails, the checkpoints, the
 ## checks - sees an ordinary definition and never has to ask where it came from.
-static func apply(definition: TrackDefinition, variant: String) -> void:
+## `track_file` is only for finding the way's medal targets.
+static func apply(definition: TrackDefinition, variant: String, track_file: String) -> void:
 	match variant:
 		MIRROR:
 			mirror(definition)
 		REVERSE:
 			reverse(definition)
-	definition.targets = targets(definition.targets, variant)
+	definition.targets = targets(track_file, definition.targets, variant)
 
 
 ## Left and right swapped: every corner turns the other way, and everything
@@ -309,12 +352,17 @@ static func _steps(length: float, step: float) -> int:
 ##
 ## A mirrored lap is the same lap turned round - the same length, the same
 ## corners the other way, in a car that is the same on both sides - so it is
-## worth the same. The other ways are different roads and get targets of
-## their own once somebody has measured them. Until then they have none,
-## which is how a track with no `medals()` line already behaves: a time and a
-## board, and no gold that was guessed.
-static func targets(base: Vector3, variant: String) -> Vector3:
-	return base if variant in [NORMAL, MIRROR] else Vector3.ZERO
+## worth the same. That was an argument until the bot drove all thirty: every
+## mirror it finished cleanly came home within 0.7% of its track, and
+## `tools/lap_times.gd -- mirror` is how to ask again. The other ways are
+## different roads, and their targets are what `TARGETS` measured for them. A
+## way with no row there has none, which is how a track with no `medals()` line
+## already behaves: a time and a board, and no gold that was guessed.
+static func targets(track_file: String, base: Vector3, variant: String) -> Vector3:
+	if variant in [NORMAL, MIRROR]:
+		return base
+	var measured: Dictionary = TARGETS.get(variant, {})
+	return measured.get(track_file.get_file().get_basename(), Vector3.ZERO)
 
 
 ## A track described and put through a variant, with no road built: the pieces
@@ -336,6 +384,7 @@ static func described(track_file: String, variant: String, roll_seed := 0) -> Tr
 		return null
 	var definition: TrackDefinition = written.new()
 	var track: Track = load("res://scenes/track/track.tscn").instantiate()
+	track.track_file = track_file
 	track.variant = variant
 	track.track_chaos_seed = roll_seed
 	track.plan_course(definition)

@@ -25,6 +25,9 @@ extends SceneTree
 #   where a hole was
 # - every way of driving it is kept and sent under a key, fingerprint and
 #   signature of its own
+# - a way that is a different road to drive has the medal targets
+#   `TrackVariant.TARGETS` measured for it, in order, and no targets are kept
+#   for a way the track does not offer
 # - the track as written has exactly the fingerprint and signature it had
 #   before variants existed. That is the one number in all of this that must
 #   not move: every best time anybody has set is held against it.
@@ -94,6 +97,7 @@ func _init() -> void:
 			_check_track_chaos(track, file)
 		_check_what_is_offered(track, file)
 
+	_check_the_targets()
 	_check_what_is_not_a_track()
 	_check_the_check()
 
@@ -184,8 +188,10 @@ func _check_the_reverse(file: String) -> void:
 	if not is_equal_approx(once.length(), base.length()):
 		_fault("%s: reversed is %.1f m long, and the track %.1f m"
 			% [name, once.length(), base.length()])
-	if once.targets != Vector3.ZERO:
-		_fault("%s: reversed has medal targets nobody measured" % name)
+	var measured: Vector3 = TrackVariant.TARGETS[TrackVariant.REVERSE].get(name, Vector3.ZERO)
+	if once.targets != measured:
+		_fault("%s: reversed is worth %s, and %s was measured for it"
+			% [name, once.targets, measured])
 	# Every hole where a hole was, read from the far end, within a sample: a
 	# jump is built again from its parts, and the sample it rounds to may move.
 	var ours := _holes(base)
@@ -200,6 +206,33 @@ func _check_the_reverse(file: String) -> void:
 				or absf(theirs[i].y - mirrored.y) > base.step + 0.01):
 			_fault("%s: a hole reversed runs %.0f-%.0f m, where it was %.0f-%.0f m"
 				% [name, theirs[i].x, theirs[i].y, mirrored.x, mirrored.y])
+
+
+## The measured targets are a ladder that can be climbed, and are only kept for
+## ways that can be driven. Every track driven backwards has a row: a track
+## that is offered Reverse and not measured would quietly have no medals, which
+## is the kind of gap nobody notices until a player asks why. A new track that
+## offers it gets its row from `tools/lap_times.gd -- reverse`.
+func _check_the_targets() -> void:
+	for variant: String in TrackVariant.TARGETS:
+		var measured: Dictionary = TrackVariant.TARGETS[variant]
+		for name: String in measured:
+			var targets: Vector3 = measured[name]
+			if not (0.0 < targets.x and targets.x < targets.y and targets.y < targets.z):
+				_fault("%s: %s's targets %s are not gold under silver under bronze"
+					% [name, TrackVariant.display_name(variant), targets])
+			var file := ""
+			for known: String in TrackRoster.FILES + TrackRoster.ACROBATIC_FILES:
+				if known.get_file().get_basename() == name:
+					file = known
+			if variant not in TrackVariant.offered(file):
+				_fault("%s: targets are kept for %s, which it is not offered"
+					% [name, TrackVariant.display_name(variant)])
+	for file: String in TrackRoster.FILES:
+		var name := file.get_file().get_basename()
+		if (TrackVariant.REVERSE in TrackVariant.offered(file)
+				and not TrackVariant.TARGETS[TrackVariant.REVERSE].has(name)):
+			_fault("%s: offered Reverse with no targets measured for it" % name)
 
 
 ## Hard is the same road with more on it: every piece as written, more rows or
