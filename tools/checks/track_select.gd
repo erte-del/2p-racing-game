@@ -5,7 +5,10 @@ extends SceneTree
 #
 # A grid built in code, a setting carried across a scene change and a Track
 # that has to divert from a seed to a file: three places for a track to be
-# chosen and then quietly not raced.
+# chosen and then quietly not raced. And a way of driving it, held down on the
+# track's page, which is a fourth.
+
+const VARIANTS := "TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/"
 
 
 func _init() -> void:
@@ -96,9 +99,13 @@ func _init() -> void:
 	first.pressed.emit()
 	await process_frame
 	# A track with a page of its own opens that first, and the race starts off
-	# the page's PLAY.
+	# the page's PLAY - here with MIRROR held down, so what arrives in the race
+	# is the way picked as well as the track.
 	if menu.get_node("TrackDetail").visible:
 		print("pressing %s opens its own page" % TrackRoster.track_name(0))
+		var mirror: Button = menu.get_node(VARIANTS + "Mirror")
+		mirror.button_pressed = true
+		mirror.pressed.emit()
 		menu.get_node("TrackDetail/Page/Panel/Margin/Box/Body/You/Play").pressed.emit()
 	for i in 40:
 		await process_frame
@@ -118,6 +125,7 @@ func _init() -> void:
 		if settings != null and settings.chaos:
 			print("  a timed track is being run under chaos rules")
 			faults += 1
+		faults += _check_it_is_mirrored(track)
 
 	faults += await _check_coming_back()
 
@@ -360,6 +368,7 @@ func _check_coming_back() -> int:
 	# since those two are counted from different ends of the roster.
 	for index in [6, TrackRoster.first(TrackRoster.ACROBATIC)]:
 		faults += await _check_coming_back_to(settings, index)
+	faults += await _check_the_ways(settings)
 
 	# Every track in both grids opens its own page when pressed, named for
 	# itself and showing its own wide shot rather than falling back to the
@@ -368,6 +377,7 @@ func _check_coming_back() -> int:
 
 	# And a fresh start, with nothing picked, still opens on the title.
 	settings.track_file = ""
+	settings.track_variant = TrackVariant.NORMAL
 	var fresh: Node = load("res://scenes/menu.tscn").instantiate()
 	Engine.get_main_loop().root.add_child(fresh)
 	for i in 20:
@@ -576,4 +586,114 @@ func _check_every_page(settings: Node) -> int:
 	print("%d pages open, each with its own name and wide shot" % opened)
 	menu.queue_free()
 	await Engine.get_main_loop().process_frame
+	return faults
+
+
+## The race that started off the page with MIRROR held is on the mirrored
+## road: the way picked arrived, and every corner turns the other way.
+func _check_it_is_mirrored(track: Track) -> int:
+	var settings: Node = Engine.get_main_loop().root.get_node_or_null(^"/root/GameSettings")
+	if settings != null and settings.track_variant != TrackVariant.MIRROR:
+		print("  PLAY with MIRROR held set the way to drive to %s" % settings.track_variant)
+		return 1
+	if track.variant != TrackVariant.MIRROR:
+		print("  PLAY with MIRROR held raced the track %s" % TrackVariant.display_name(track.variant))
+		return 1
+	var written := TrackVariant.described(track.track_file, TrackVariant.NORMAL)
+	for i in written.pieces.size():
+		if not is_equal_approx(track.definition().pieces[i].turn, -written.pieces[i].turn):
+			print("  the race with MIRROR held is not on the mirrored road")
+			return 1
+	print("and with MIRROR held, on the mirrored road")
+	return 0
+
+
+## Each way on the page: a way the track offers can be played and says
+## nothing, a way it does not is faded, cannot be played, and says why in a
+## line. MIRROR turns the picture round. And coming back from a race holds the
+## way it was driven, unless the track does not offer that way, when it holds
+## NORMAL.
+func _check_the_ways(settings: Node) -> int:
+	var faults := 0
+	var file: String = TrackRoster.FILES[0]
+	settings.track_file = ""
+	settings.track_variant = TrackVariant.NORMAL
+	var menu: Node = load("res://scenes/menu.tscn").instantiate()
+	Engine.get_main_loop().root.add_child(menu)
+	for i in 20:
+		await Engine.get_main_loop().process_frame
+	menu.call("_open_track_grid", TrackRoster.NORMAL)
+	menu.call("_open_track_detail", 0)
+	await Engine.get_main_loop().process_frame
+	var box := "TrackDetail/Page/Panel/Margin/Box/"
+	var play: Button = menu.get_node(box + "Body/You/Play")
+	var why: Label = menu.get_node(box + "Body/You/Why")
+	var picture: TextureRect = menu.get_node(box + "Body/Left/Picture")
+	var buttons := {
+		TrackVariant.NORMAL: menu.get_node(VARIANTS + "Normal"),
+		TrackVariant.HARD: menu.get_node(VARIANTS + "Hard"),
+		TrackVariant.TRACK_CHAOS: menu.get_node(VARIANTS + "TrackChaos"),
+		TrackVariant.MIRROR: menu.get_node(VARIANTS + "Mirror"),
+	}
+	var offered := TrackVariant.offered(file)
+	for variant: String in TrackVariant.ALL:
+		var button: Button = buttons[variant]
+		button.button_pressed = true
+		button.pressed.emit()
+		await Engine.get_main_loop().process_frame
+		var named := TrackVariant.display_name(variant)
+		var can := variant in offered
+		if play.disabled == can:
+			print("  PLAY is %s with %s held" % ["off" if can else "on", named])
+			faults += 1
+		if why.text.is_empty() == not can:
+			print("  %s held %s" % [named, "says why not" if can else "does not say why not"])
+			faults += 1
+		if (button.modulate.a < 1.0) == can:
+			print("  %s is %s" % [named, "faded" if can else "not faded"])
+			faults += 1
+		if picture.flip_h != (variant == TrackVariant.MIRROR):
+			print("  the picture is %s with %s held" % [
+				"turned round" if picture.flip_h else "the right way round", named])
+			faults += 1
+		if not can:
+			# And pressed anyway, it starts nothing.
+			menu.call("_start_detail_track")
+			if not settings.track_file.is_empty():
+				print("  PLAY with %s held started a race it does not offer" % named)
+				faults += 1
+				settings.track_file = ""
+	menu.queue_free()
+	await Engine.get_main_loop().process_frame
+	if faults == 0:
+		print("each way on the page plays or says why not, and MIRROR turns the picture round")
+
+	# Back from a race: the way it was driven is held again, and one the track
+	# does not offer comes back as NORMAL rather than as a way PLAY refuses.
+	for pair in [[TrackVariant.MIRROR, TrackVariant.MIRROR],
+			[TrackVariant.HARD, TrackVariant.NORMAL]]:
+		settings.track_file = file
+		settings.track_variant = pair[0]
+		var back: Node = load("res://scenes/menu.tscn").instantiate()
+		Engine.get_main_loop().root.add_child(back)
+		for i in 20:
+			await Engine.get_main_loop().process_frame
+		var held: String = back.get("_detail_variant")
+		var pressed: Button = back.get_node(VARIANTS + (
+			"Mirror" if pair[1] == TrackVariant.MIRROR else "Normal"))
+		if not back.get_node("TrackDetail").visible:
+			print("  coming back from %s did not open its page" % pair[0])
+			faults += 1
+		elif held != pair[1] or not pressed.button_pressed:
+			print("  coming back from %s holds %s" % [pair[0], TrackVariant.display_name(held)])
+			faults += 1
+		elif back.get_viewport().gui_get_focus_owner() != back.get_node(box + "Body/You/Play"):
+			print("  coming back from %s left the cursor off PLAY" % pair[0])
+			faults += 1
+		else:
+			print("coming back from %s holds %s" % [
+				TrackVariant.display_name(pair[0]), TrackVariant.display_name(pair[1])])
+		back.queue_free()
+		await Engine.get_main_loop().process_frame
+	settings.track_variant = TrackVariant.NORMAL
 	return faults

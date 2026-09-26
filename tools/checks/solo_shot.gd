@@ -49,6 +49,28 @@ func _init() -> void:
 	for i in 10:
 		await physics_frame
 	await _shoot(out, "04_finished")
+
+	# The same track mirrored: the corner and the finish screen both name the
+	# road with the way it was driven beside it, so a screenshot of a time says
+	# which road it was set on.
+	solo.queue_free()
+	await process_frame
+	if settings != null:
+		settings.track_variant = TrackVariant.MIRROR
+	solo = load("res://scenes/solo.tscn").instantiate()
+	root.add_child(solo)
+	for i in 40:
+		await physics_frame
+	await _shoot(out, "05_countdown_mirror")
+	while not solo.get("_running"):
+		await physics_frame
+	solo.set("_time", 41.55)
+	solo.call("_finish")
+	for i in 10:
+		await physics_frame
+	await _shoot(out, "06_finished_mirror")
+	if settings != null:
+		settings.track_variant = TrackVariant.NORMAL
 	if times != null:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(times.save_path))
 	print("solo drawn")

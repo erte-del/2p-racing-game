@@ -115,6 +115,8 @@ const BOT_COLOUR := Color(0.98, 0.55, 0.06)
 @onready var _tally: Label = $Hud/Corner/Box/Tally
 @onready var _condition: ConditionBar = $Hud/Corner/Box/Condition/Bar
 @onready var _best_label: Label = $Hud/Best
+@onready var _road_label: Label = $Hud/Road
+@onready var _result_road: Label = $Hud/Result/Centre/Panel/Margin/Box/Road
 @onready var _countdown: Label = $Hud/Countdown
 @onready var _result: Control = $Hud/Result
 @onready var _result_panel: Control = $Hud/Result/Centre/Panel
@@ -223,6 +225,11 @@ func _ready() -> void:
 		if not _bot_race:
 			_best = TrackTimes.best(_track_file, _track_variant)
 			_targets = _track_targets()
+	# The road named under the best, and over the time on the finish screen,
+	# with the way it is driven beside it. The endless course has no name.
+	_road_label.text = _road_title()
+	_result_road.text = _road_label.text
+	_result_road.visible = not _endless
 
 	# Told rather than left to read the setting, the same way the wood is. The
 	# bot is never told: its car is BOT_COLOUR and undecorated for the life of
@@ -526,9 +533,16 @@ func _open_pause() -> void:
 			what += "  \u2013  CHAOS"
 		_pause.open(what, "NEXT COURSE", "QUIT TO MENU")
 		return
+	_pause.open(_road_title(), "RESTART", "BACK TO TRACKS")
+
+
+## The laid-out track's name, and the way it is driven beside it; empty on the
+## endless course.
+func _road_title() -> String:
 	var definition := _track.definition()
-	var named := definition.track_name.to_upper() if definition != null else ""
-	_pause.open(named, "RESTART", "BACK TO TRACKS")
+	if _endless or definition == null:
+		return ""
+	return TrackVariant.title(definition.track_name, _track_variant)
 
 
 ## Coming back from the pause screen with nothing focused would leave the

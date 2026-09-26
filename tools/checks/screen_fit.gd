@@ -88,11 +88,20 @@ func _check(window: Vector2i, laid_out_least: Vector2) -> int:
 	# three columns across, which makes it the widest page the menu has. All of
 	# them rather than one, because the name and the line under it are each
 	# track's own, and the longest is the one that decides.
+	#
+	# Each with HARD held down where the track shows it: a way the track does
+	# not offer puts a line under PLAY saying why, which makes that column as
+	# tall as it gets.
 	var pages := 0
+	var hard: Button = menu.get_node(
+		"TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Hard")
 	for index in TrackRoster.TOTAL:
 		if not menu.call("_has_a_page", index):
 			continue
 		menu.call("_open_track_detail", index)
+		if hard.visible:
+			hard.button_pressed = true
+			menu.call("_choose_detail_variant", TrackVariant.HARD)
 		for i in 4:
 			await process_frame
 		var fault := _fits("%s's page" % TrackRoster.track_name(index),

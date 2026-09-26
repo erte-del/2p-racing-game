@@ -147,6 +147,13 @@ extends Control
 ## tint takes the word with it.
 @export_range(0.0, 1.0) var chaos_tint := 0.5
 
+@export_group("Track page")
+## How far a way of driving a track does not offer is faded. Faded rather than
+## hidden, and still pressable: its board is still worth reading, and a row of
+## buttons that changes length from track to track is a row a player has to
+## read again every time.
+@export_range(0.0, 1.0) var unoffered_alpha := 0.4
+
 @export_group("Mode choice")
 ## How long the flavour buttons take to roll out from under infinite. Long
 ## enough to read as movement, short enough that a player who knows what they
@@ -208,6 +215,7 @@ const WON_COLOUR := Color(0.44, 0.85, 0.52)
 @onready var _detail_hard: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Hard
 @onready var _detail_mirror: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Mirror
 @onready var _detail_play: Button = $TrackDetail/Page/Panel/Margin/Box/Body/You/Play
+@onready var _detail_why: Label = $TrackDetail/Page/Panel/Margin/Box/Body/You/Why
 @onready var _detail_back: Button = $TrackDetail/Page/Panel/Margin/Box/Back
 @onready var _detail_board_heading: Label = $TrackDetail/Page/Panel/Margin/Box/Body/Board/Heading
 @onready var _detail_rows: VBoxContainer = $TrackDetail/Page/Panel/Margin/Box/Body/Board/Scroll/Rows
@@ -345,7 +353,7 @@ func _open_where_they_left_off() -> void:
 	# Back onto the track's own page if it has one, since that is where the
 	# player pressed to drive it and where they are about to press again.
 	if _has_a_page(index):
-		_open_track_detail(index)
+		_open_track_detail(index, GameSettings.track_variant)
 
 
 func _process(delta: float) -> void:
@@ -370,7 +378,9 @@ func _process(delta: float) -> void:
 	# thing from the chaos mode the button above belongs to, but it is the one
 	# way of driving a track that refuses to sit still, so it says so the same
 	# way.
-	_detail_track_chaos.modulate = _chaos_button.modulate
+	# Its own alpha kept: that is what says whether the track offers it.
+	_detail_track_chaos.modulate = Color(_chaos_button.modulate,
+		_detail_track_chaos.modulate.a)
 	# A label does not know it is inside a button, so it is told which of the
 	# button's colours to wear: the same word a plain button would show.
 	var word: Label = _detail_mirror.get_node("Word")
@@ -1003,7 +1013,11 @@ func _has_a_page(index: int) -> bool:
 
 ## A track's own page: its name, a wide shot of the road, and the ways it can
 ## be driven. The grid steps aside for it, as the mode page does for the grid.
-func _open_track_detail(index: int) -> void:
+##
+## `variant` is the way held down to start with: NORMAL off the grid, and the
+## way the player last drove it on the way back from a race, since the same
+## way again is what they are most likely to press PLAY for.
+func _open_track_detail(index: int, variant := TrackVariant.NORMAL) -> void:
 	_detail_index = index
 	_detail_heading.text = TrackRoster.track_name(index).to_upper()
 	_detail_blurb.text = TrackRoster.blurb(index)
@@ -1017,10 +1031,15 @@ func _open_track_detail(index: int) -> void:
 	_detail_track_chaos.visible = not acrobatic
 	_track_choice.hide()
 	_track_detail.show()
-	# NORMAL is held down to start with, and the cursor is on PLAY, so Enter
-	# straight away drives the track the way it has always been driven.
-	_detail_normal.button_pressed = true
-	_detail_variant = TrackVariant.NORMAL
+	# The way asked for is held down to start with, and the cursor is on PLAY,
+	# so Enter straight away drives it: the track as it is written, off the
+	# grid.
+	if variant not in TrackVariant.offered(TrackRoster.file(index)):
+		variant = TrackVariant.NORMAL
+	_detail_variant = variant
+	(_detail_normal.get_parent().get_child(TrackVariant.ALL.find(variant)) as Button
+		).button_pressed = true
+	_show_the_way()
 	_detail_play.grab_focus()
 	_fetch_the_detail_board()
 
@@ -1030,7 +1049,26 @@ func _choose_detail_variant(variant: String) -> void:
 	if variant == _detail_variant:
 		return
 	_detail_variant = variant
+	_show_the_way()
 	_fetch_the_detail_board()
+
+
+## What the page says about the way held down, apart from its board: the
+## picture turned round for MIRROR, and PLAY only for a way the track offers,
+## with the reason under it where it does not. Every way the track does not
+## offer is faded, whichever is held.
+func _show_the_way() -> void:
+	var file := TrackRoster.file(_detail_index)
+	var offered := TrackVariant.offered(file)
+	# The same overhead shot flipped, rather than a second picture drawn and
+	# checked in: a mirrored road is exactly that shot the other way round.
+	_detail_picture.flip_h = _detail_variant == TrackVariant.MIRROR
+	var ways := _detail_normal.get_parent().get_children()
+	for at in ways.size():
+		(ways[at] as Button).modulate.a = (1.0 if TrackVariant.ALL[at] in offered
+			else unoffered_alpha)
+	_detail_play.disabled = _detail_variant not in offered
+	_detail_why.text = TrackVariant.why_not(file, _detail_variant)
 
 
 ## Put the track's board up beside its picture, and the player's own time and
@@ -1117,10 +1155,14 @@ func _close_track_detail() -> void:
 	_focus_track(_detail_index - TrackRoster.first(_track_kind))
 
 
-## Only NORMAL is built so far, so whichever way is held down the race is the
-## track as it is written. The other three are there to be looked at.
+## Drive the track the way held down. PLAY is disabled on a way the track does
+## not offer, and this asks again rather than trusting that: a race on a way
+## nobody checked is a time on a road nobody has looked at.
 func _start_detail_track() -> void:
-	_start_track(TrackRoster.file(_detail_index))
+	var file := TrackRoster.file(_detail_index)
+	if _detail_variant not in TrackVariant.offered(file):
+		return
+	_start_track(file, _detail_variant)
 
 
 func _close_track_choice() -> void:

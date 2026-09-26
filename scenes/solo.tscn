@@ -180,6 +180,22 @@ theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
 theme_override_constants/outline_size = 8
 theme_override_font_sizes/font_size = 28
 
+[node name="Road" type="Label" parent="Hud"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -460.0
+offset_top = 74.0
+offset_right = -30.0
+offset_bottom = 104.0
+grow_horizontal = 0
+mouse_filter = 2
+horizontal_alignment = 2
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 0.75)
+theme_override_constants/outline_size = 6
+theme_override_font_sizes/font_size = 20
+
 [node name="Lost" type="Label" parent="Hud"]
 visible = false
 anchors_preset = 10
@@ -240,6 +256,12 @@ theme_override_constants/margin_bottom = 30
 custom_minimum_size = Vector2(460, 0)
 layout_mode = 2
 theme_override_constants/separation = 2
+
+[node name="Road" type="Label" parent="Hud/Result/Centre/Panel/Margin/Box"]
+layout_mode = 2
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.72, 0.76, 0.86, 1)
+theme_override_font_sizes/font_size = 22
 
 [node name="Time" type="Label" parent="Hud/Result/Centre/Panel/Margin/Box"]
 layout_mode = 2

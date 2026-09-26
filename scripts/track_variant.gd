@@ -89,6 +89,26 @@ static func offered(track_file: String) -> Array:
 	return [NORMAL] + OFFERED[name]
 
 
+## What a race on a track calls the road: its name, and the way it is driven
+## beside it wherever that is not NORMAL - `FIRST LIGHT · MIRROR`. On the pause
+## screen, the finish screen and in the corner, so a time read off a
+## screenshot says which road it was set on.
+static func title(track_name: String, variant: String) -> String:
+	var named := track_name.to_upper()
+	return named if variant == NORMAL else "%s · %s" % [named, display_name(variant)]
+
+
+## Why a track cannot be driven a way, in one line, or empty when it can. What
+## the track page puts under PLAY when a way it cannot drive is held down: a
+## dimmed button with no reason reads as a broken one.
+static func why_not(track_file: String, variant: String) -> String:
+	if variant in offered(track_file):
+		return ""
+	if variant not in BUILT:
+		return "%s is still being built." % display_name(variant)
+	return "This track is not offered %s." % display_name(variant)
+
+
 ## Turn a track as its file describes it into the way it is being driven.
 ## Called by `Track.lay_out()` straight after `describe()`, before anything is
 ## built, so everything downstream - the road, the rails, the checkpoints, the

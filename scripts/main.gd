@@ -341,9 +341,16 @@ func _open_pause() -> void:
 			what += "  \u2013  CHAOS"
 		_pause.open(what, "NEXT COURSE", "QUIT TO MENU")
 		return
+	_pause.open(_road_title(), "RESTART", "BACK TO TRACKS")
+
+
+## The laid-out track's name, and the way it is driven beside it; empty on the
+## endless course, which has no name, and in attract mode.
+func _road_title() -> String:
 	var definition := _track.definition()
-	var named := definition.track_name.to_upper() if definition != null else ""
-	_pause.open(named, "RESTART", "BACK TO TRACKS")
+	if _endless or definition == null:
+		return ""
+	return TrackVariant.title(definition.track_name, _track.variant)
 
 
 ## Start the race over. The endless course is endless: asking for another go
@@ -685,6 +692,11 @@ func _show_tally(index: int) -> void:
 
 
 func _show_result(text: String) -> void:
+	# Under the result, which road it was won on: two players on a mirrored
+	# road is a mirrored race, and a screenshot of it should say so.
+	var road := _road_title()
+	if not text.is_empty() and not road.is_empty():
+		text += "\n" + road
 	for label in _results:
 		label.text = text
 

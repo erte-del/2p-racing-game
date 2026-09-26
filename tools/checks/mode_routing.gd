@@ -7,6 +7,10 @@ extends SceneTree
 # which is four ways in and four chances for one of them to land somewhere it
 # should not. How many are playing is the only one that decides the scene;
 # everything else is a setting the scene reads.
+#
+# The way a track is driven is one of those settings, and it has to survive
+# both routes: a mirrored track picked for two players is a mirrored race. An
+# infinite race after it has to have forgotten it.
 
 const SOLO := "Solo"
 const COOP := "Main"
@@ -63,6 +67,8 @@ func _init() -> void:
 	for trial: Array in [
 		[true, "infinite", SOLO], [false, "infinite", COOP],
 		[true, "track", SOLO], [false, "track", COOP],
+		[true, "mirror", SOLO], [false, "mirror", COOP],
+		[true, "infinite", SOLO],
 	]:
 		var solo: bool = trial[0]
 		var mode: String = trial[1]
@@ -97,6 +103,8 @@ func _init() -> void:
 
 		if mode == "infinite":
 			menu.call("_start_infinite", false)
+		elif mode == "mirror":
+			menu.call("_start_track", TrackRoster.file(0), TrackVariant.MIRROR)
 		else:
 			menu.call("_start_track", TrackRoster.file(0))
 		for i in 30:
@@ -117,10 +125,16 @@ func _init() -> void:
 		# the right kind of scene.
 		var track: Track = race.get_node_or_null("Track")
 		var laid_out: bool = track != null and track.definition() != null
-		if laid_out != (mode == "track"):
+		if laid_out != (mode != "infinite"):
 			print("  %s + %s is running %s"
 				% ["solo" if solo else "co-op", mode,
 					"a laid-out track" if laid_out else "a rolled course"])
+			faults += 1
+		var wanted_way := TrackVariant.MIRROR if mode == "mirror" else TrackVariant.NORMAL
+		if settings.track_variant != wanted_way or (laid_out and track.variant != wanted_way):
+			print("  %s + %s is driven %s"
+				% ["solo" if solo else "co-op", mode, TrackVariant.display_name(
+					track.variant if laid_out else settings.track_variant)])
 			faults += 1
 		race.queue_free()
 		await process_frame

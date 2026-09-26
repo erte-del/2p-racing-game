@@ -2842,6 +2842,26 @@ A high road is laid out as a `Track` of its own and is handed everything its
 course has except the file and the variant: the course's `lay_out()` has
 already mirrored it, and a second pass would mirror it back.
 
+A way is picked on the track's own page, by holding its button down, and PLAY
+drives the way held down. A way the track does not offer is faded rather than
+hidden: the row of buttons stays the same from one track to the next, and a
+faded way's board is still worth reading. Holding one down turns PLAY off and
+puts a line over it saying why - `TrackVariant.why_not()`, so every page that
+refuses a way gives the same reason. With MIRROR held, the overhead shot is
+turned round. That is the same picture flipped rather than a second one drawn
+and checked in, because a mirrored road is exactly that. Coming back from a
+race opens the page with the way it was driven held down again, since the same
+way again is what a player is most likely to press PLAY for. "Next track" on
+the finish screen keeps the way too, where the next track offers it.
+
+In a race the road is named with the way beside it - `FIRST LIGHT · MIRROR`,
+from `TrackVariant.title()` - in the corner under the best time, over the time
+on the finish screen, under the result of a two-player race and at the top of
+the pause screen. A mirrored road looks like a road, and a time read off a
+screenshot has to say which road it was set on. The track as written is
+named plainly, `FIRST LIGHT`, and the endless course is not named at all.
+`tools/checks/solo_shot.gd` draws a mirrored countdown and finish to look at.
+
 A variant is a different road, so it keeps its own time, its own board and its
 own coins - see [Track times](#track-times) for how its time is kept apart. Its
 coins are seeded off the track's name with the variant on the end, so they are
@@ -2861,6 +2881,14 @@ every best time anybody has set is held against them.
 ```
 Godot --path . --headless --script tools/checks/variants.gd
 ```
+
+`tools/checks/track_select.gd` holds MIRROR down on First Light's page, presses
+PLAY and checks that the race it lands in is on the mirrored road. It also
+holds each way down in turn, checking that PLAY, the faded buttons, the line
+under PLAY and the picture all agree with what the track offers, and comes
+back from a mirrored race and from one it cannot offer.
+`tools/checks/mode_routing.gd` carries a mirrored track down both routes, solo
+and two-player, and then an infinite race, which has to have forgotten it.
 
 ## Solo
 

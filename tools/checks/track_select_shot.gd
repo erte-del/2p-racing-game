@@ -104,7 +104,8 @@ func _init() -> void:
 	for i in 12:
 		await process_frame
 	root.get_texture().get_image().save_png("%s/08_track_page.png" % out)
-	# HARD held down: its own board, which nobody is on yet, and no time.
+	# HARD held down: its own board, which nobody is on yet, no time, and PLAY
+	# off with the line under it saying why.
 	var hard: Button = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Hard")
 	hard.button_pressed = true
 	hard.pressed.emit()
@@ -123,6 +124,17 @@ func _init() -> void:
 	for i in 12:
 		await process_frame
 	root.get_texture().get_image().save_png("%s/11_track_page_acrobatic.png" % out)
+	menu.call("_close_track_detail")
+	# And the first track again with MIRROR held down: the same overhead shot
+	# turned round, rather than a second picture drawn and checked in, and
+	# HARD and CHAOS faded beside it, since this track does not offer them.
+	menu.call("_open_track_detail", 0)
+	var mirror: Button = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Mirror")
+	mirror.button_pressed = true
+	mirror.pressed.emit()
+	for i in 12:
+		await process_frame
+	root.get_texture().get_image().save_png("%s/12_track_page_mirror.png" % out)
 	menu.call("_close_track_detail")
 
 	# Said as well as drawn: a name cut off at one end of twenty is easy to

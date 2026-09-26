@@ -11,7 +11,7 @@ ones, that comes to about a hundred timed configurations, and none of them had
 to be laid out.
 
 Written up 2026-09-25. **Built so far:** the track page (section 7) and build
-step 1, Mirror and its plumbing (2026-09-26). The previous contents
+steps 1 and 2, Mirror and its plumbing, playable off the page (2026-09-26). The previous contents
 of this file (the shop, customisation, statistics) were all built and are in
 the README. Git has the old text.
 
@@ -201,7 +201,7 @@ itself stays trivial.
 	  A course that stays on the ground swinging right can run off it swinging
 	  left, if the ground is not symmetric about the start. `problems()` would
 	  report that, and the check reads it.
-- [ ] Thumbnail: the same overhead shot with `flip_h = true`. There is no new
+- [x] Thumbnail: the same overhead shot with `flip_h = true`. There is no new
 	  picture to draw or check in.
 
 Medals: the same as the base track's. See section 6.
@@ -482,15 +482,17 @@ and place on it, with PLAY under them and BACK across the bottom.
 	  only while it is being designed. Checked by `screen_fit.gd`,
 	  `track_select.gd` and `track_select_shot.gd`.
 - [x] A board per way of driving, and the player's time and place on it.
-- [ ] The other nineteen tracks, and the acrobatic ones with only NORMAL and
+- [x] The other nineteen tracks, and the acrobatic ones with only NORMAL and
 	  MIRROR.
-- [ ] PLAY drives the way held down. It drives NORMAL whatever is held until
-	  the variants are built.
+- [x] PLAY drives the way held down, where the track offers it.
 - [ ] REVERSE. It is in the plan and not on the page.
-- [ ] A way a track does not offer is dimmed, with one line saying why.
-- [ ] `GameSettings.track_variant` is set by PLAY, next to `track_file`, and
+- [x] A way a track does not offer is dimmed, with one line saying why
+	  (`TrackVariant.why_not()`, over PLAY). HARD and CHAOS say they are
+	  still being built.
+- [x] `GameSettings.track_variant` is set by PLAY, next to `track_file`, and
 	  coming back from a race opens the page with the same way held down.
-- [ ] Shut blocks stay shut in every way. A variant is a way of driving a
+- [x] Mirror's picture is the wide shot with `flip_h`.
+- [x] Shut blocks stay shut in every way. A variant is a way of driving a
 	  track the player has already opened, not a way around the gate.
 
 ### The other pages
@@ -506,9 +508,10 @@ and place on it, with PLAY under them and BACK across the bottom.
 - [ ] Statistics' "tracks with a time" stays a count of the twenty base
 	  tracks. A number that can reach a hundred hides whether the twenty have
 	  been driven.
-- [ ] The finish screen and the corner name the variant beside the track
+- [x] The finish screen and the corner name the variant beside the track
 	  name, `FIRST LIGHT · MIRROR`, so that a time read off a screenshot says
-	  which road it was set on.
+	  which road it was set on. So do the pause screen and a two-player
+	  result.
 
 ---
 
@@ -551,19 +554,19 @@ non-zero exit.
 - [ ] `tools/checks/track_times.gd`: a time on Mirror does not touch the base
 	  time. Editing the base file drops the variant's times as well. A Hard
 	  plan that changes drops the Hard time and leaves the others alone.
-- [ ] `tools/checks/track_select.gd`: the selector redraws the cells, a cell
-	  that does not offer the variant cannot be pressed, the variant arrives in
-	  the race's `Track`, and coming back lands on the same track and variant.
-- [ ] `tools/checks/mode_routing.gd`: a variant survives both routes, solo
+- [x] `tools/checks/track_select.gd`: a way the track does not offer cannot
+	  be played and says why, the variant arrives in the race's `Track`, and
+	  coming back lands on the same track and variant.
+- [x] `tools/checks/mode_routing.gd`: a variant survives both routes, solo
 	  and two-player.
 - [ ] `tools/checks/progress.gd`: golds on variants do not open a gate.
 - [ ] `tools/checks/stats_race.gd`: a track chaos run adds a completed race.
-- [ ] `tools/checks/screen_fit.gd` opens the track page with the selector in
-	  place and the Statistics page with its new columns, at every window
-	  shape and the largest interface size.
-- [ ] `tools/checks/track_select_shot.gd`, not headless: one shot of the grid
-	  per variant, so a flipped thumbnail and the "not offered" cell can be
-	  looked at.
+- [ ] `tools/checks/screen_fit.gd` opens the track page with the line under
+	  PLAY showing (done), and the Statistics page with its new columns (not
+	  yet), at every window shape and the largest interface size.
+- [x] `tools/checks/track_select_shot.gd`, not headless: the track page with
+	  HARD held (faded, PLAY off, the line saying why) and with MIRROR held
+	  (the picture flipped).
 
 ---
 
@@ -642,10 +645,10 @@ this.
    plumbing, keys and fingerprints, and `variants.gd` checking the mirror
    involution and the unchanged base fingerprints.~~ Done 2026-09-26. All
    thirty mirrors build clean.
-2. **The selector** on the track page, with `screen_fit.gd` deciding row vs.
-   cycling button, and `track_select.gd` / `mode_routing.gd` extended.
-   Mirror is playable end to end at this point: time, board and flipped
-   thumbnail.
+2. ~~**PLAY drives the way held** on the track page, with `screen_fit.gd`,
+   `track_select.gd` and `mode_routing.gd` extended.~~ Done 2026-09-26.
+   Mirror is playable end to end: time, board, flipped picture, and the
+   road named `FIRST LIGHT · MIRROR` in the race.
 3. **Reverse**, starting with the jump rebuild, then `variant_drive.gd`.
    Expect the check to find a few tracks whose reverse does not work. That is
    the check doing its job, not the feature failing.
