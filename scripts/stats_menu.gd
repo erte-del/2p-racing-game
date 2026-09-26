@@ -2,7 +2,7 @@ class_name StatsMenu
 extends Control
 
 ## The page of lifetime totals, and under it the best time and medal on every
-## track.
+## track, one column for each way of driving it.
 ##
 ## The totals are `Stats`'. The times are not: they are read straight out of
 ## `TrackTimes` every time the page is drawn, the way `Progress.golds_in` reads
@@ -32,6 +32,15 @@ const TABLE_LEAST := 140.0
 const CLEARANCE := 24.0
 ## How far one press of up or down moves the table.
 const SCROLL_STEP := 48.0
+## How wide each way's column of times is, and how big the words in the table.
+## Five columns of times is what the page is widest for; `screen_fit.gd` holds
+## it to the screen at the largest interface size.
+const TIME_WIDTH := 108.0
+const TABLE_FONT := 20
+## How thick the bar of a time's medal colour is, under the time.
+const MEDAL_BAR := 3.0
+## Room left on the right of the table for the scroll bar.
+const SCROLL_GUTTER := 22
 
 var _panel: PanelContainer
 var _totals: GridContainer
@@ -117,7 +126,7 @@ func _build() -> void:
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 14)
-	box.custom_minimum_size = Vector2(700.0, 0.0)
+	box.custom_minimum_size = Vector2(900.0, 0.0)
 	margin.add_child(box)
 
 	var heading := Label.new()
@@ -169,10 +178,17 @@ func _build() -> void:
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	box.add_child(_scroll)
 
+	# Kept clear of the scroll bar on the right, which otherwise stands over
+	# the last column of times.
+	var gutter := MarginContainer.new()
+	gutter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gutter.add_theme_constant_override("margin_right", SCROLL_GUTTER)
+	_scroll.add_child(gutter)
+
 	_rows = VBoxContainer.new()
 	_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_rows.add_theme_constant_override("separation", 4)
-	_scroll.add_child(_rows)
+	gutter.add_child(_rows)
 
 	_close = Button.new()
 	_close.text = "BACK"
@@ -229,62 +245,116 @@ func _show_total(key: String, text: String) -> void:
 ## tracks keep their row and their name - a table that grew as a player
 ## unlocked things would change shape under them - and a slot still to come
 ## has no row, because it has no road.
+##
+## A column for each way of driving a track, in the order the track's page
+## has them, since each is a road of its own with a best of its own. All five
+## at once rather than a row of ways to pick one from: the page is there to be
+## read at a glance, and five columns fit. Each group's heading names the
+## columns it fills, so the acrobatic tracks' heading says NORMAL and MIRROR
+## and nothing else.
 func _fill_the_table() -> void:
 	for row in _rows.get_children():
 		_rows.remove_child(row)
 		row.queue_free()
 	for kind in [TrackRoster.NORMAL, TrackRoster.ACROBATIC]:
-		var heading := Label.new()
-		heading.text = "TRACKS" if kind == TrackRoster.NORMAL else "ACROBATIC TRACKS"
-		heading.add_theme_font_size_override("font_size", 22)
-		heading.add_theme_color_override("font_color", QUIET)
-		_rows.add_child(heading)
+		_rows.add_child(_heading(kind))
 		var first := TrackRoster.first(kind)
 		for index in range(first, first + TrackRoster.count(kind)):
 			if TrackRoster.exists(index):
 				_rows.add_child(_line(index, index - first + 1))
 
 
-## One track: its number in its own grid, its name, its best and what that is
-## worth.
+## A group's heading, with the name of each way over its column - where the
+## group has any track that is driven that way.
+func _heading(kind: int) -> Control:
+	var line := _row()
+	var heading := Label.new()
+	heading.text = "TRACKS" if kind == TrackRoster.NORMAL else "ACROBATIC TRACKS"
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.add_child(heading)
+	var first := TrackRoster.first(kind)
+	for variant: String in TrackVariant.ALL:
+		var driven := false
+		for index in range(first, first + TrackRoster.count(kind)):
+			driven = driven or variant in TrackVariant.offered(TrackRoster.file(index))
+		var way := Label.new()
+		way.text = TrackVariant.display_name(variant) if driven else ""
+		way.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		way.custom_minimum_size.x = TIME_WIDTH
+		line.add_child(way)
+	for label in line.get_children():
+		(label as Label).add_theme_font_size_override("font_size", TABLE_FONT)
+		(label as Label).add_theme_color_override("font_color", QUIET)
+	return line
+
+
+## One track: its number in its own grid, its name, and its best each way it
+## is driven, over a bar in the colour of what that is worth. A way it is not
+## driven is left blank, which is not the same as a dash: a dash is a time
+## still to set.
 ##
 ## Below zero means no time, and a dash. A time dropped because its track was
 ## edited comes back below zero too, silently, from the same call - which is
 ## right: it was set on a road that no longer exists. Do not "fix" it.
 func _line(index: int, number: int) -> Control:
 	var file := TrackRoster.file(index)
-	var best := TrackTimes.best(file)
-	var medal := Medal.earned(best, TrackRoster.targets(index))
-
-	var line := HBoxContainer.new()
-	line.add_theme_constant_override("separation", 12)
+	var line := _row()
 
 	var place := Label.new()
 	place.text = "%02d" % number
 	place.custom_minimum_size.x = 40.0
 	place.add_theme_color_override("font_color", QUIET)
+	place.add_theme_font_size_override("font_size", TABLE_FONT)
 	line.add_child(place)
 
 	var name := Label.new()
 	name.text = TrackRoster.track_name(index).to_upper()
 	name.clip_text = true
 	name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name.add_theme_font_size_override("font_size", TABLE_FONT)
 	line.add_child(name)
 
+	var offered := TrackVariant.offered(file)
+	for variant: String in TrackVariant.ALL:
+		line.add_child(_best(file, index, variant) if variant in offered else _blank())
+	return line
+
+
+## A best time over its medal's bar. The bar and not only the colour of the
+## time, for the reason the grid has one under every picture: against a dark
+## panel a silver time and a time worth nothing are two shades of pale.
+func _best(file: String, index: int, variant: String) -> Control:
+	var best := TrackTimes.best(file, variant)
+	var medal := Medal.earned(best,
+		TrackVariant.targets(file, TrackRoster.targets(index), variant))
+	var cell := _blank()
 	var time := Label.new()
+	time.name = "Time"
 	time.text = RaceClock.format(best) if best >= 0.0 else NOTHING
 	time.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	time.custom_minimum_size.x = 120.0
-	line.add_child(time)
+	time.add_theme_font_size_override("font_size", TABLE_FONT)
+	time.add_theme_color_override("font_color", Medal.colour(medal))
+	cell.add_child(time)
+	var bar := ColorRect.new()
+	bar.name = "Medal"
+	bar.custom_minimum_size = Vector2(0.0, MEDAL_BAR)
+	bar.color = Medal.colour(medal)
+	bar.modulate.a = 1.0 if medal != Medal.NONE else 0.0
+	cell.add_child(bar)
+	return cell
 
-	var worth := Label.new()
-	worth.text = Medal.label(medal) if medal != Medal.NONE else ""
-	worth.custom_minimum_size.x = 100.0
-	worth.add_theme_color_override("font_color", Medal.colour(medal))
-	line.add_child(worth)
 
-	for label in [place, name, time, worth]:
-		(label as Label).add_theme_font_size_override("font_size", 22)
+## A column's width with nothing in it.
+func _blank() -> VBoxContainer:
+	var cell := VBoxContainer.new()
+	cell.custom_minimum_size.x = TIME_WIDTH
+	cell.add_theme_constant_override("separation", 0)
+	return cell
+
+
+func _row() -> HBoxContainer:
+	var line := HBoxContainer.new()
+	line.add_theme_constant_override("separation", 12)
 	return line
 
 
@@ -320,6 +390,10 @@ static func _wins(won: int, contested: int) -> String:
 
 ## How many of the tracks have a best time on them. Not a counter in `Stats`:
 ## `TrackTimes` already knows.
+##
+## As written only, never any other way. With every way counted it could reach
+## over a hundred, and a number that big hides the one it is there to say:
+## whether the tracks themselves have all been driven.
 func _tracks_with_a_time() -> String:
 	var timed := 0
 	var total := 0

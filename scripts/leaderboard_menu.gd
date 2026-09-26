@@ -8,6 +8,11 @@ extends Control
 ## nearly always about to look at the next one, and a page they have to back
 ## out of and come back into twenty times is a page they look at once.
 ##
+## Every way of driving a track has a board of its own, so the way is picked
+## here too, off the same row of ways the track's own page has. It is held
+## across tracks: somebody reading the Hard boards reads them one track after
+## another, not NORMAL, then Hard, then NORMAL again.
+##
 ## Readable without an account. Somebody deciding whether it is worth making
 ## one should be able to see what they would be joining, and a board that
 ## demands a sign-in before it will show you anything is a board with nobody
@@ -35,9 +40,15 @@ const LIST_HEIGHT := 400.0
 const LIST_LEAST := 150.0
 ## Kept clear above and below the page, so it never sits flush to the edge.
 const CLEARANCE := 24.0
+## How wide the page is, and how big its row of ways: smaller than the track
+## page's, where the ways are the main thing on it, and big enough to read.
+const PAGE_WIDTH := 660.0
+const WAYS_FONT := 22
+const WAYS_HEIGHT := 50.0
 
 var _panel: PanelContainer
 var _picker: OptionButton
+var _ways: WaysRow
 var _scroll: ScrollContainer
 var _rows: VBoxContainer
 var _note: Label
@@ -45,6 +56,8 @@ var _close: Button
 
 ## Which slot the picker is showing, as an index into the roster.
 var _showing := 0
+## Which way of driving it: whose board is up.
+var _variant := TrackVariant.NORMAL
 ## Bumped every time a board is asked for, so an answer to a question the
 ## player has already moved on from can be dropped rather than drawn.
 var _asked := 0
@@ -64,12 +77,15 @@ func _ready() -> void:
 
 
 ## Show the boards, opening on a particular track where there is one worth
-## opening on - the one the player was just looking at.
-func open(track_file: String = "") -> void:
+## opening on - the one the player was just looking at - and on the way of
+## driving it they last drove, where that is not NORMAL.
+func open(track_file: String = "", variant := TrackVariant.NORMAL) -> void:
 	var index := TrackRoster.index_of(track_file)
 	if index >= 0:
 		_showing = index
 		_picker.selected = _picker.get_item_index(index)
+	_variant = variant
+	_set_out_the_ways()
 	show()
 	_fit_the_list()
 	_close.grab_focus()
@@ -114,7 +130,10 @@ func _build() -> void:
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 14)
-	box.custom_minimum_size = Vector2(560.0, 0.0)
+	# Wide enough for all five ways of driving a track in a row, so the page
+	# is the same width whichever track is picked - an acrobatic track shows
+	# two of them, and a page that shrank to fit would jump on every pick.
+	box.custom_minimum_size = Vector2(PAGE_WIDTH, 0.0)
 	margin.add_child(box)
 
 	var heading := Label.new()
@@ -133,6 +152,12 @@ func _build() -> void:
 			_picker.add_item(TrackRoster.track_name(index).to_upper(), index)
 	_picker.item_selected.connect(_on_picked)
 	box.add_child(_picker)
+
+	_ways = WaysRow.new()
+	_ways.font_size = WAYS_FONT
+	_ways.button_height = WAYS_HEIGHT
+	_ways.chosen.connect(_on_way_chosen)
+	box.add_child(_ways)
 
 	_scroll = ScrollContainer.new()
 	_scroll.custom_minimum_size = Vector2(0.0, LIST_HEIGHT)
@@ -184,7 +209,29 @@ func _fit_the_list() -> void:
 
 func _on_picked(item: int) -> void:
 	_showing = _picker.get_item_id(item)
+	_set_out_the_ways()
 	_fetch()
+
+
+func _on_way_chosen(variant: String) -> void:
+	_variant = variant
+	_fetch()
+
+
+## The row of ways as the track being shown has them. A way the track does not
+## even show - HARD on an acrobatic track - drops back to NORMAL; one it shows
+## faded stays held, and its board says why it is empty.
+func _set_out_the_ways() -> void:
+	var file := TrackRoster.file(_showing)
+	_ways.show_for(file)
+	if not _ways.button(_variant).visible:
+		_variant = TrackVariant.NORMAL
+	_ways.hold(_variant)
+
+
+## The row of ways on this page, for the menu to hand CHAOS its colour.
+func ways() -> WaysRow:
+	return _ways
 
 
 func _on_account_changed() -> void:
@@ -207,7 +254,13 @@ func _fetch() -> void:
 	_asked += 1
 	var asked := _asked
 	var file: String = TrackRoster.file(_showing)
-	var rows: Array = await Leaderboard.board(file)
+	if _variant not in TrackVariant.offered(file):
+		# Not driven this way, so nobody has a time on it or ever will. Saying
+		# so beats a board that only ever says nobody has been first.
+		_clear()
+		_note.text = TrackVariant.why_not(file, _variant)
+		return
+	var rows: Array = await Leaderboard.board(file, false, _variant)
 
 	# The player has moved to another track, or shut the page, since this was
 	# asked for. Drawing it now would put one track's times under another
@@ -242,7 +295,7 @@ func _show_board(rows: Array) -> void:
 		# Being off the bottom of the board is not the same as not being on
 		# the board, and a player who has driven the track should be told
 		# which of the two they are.
-		var mine := TrackTimes.best(TrackRoster.file(_showing))
+		var mine := TrackTimes.best(TrackRoster.file(_showing), _variant)
 		if mine >= 0.0:
 			_note.text = ("Your %s is not in the top %d yet."
 				% [RaceClock.format(mine), rows.size()])

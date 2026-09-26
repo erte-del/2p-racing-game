@@ -18,7 +18,8 @@ A split-screen two-player racing game, built in Godot 4.7 (GDScript).
 assets/models/    imported .glb models
 scenes/           main.tscn and per-entity scenes
 scripts/          GDScript
-tracks/           the twenty laid-out tracks, one file each
+tracks/           the laid-out tracks, one file each: twenty, then the
+                  acrobatic ten and the bot roads in folders of their own
 tools/            Blender export scripts and the checks (not shipped)
 backend/          the server side: the schema, the setup, the emails
 ```
@@ -2763,13 +2764,23 @@ Scenery is left out of them. At the size they are shown, trees and hills come
 out as noise across the one thing the picture is for, which is the shape of the
 road.
 
+Pressing a track opens a page of its own rather than starting a race: its
+name, a wide overhead shot, its board and the player's time and place on it,
+and under them a row of the ways it can be driven, with PLAY to drive the one
+held down. See [Track variants](#track-variants) for the ways, and for what
+the page does with the one held down.
+
 Under the grid, above Back, is Leaderboard. It opens on whichever track the
 cursor is sitting on, worked out from what currently holds focus rather than
 remembered, so it cannot go stale. That is one page with the track picked
 inside it rather than a board hung off each of the twenty cells: a player
 looking at one board is nearly always about to look at the next, and a page
 they have to back out of and come back into twenty times is a page they look
-at once.
+at once. Every way of driving a track has a board of its own, so the page has
+the track page's row of ways under its picker, and the way held stays held
+from one track to the next - somebody reading the Hard boards reads them one
+after another. It opens on the track as written, except on the track the
+player has just come back from, where it opens on the way they drove it.
 
 Beside it, in the same row, is Statistics - see [Statistics](#statistics). It
 is there whether or not the build has a server, since everything on it is kept
@@ -2969,6 +2980,7 @@ is `TrackVariant.described` with no roll. It has no medals: a target measured
 on one roll of the hazards is only a target for that roll. It counts in
 Statistics as a completed race like any other time trial, and like every
 variant it does nothing for the medal gate.
+
 Which ways a track offers is a table in `TrackVariant` keyed by file name, and
 not a line in the track file. A time's fingerprint is taken over the whole of
 its track's file, so adding a line to all thirty would throw away every best
@@ -2984,7 +2996,13 @@ course has except the file and the variant: the course's `lay_out()` has
 already mirrored it, and a second pass would mirror it back.
 
 A way is picked on the track's own page, by holding its button down, and PLAY
-drives the way held down. A way the track does not offer is faded rather than
+drives the way held down. The row of ways is `WaysRow`, one control that the
+track page and the leaderboard both put up. Two copies of five buttons,
+each with its own look, would drift apart, and a player who has learnt the
+row on one page should meet the same row on the other. It is what writes HARD
+in red and MIRROR mirrored, and CHAOS is handed its colour by the menu each
+frame, so every CHAOS on the screen is the colour chaos mode's button is at
+that moment. A way the track does not offer is faded rather than
 hidden: the row of buttons stays the same from one track to the next, and a
 faded way's board is still worth reading. Holding one down turns PLAY off and
 puts a line over it saying why - `TrackVariant.why_not()`, so every page that
@@ -3048,6 +3066,20 @@ waits for lifts.
 
 ```
 Godot --path . --headless --fixed-fps 60 --script tools/checks/variant_drive.gd
+```
+
+The other pages that read times read them per way. Statistics has a column
+for each - see [Statistics](#statistics) - and the leaderboard the row of ways
+above. The medal gate reads none of them: it counts golds on the tracks as
+written, since a mirror gold on a track already golded is the same driving
+counted twice. `tools/checks/variant_pages.gd` sets times on a few ways of a
+few tracks and reads both pages back: each time under its own way, worth what
+it is that way, and the leaderboard holding the right way as the track
+changes under it. `tools/checks/leaderboard_shot.gd` photographs the row.
+
+```
+Godot --path . --headless --script tools/checks/variant_pages.gd
+Godot --path . --script tools/checks/leaderboard_shot.gd -- /tmp/shots
 ```
 
 `tools/checks/track_select.gd` holds MIRROR down on First Light's page, presses
@@ -3189,7 +3221,7 @@ A page of lifetime totals - how far the cars have been driven and for how
 long, how many races were finished and how many won, how many tracks have a
 time, how many coins were picked up, how many cars were wrecked, how many
 resets were asked for - and under them the best time and medal on every
-track. It opens from two places: Statistics beside Controls in the settings,
+track, each way it is driven. It opens from two places: Statistics beside Controls in the settings,
 which is where a player looking for it by name tries first and which works over
 a paused race as well as on the title, and Statistics beside Leaderboard on the
 track page, where half of the page - the table of times - is already the
@@ -3213,6 +3245,21 @@ call, and shows as a dash - which is right, because it was set on a road that
 no longer exists. Locked tracks keep their row and their name, so the table
 does not change shape as a player unlocks things, and the acrobatic tracks are
 grouped under their own heading as they are on the select screen.
+
+Every way of driving a track has a column: NORMAL, HARD, CHAOS, MIRROR and
+REVERSE, in the order the track page has them. All five at once rather than a
+row of ways to pick one from, because this page is there to be read at a
+glance and five columns fit, at the largest interface size too. A way a track
+is not driven is left blank, which is not a dash: a dash is a time still to
+set. Each group's heading names only the columns it fills, so the acrobatic
+tracks' says NORMAL and MIRROR. Every time sits over a thin bar in the colour
+of its medal, worked out against that way's own targets. It is a bar rather
+than only a coloured time, for the reason the grid has one: against a dark
+panel a silver time and a time worth nothing are two shades of pale.
+
+TRACKS WITH A TIME counts the tracks as written and no other way. With every
+way counted it could reach over a hundred, and a number that big hides the
+one it is there to say: whether the tracks themselves have all been driven.
 
 ### What a number means
 
@@ -3381,6 +3428,11 @@ and pushes up anything better that was set here before the account existed.
 That is the backup half: reinstall the game, or open it on another machine, and
 twenty best laps are where they were left.
 
+Every way of driving a track has a board of its own, kept under the track's key
+with the way on the end, exactly as its time is (see [Track times](#track-times)).
+Pulling a player's times down on sign-in splits the key back into the track
+and the way, so a mirrored time comes back as a mirrored time.
+
 Reading a board works signed out, deliberately. Somebody deciding whether an
 account is worth making should be able to see what they would be joining, and a
 board that demands a sign-in before it will show you anything is a board with
@@ -3425,6 +3477,13 @@ tuned, and costs nothing when it is not. A track that sets no targets has no
 medals rather than every medal, and one that offers only some of them is walked
 past rather than stalled on: a track with no silver takes a lap between the
 gold and bronze times as bronze, and tells the player they are driving at gold.
+
+A way of driving a track that is a different road has targets of its own,
+measured rather than guessed - see [Where the numbers come
+from](#where-the-numbers-come-from). A mirrored lap is worth what the track's
+is, since it is the same lap turned round, so Mirror shares the track's.
+Reverse's are in `TrackVariant.TARGETS`, and a way with no row there, like Hard
+and track chaos for now, has a time and a board and no medals.
 
 The finish screen says the time, the medal in its own colour, and both of the
 things a player might be chasing - how far under their own best the run was,
@@ -3961,6 +4020,14 @@ again the next time anything asks. A remembered count would be a second copy of
 a number that already exists, and the two would disagree the first time
 anybody tuned a track. It costs a few file reads on a screen that is being
 drawn anyway.
+
+**Only the tracks as written count.** `golds_in()` asks `TrackTimes.best()`
+with no way named, which is the track as written. A gold mirrored, reversed or
+on Hard is its own gold on its own road, and shows as one, but it opens
+nothing. The gate asks whether a player has driven half of these properly, and
+a mirror gold on a track already golded is the same driving counted twice.
+`tools/checks/progress.gd` sets golds on other ways and checks the gate stays
+shut.
 
 **Acrobatic tracks are not gated.** They are a different thing to drive, in
 their own grid, and a player who cannot find five golds among the first ten
@@ -5093,7 +5160,7 @@ Godot --path . --script tools/checks/decorate_shot.gd -- /tmp/shots
 
 ## Adding a track
 
-Everything a track needs is in place, so adding a twenty-first is three steps
+Everything a track needs is in place, so adding a twenty-first is four steps
 and no code:
 
 1. Write `tracks/NN_name.gd` extending `TrackDefinition`, set its `medals()`,
@@ -5101,9 +5168,14 @@ and no code:
    `tools/checks/track_map.gd`.
 2. Add its path to `TrackRoster.FILES`, in the order it should appear.
 3. Run `tools/track_thumbnails.gd` to draw its overhead shot.
+4. Give it a row in `TrackVariant.OFFERED`, the ways it can be driven.
+   `tools/checks/variants.gd` says which those are: it reports every way that
+   would build clean and is not listed. If it offers Reverse, give that a row
+   in `TrackVariant.TARGETS` too, from `tools/lap_times.gd -- reverse`, since
+   the check refuses a track driven backwards with no targets.
 
-The name on the button, the slot in the grid, the times, the solo race and the
-checks all follow from those.
+The name on the button, the slot in the grid, the times, the solo race, the
+track page and the checks all follow from those.
 
 ## What chaos looks like
 

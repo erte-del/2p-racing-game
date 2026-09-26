@@ -147,13 +147,6 @@ extends Control
 ## tint takes the word with it.
 @export_range(0.0, 1.0) var chaos_tint := 0.5
 
-@export_group("Track page")
-## How far a way of driving a track does not offer is faded. Faded rather than
-## hidden, and still pressable: its board is still worth reading, and a row of
-## buttons that changes length from track to track is a row a player has to
-## read again every time.
-@export_range(0.0, 1.0) var unoffered_alpha := 0.4
-
 @export_group("Mode choice")
 ## How long the flavour buttons take to roll out from under infinite. Long
 ## enough to read as movement, short enough that a player who knows what they
@@ -209,12 +202,7 @@ const WON_COLOUR := Color(0.44, 0.85, 0.52)
 @onready var _detail_heading: Label = $TrackDetail/Page/Panel/Margin/Box/Heading
 @onready var _detail_blurb: Label = $TrackDetail/Page/Panel/Margin/Box/Blurb
 @onready var _detail_picture: TextureRect = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Picture
-@onready var _detail_normal: Button = $TrackDetail/Page/Panel/Margin/Box/Variants/Normal
-## Track chaos, not chaos mode - see `TrackVariant.TRACK_CHAOS`.
-@onready var _detail_track_chaos: Button = $TrackDetail/Page/Panel/Margin/Box/Variants/TrackChaos
-@onready var _detail_hard: Button = $TrackDetail/Page/Panel/Margin/Box/Variants/Hard
-@onready var _detail_mirror: Button = $TrackDetail/Page/Panel/Margin/Box/Variants/Mirror
-@onready var _detail_reverse: Button = $TrackDetail/Page/Panel/Margin/Box/Variants/Reverse
+@onready var _detail_ways: WaysRow = $TrackDetail/Page/Panel/Margin/Box/Variants
 @onready var _detail_play: Button = $TrackDetail/Page/Panel/Margin/Box/Body/You/Play
 @onready var _detail_why: Label = $TrackDetail/Page/Panel/Margin/Box/Body/You/Why
 @onready var _detail_back: Button = $TrackDetail/Page/Panel/Margin/Box/Back
@@ -272,37 +260,15 @@ func _ready() -> void:
 	_normal_tracks_button.pressed.connect(_open_track_grid.bind(TrackRoster.NORMAL))
 	_acrobatic_button.pressed.connect(_open_track_grid.bind(TrackRoster.ACROBATIC))
 	_track_back.pressed.connect(_close_track_choice)
-	# The four ways of driving it are a choice held down, one at a time, and
-	# PLAY is what starts the race: picking how to drive a track and setting
-	# off are two different presses, so a player can look at each before going.
+	# The ways of driving it are a choice held down, one at a time, and PLAY
+	# is what starts the race: picking how to drive a track and setting off
+	# are two different presses, so a player can look at each before going.
 	#
 	# Holding one down puts that way's board up, and the player's time and
 	# place on it: each way is a road of its own, with a board of its own.
-	var ways := ButtonGroup.new()
-	var buttons := _detail_normal.get_parent().get_children()
-	for at in buttons.size():
-		var way := buttons[at] as Button
-		way.button_group = ways
-		way.pressed.connect(_choose_detail_variant.bind(TrackVariant.ALL[at]))
+	_detail_ways.chosen.connect(_choose_detail_variant)
 	_detail_play.pressed.connect(_start_detail_track)
 	_detail_back.pressed.connect(_close_track_detail)
-	# MIRROR is written mirrored, flipped left to right about its own middle
-	# so it reads the way the word would in a mirror. It is a label inside the
-	# button rather than the button's own text, because the row a button sits
-	# in puts its scale back to one every time it lays it out; nothing lays
-	# out a label hung inside a button. The middle moves whenever the button
-	# is resized, so it is re-centred then rather than set once.
-	var word: Label = _detail_mirror.get_node("Word")
-	word.add_theme_font_size_override("font_size",
-		_detail_mirror.get_theme_font_size("font_size"))
-	word.scale.x = -1.0
-	word.resized.connect(func() -> void: word.pivot_offset = word.size * 0.5)
-	# And the button is held to the width the word needs, as a button with its
-	# own text would be. A button with no text of its own asks for next to no
-	# room, so in a row that is short of it this one was the one squeezed, with
-	# its word spilling over the buttons either side.
-	_detail_mirror.custom_minimum_size.x = (word.get_minimum_size().x
-		+ _detail_mirror.get_theme_stylebox("normal").get_minimum_size().x)
 	_account_button.pressed.connect(_on_account_pressed)
 	_account_screen.closed.connect(_on_account_closed)
 	_boards_button.pressed.connect(_on_boards_pressed)
@@ -381,24 +347,12 @@ func _process(delta: float) -> void:
 	# hovered or focused, which is most of the time it is on the screen.
 	_chaos_button.modulate = Color.from_hsv(
 		fmod(_elapsed / chaos_cycle_seconds, 1.0), chaos_tint, 1.0)
-	# The track page's CHAOS turns the same way. It is track chaos, a different
-	# thing from the chaos mode the button above belongs to, but it is the one
-	# way of driving a track that refuses to sit still, so it says so the same
-	# way.
-	# Its own alpha kept: that is what says whether the track offers it.
-	_detail_track_chaos.modulate = Color(_chaos_button.modulate,
-		_detail_track_chaos.modulate.a)
-	# A label does not know it is inside a button, so it is told which of the
-	# button's colours to wear: the same word a plain button would show.
-	var word: Label = _detail_mirror.get_node("Word")
-	var state := "font_color"
-	if _detail_mirror.button_pressed:
-		state = "font_pressed_color"
-	elif _detail_mirror.has_focus():
-		state = "font_focus_color"
-	elif _detail_mirror.is_hovered():
-		state = "font_hover_color"
-	word.add_theme_color_override("font_color", _detail_mirror.get_theme_color(state))
+	# Every CHAOS on a row of ways turns the same way. It is track chaos, a
+	# different thing from the chaos mode the button above belongs to, but it
+	# is the one way of driving a track that refuses to sit still, so it says
+	# so the same way - and in step with it, off the one clock.
+	_detail_ways.track_chaos_colour = _chaos_button.modulate
+	_boards_screen.ways().track_chaos_colour = _chaos_button.modulate
 	# While the modes are out, the slot holding them is exactly as tall as
 	# they are. That is what lets the flavour buttons slide out inside it: the
 	# inner grows as they roll down, and the slot grows with it, instead of
@@ -1030,15 +984,7 @@ func _open_track_detail(index: int, variant := TrackVariant.NORMAL) -> void:
 	_detail_blurb.text = TrackRoster.blurb(index)
 	_detail_blurb.visible = not _detail_blurb.text.is_empty()
 	_detail_picture.texture = TrackRoster.wide_shot(index)
-	# An acrobatic track is driven NORMAL or MIRROR and nothing else. HARD would
-	# stand barriers on its landings, and track chaos would roll them there,
-	# and a barrier on a landing is a much meaner thing than one on a straight.
-	# Rings, platforms, lifts and high roads are all aimed at where a ramp
-	# throws a car, so none of them has a reverse either.
-	var acrobatic := TrackRoster.kind_of(index) == TrackRoster.ACROBATIC
-	_detail_hard.visible = not acrobatic
-	_detail_track_chaos.visible = not acrobatic
-	_detail_reverse.visible = not acrobatic
+	_detail_ways.show_for(TrackRoster.file(index))
 	_track_choice.hide()
 	_track_detail.show()
 	# The way asked for is held down to start with, and the cursor is on PLAY,
@@ -1047,8 +993,7 @@ func _open_track_detail(index: int, variant := TrackVariant.NORMAL) -> void:
 	if variant not in TrackVariant.offered(TrackRoster.file(index)):
 		variant = TrackVariant.NORMAL
 	_detail_variant = variant
-	(_detail_normal.get_parent().get_child(TrackVariant.ALL.find(variant)) as Button
-		).button_pressed = true
+	_detail_ways.hold(variant)
 	_show_the_way()
 	_detail_play.grab_focus()
 	_fetch_the_detail_board()
@@ -1065,18 +1010,13 @@ func _choose_detail_variant(variant: String) -> void:
 
 ## What the page says about the way held down, apart from its board: the
 ## picture turned round for MIRROR, and PLAY only for a way the track offers,
-## with the reason under it where it does not. Every way the track does not
-## offer is faded, whichever is held.
+## with the reason under it where it does not.
 func _show_the_way() -> void:
 	var file := TrackRoster.file(_detail_index)
 	var offered := TrackVariant.offered(file)
 	# The same overhead shot flipped, rather than a second picture drawn and
 	# checked in: a mirrored road is exactly that shot the other way round.
 	_detail_picture.flip_h = _detail_variant == TrackVariant.MIRROR
-	var ways := _detail_normal.get_parent().get_children()
-	for at in ways.size():
-		(ways[at] as Button).modulate.a = (1.0 if TrackVariant.ALL[at] in offered
-			else unoffered_alpha)
 	_detail_play.disabled = _detail_variant not in offered
 	_detail_why.text = TrackVariant.why_not(file, _detail_variant)
 
@@ -1392,7 +1332,12 @@ func _on_account_closed() -> void:
 ## The boards open on whichever track the cursor is sitting on, because that
 ## is the one the player is asking about.
 func _on_boards_pressed() -> void:
-	_boards_screen.open(_track_under_the_cursor())
+	# The grid shows every track as written, so its boards open on NORMAL -
+	# except for the track the player has just come back from, whose board is
+	# the one for the way they drove it.
+	var file := _track_under_the_cursor()
+	_boards_screen.open(file, GameSettings.track_variant
+		if file == GameSettings.track_file else TrackVariant.NORMAL)
 
 
 func _on_boards_closed() -> void:

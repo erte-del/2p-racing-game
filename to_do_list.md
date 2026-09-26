@@ -11,8 +11,10 @@ ones, that comes to about a hundred timed configurations, and none of them had
 to be laid out.
 
 Written up 2026-09-25. **Built so far:** the track page (section 7) and build
-steps 1 to 6: Mirror, Reverse, Hard and track chaos, all playable off the
-page, and Reverse's medal targets measured (2026-09-26). The previous contents
+steps 1 to 7: Mirror, Reverse, Hard and track chaos, all playable off the
+page, Reverse's medal targets measured, every way on the Leaderboard and
+Statistics pages, and the README (2026-09-26). What is still open: Hard's
+targets (a person has to drive it), and one `track_times.gd` case (section 8). The previous contents
 of this file (the shop, customisation, statistics) were all built and are in
 the README. Git has the old text.
 
@@ -492,7 +494,7 @@ have to be measured, not assumed. The one exception is argued below.
 	  (`BotDriver`), not the tool's crude driver, which does not finish half
 	  the tracks as written. A lap with a put-back is left out. Normal tracks
 	  only: the bot does not drive rings. Hard prints no block to paste.
-- [ ] **The medal gate counts base tracks only.** `Progress.golds_in()`
+- [x] **The medal gate counts base tracks only.** `Progress.golds_in()`
 	  reads `TrackTimes.best()` with no variant, which means `NORMAL`, so this
 	  needs no change. It does need a sentence in the README and a case in
 	  `tools/checks/progress.gd`, because the day somebody passes a variant
@@ -542,15 +544,24 @@ largest interface size.
 
 ### The other pages
 
-- [ ] **Leaderboard** opens on the track *and variant* the grid is showing,
+- [x] **Leaderboard** opens on the track *and variant* the grid is showing,
 	  worked out from focus and the selector, the same way the track is
 	  worked out today. It gets the same selector, because a player reading
 	  one board is nearly always about to read the next.
-- [ ] **Statistics'** table of best times gets a column per timed variant
+	  *As built:* the grid has no selector any more, so it opens on NORMAL,
+	  or on the way last driven for the track just come back from. The row
+	  of ways is `WaysRow`, now shared with the track page. The way held
+	  stays held across tracks; one the track does not show (HARD on an
+	  acrobatic track) drops to NORMAL, and a way it shows faded says why
+	  in place of a board.
+- [x] **Statistics'** table of best times gets a column per timed variant
 	  (STANDARD, MIRROR, REVERSE, HARD) if that fits at the largest interface
 	  size, with a medal colour on each time. If it does not fit, it gets the
 	  selector. `screen_fit.gd` decides here too.
-- [ ] Statistics' "tracks with a time" stays a count of the twenty base
+	  *As built:* all five, CHAOS too since it has a time, in the page's
+	  order. It fits. Each time is over a bar of its medal's colour, as the
+	  grid does it; a way a track is not driven is blank, not a dash.
+- [x] Statistics' "tracks with a time" stays a count of the twenty base
 	  tracks. A number that can reach a hundred hides whether the twenty have
 	  been driven.
 - [x] The finish screen and the corner name the variant beside the track
@@ -567,9 +578,8 @@ These follow the shape everything under `tools/checks/` already has: a
 from `/root` by name, `save_path` pointed at scratch, a fault count and a
 non-zero exit.
 
-- [ ] **`tools/checks/variants.gd`**, headless. This is the one that matters.
-	  Built for Mirror and Reverse: everything below except what belongs to
-	  Hard and track chaos. For every track and every variant:
+- [x] **`tools/checks/variants.gd`**, headless. This is the one that matters.
+	  For every track and every variant:
 	- declared variants build with no `problems()`, `faults()` or
 	  `branch_problems()`, and undeclared variants that would pass are
 	  reported
@@ -586,7 +596,7 @@ non-zero exit.
 	  The check computes it by the old route, with no variant argument, and
 	  compares.
 	- nothing lands on a ramp or in a hole
-- [ ] It also hands the validator plans that are **wrong on purpose**, in the
+- [x] It also hands the validator plans that are **wrong on purpose**, in the
 	  habit of `barrier_layout.gd` and `trap_layout.gd`: a reversed jump that
 	  would need to climb 5 m, a reversed run-up of 30 m, and a Hard row pushed
 	  inside the dodge distance. A validator that has never rejected anything
@@ -603,6 +613,8 @@ non-zero exit.
 - [ ] `tools/checks/track_times.gd`: a time on Mirror does not touch the base
 	  time. Editing the base file drops the variant's times as well. A Hard
 	  plan that changes drops the Hard time and leaves the others alone.
+	  *The first is checked* (each way keeps its own time). The other two are
+	  not.
 - [x] `tools/checks/track_select.gd`: a way the track does not offer cannot
 	  be played and says why, the variant arrives in the race's `Track`, and
 	  coming back lands on the same track and variant.
@@ -610,9 +622,13 @@ non-zero exit.
 	  and two-player.
 - [x] `tools/checks/progress.gd`: golds on variants do not open a gate.
 - [x] `tools/checks/stats_race.gd`: a track chaos run adds a completed race.
-- [ ] `tools/checks/screen_fit.gd` opens the track page with the line under
-	  PLAY showing (done), and the Statistics page with its new columns (not
-	  yet), at every window shape and the largest interface size.
+- [x] `tools/checks/screen_fit.gd` opens the track page with the line under
+	  PLAY showing, and the Statistics page with its new columns, at every
+	  window shape and the largest interface size.
+- [x] *Added:* `tools/checks/variant_pages.gd`, headless: each way's time in
+	  its own Statistics column and worth what it is that way, the base-only
+	  count, and the leaderboard holding the right way as the track changes.
+	  `tools/checks/leaderboard_shot.gd` photographs the row.
 - [x] `tools/checks/track_select_shot.gd`, not headless: the track page with
 	  HARD held (faded, PLAY off, the line saying why) and with MIRROR held
 	  (the picture flipped).
@@ -630,10 +646,11 @@ non-zero exit.
 | `scripts/leaderboard.gd` | `variant` argument, and splitting the suffix on pull |
 | `scripts/game_settings.gd` | `track_variant`, unsaved, cleared with `track_file` |
 | `scripts/solo.gd`, `scripts/main.gd` | hand the variant to `Track`, reroll track chaos on retry, name it on screen |
-| `scripts/menu.gd` | the selector, the fourth cell look, focus seams |
+| `scripts/menu.gd` | the track page, and handing CHAOS its colour |
+| `scripts/ways_row.gd` | **new**: the row of ways, shared by the track page and the leaderboard |
 | `scripts/leaderboard_menu.gd`, `scripts/stats_menu.gd` | the variant on each page |
 | `tools/lap_times.gd` | the variant as an argument |
-| `tools/checks/…` | `variants.gd` and `variant_drive.gd` are new; six others extended (section 8) |
+| `tools/checks/…` | `variants.gd`, `variant_drive.gd`, `variant_pages.gd` and `leaderboard_shot.gd` are new; others extended (section 8) |
 
 **Nothing new in `user://`.** Variant times are more sections in
 `user://times.cfg`, keyed with a suffix. **Nothing changes on the server.**
@@ -642,21 +659,25 @@ this.
 
 ### README
 
-- [ ] A `## Track variants` section after `## Choosing a track`, with a
+- [x] A `## Track variants` section after `## Choosing a track`, with a
 	  subsection per variant: what the transform is, why each variant is or is
 	  not offered where it is, what Reverse does to a jump, why Hard is seeded
 	  and track chaos is not, how track chaos differs from chaos mode, and the
 	  command for each check.
-- [ ] `## Track times`: the key suffix, and why a variant's fingerprint covers
+- [x] `## Track times`: the key suffix, and why a variant's fingerprint covers
 	  its plan when a base track's covers only its file.
-- [ ] `## Medals`: Mirror shares the base targets and the argument for it;
+- [x] `## Medals`: Mirror shares the base targets and the argument for it;
 	  the others come from the table.
-- [ ] `## The medal gate`: base golds only.
-- [ ] `## Choosing a track`: the selector and the fourth cell look.
-- [ ] `## Adding a track`: a new track gets its variants from the check, and
+- [x] `## The medal gate`: base golds only.
+- [x] `## Choosing a track`: the selector and the fourth cell look.
+	  *As built:* the track page and the leaderboard's row of ways; there is
+	  no selector on the grid and no fourth look.
+- [x] `## Adding a track`: a new track gets its variants from the check, and
 	  one line in the `TrackVariant` table. That makes it four steps, not
 	  three.
-- [ ] `## Layout`: `scripts/track_variant.gd`.
+- [x] `## Layout`: `scripts/track_variant.gd`. *Not needed:* Layout lists
+	  folders, not scripts. Its line about `tracks/` was out of date and is
+	  fixed.
 
 ---
 
@@ -717,7 +738,8 @@ this.
    argument is confirmed or dropped here.~~ Done 2026-09-26. Mirror's
    argument holds on all thirty; Reverse has targets on all eighteen. Hard's
    wait on a person driving it (question 6).
-7. **The other pages** (Leaderboard, Statistics), then the README.
+7. ~~**The other pages** (Leaderboard, Statistics), then the README.~~ Done
+   2026-09-26.
 
 Each step can ship without the steps after it. A variant with no targets has
 no medals and still works, and a variant the table does not offer does not
