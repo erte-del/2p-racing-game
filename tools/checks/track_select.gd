@@ -8,7 +8,7 @@ extends SceneTree
 # chosen and then quietly not raced. And a way of driving it, held down on the
 # track's page, which is a fourth.
 
-const VARIANTS := "TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/"
+const VARIANTS := "TrackDetail/Page/Panel/Margin/Box/Variants/"
 
 
 func _init() -> void:
@@ -540,7 +540,7 @@ func _check_every_page(settings: Node) -> int:
 	Engine.get_main_loop().root.add_child(menu)
 	for i in 20:
 		await Engine.get_main_loop().process_frame
-	var variants := "TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/"
+	var variants := "TrackDetail/Page/Panel/Margin/Box/Variants/"
 	var picture: TextureRect = menu.get_node(
 		"TrackDetail/Page/Panel/Margin/Box/Body/Left/Picture")
 	var opened := 0

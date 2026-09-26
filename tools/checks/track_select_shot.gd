@@ -106,7 +106,7 @@ func _init() -> void:
 	root.get_texture().get_image().save_png("%s/08_track_page.png" % out)
 	# HARD held down: its own board, which nobody is on yet, no time, and PLAY
 	# off with the line under it saying why.
-	var hard: Button = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Hard")
+	var hard: Button = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Variants/Hard")
 	hard.button_pressed = true
 	hard.pressed.emit()
 	for i in 12:
@@ -129,7 +129,7 @@ func _init() -> void:
 	# turned round, rather than a second picture drawn and checked in, and
 	# HARD and CHAOS faded beside it, since this track does not offer them.
 	menu.call("_open_track_detail", 0)
-	var mirror: Button = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Mirror")
+	var mirror: Button = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Variants/Mirror")
 	mirror.button_pressed = true
 	mirror.pressed.emit()
 	for i in 12:
@@ -137,7 +137,7 @@ func _init() -> void:
 	root.get_texture().get_image().save_png("%s/12_track_page_mirror.png" % out)
 	# REVERSE held on a track that offers it, and on one that does not, whose
 	# line over PLAY is that track's own reason rather than a generic one.
-	var reverse: Button = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Reverse")
+	var reverse: Button = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Variants/Reverse")
 	reverse.button_pressed = true
 	reverse.pressed.emit()
 	for i in 12:

@@ -474,17 +474,21 @@ have to be measured, not assumed. The one exception is argued below.
 
 *Built for First Light, 2026-09-26.* The design first had a selector row over
 the track grid. What was built instead is a page of the track's own, opened by
-pressing its cell: the track's name and blurb, a wide overhead shot, and under
-it the four ways of driving it, held down one at a time:
+pressing its cell: the track's name and blurb, a wide overhead shot, and the
+ways of driving it, held down one at a time:
 
 ```
-NORMAL   HARD   CHAOS   MIRROR
+NORMAL   HARD   CHAOS   MIRROR   REVERSE
 ```
 
 HARD is written in red. CHAOS is track chaos, and turns through the colours
 the way chaos mode's button does. MIRROR is written mirrored. Beside the
 picture is the board for the way held down, and beside that the player's time
-and place on it, with PLAY under them and BACK across the bottom.
+and place on it, with PLAY under them. The ways are a row of their own across
+the whole page, over BACK, rather than squeezed under the picture: with five
+of them that was the only way to make them big enough to read at a glance.
+The picture is 680x340, the most the page can take and still fit at the
+largest interface size.
 
 - [x] The page, `TrackDetail` in `scenes/menu.tscn`, opened from First Light
 	  only while it is being designed. Checked by `screen_fit.gd`,

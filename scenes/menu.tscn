@@ -436,65 +436,10 @@ layout_mode = 2
 theme_override_constants/separation = 16
 
 [node name="Picture" type="TextureRect" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left"]
-custom_minimum_size = Vector2(600, 300)
+custom_minimum_size = Vector2(680, 340)
 layout_mode = 2
 expand_mode = 1
 stretch_mode = 5
-
-[node name="Variants" type="HBoxContainer" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="Normal" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 20
-size_flags_horizontal = 3
-toggle_mode = true
-text = "NORMAL"
-
-[node name="Hard" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 20
-size_flags_horizontal = 3
-toggle_mode = true
-text = "HARD"
-theme_override_colors/font_color = Color(0.95, 0.3, 0.3, 1)
-theme_override_colors/font_hover_color = Color(1, 0.4, 0.4, 1)
-theme_override_colors/font_focus_color = Color(1, 0.4, 0.4, 1)
-theme_override_colors/font_pressed_color = Color(1, 0.4, 0.4, 1)
-theme_override_colors/font_hover_pressed_color = Color(1, 0.4, 0.4, 1)
-
-[node name="TrackChaos" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 20
-size_flags_horizontal = 3
-toggle_mode = true
-text = "CHAOS"
-
-[node name="Mirror" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 20
-size_flags_horizontal = 3
-toggle_mode = true
-
-[node name="Word" type="Label" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Mirror"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-mouse_filter = 2
-text = "MIRROR"
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="Reverse" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 20
-size_flags_horizontal = 3
-toggle_mode = true
-text = "REVERSE"
 
 [node name="Board" type="VBoxContainer" parent="TrackDetail/Page/Panel/Margin/Box/Body"]
 custom_minimum_size = Vector2(330, 0)
@@ -583,6 +528,66 @@ autowrap_mode = 3
 [node name="Play" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/You"]
 layout_mode = 2
 text = "PLAY"
+
+[node name="Variants" type="HBoxContainer" parent="TrackDetail/Page/Panel/Margin/Box"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Normal" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Variants"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 64)
+theme_override_font_sizes/font_size = 28
+size_flags_horizontal = 3
+toggle_mode = true
+text = "NORMAL"
+
+[node name="Hard" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Variants"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 64)
+theme_override_font_sizes/font_size = 28
+size_flags_horizontal = 3
+toggle_mode = true
+text = "HARD"
+theme_override_colors/font_color = Color(0.95, 0.3, 0.3, 1)
+theme_override_colors/font_hover_color = Color(1, 0.4, 0.4, 1)
+theme_override_colors/font_focus_color = Color(1, 0.4, 0.4, 1)
+theme_override_colors/font_pressed_color = Color(1, 0.4, 0.4, 1)
+theme_override_colors/font_hover_pressed_color = Color(1, 0.4, 0.4, 1)
+
+[node name="TrackChaos" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Variants"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 64)
+theme_override_font_sizes/font_size = 28
+size_flags_horizontal = 3
+toggle_mode = true
+text = "CHAOS"
+
+[node name="Mirror" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Variants"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 64)
+theme_override_font_sizes/font_size = 28
+size_flags_horizontal = 3
+toggle_mode = true
+
+[node name="Word" type="Label" parent="TrackDetail/Page/Panel/Margin/Box/Variants/Mirror"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+text = "MIRROR"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Reverse" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Variants"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 64)
+theme_override_font_sizes/font_size = 28
+size_flags_horizontal = 3
+toggle_mode = true
+text = "REVERSE"
 
 [node name="Back" type="Button" parent="TrackDetail/Page/Panel/Margin/Box"]
 layout_mode = 2

@@ -209,12 +209,12 @@ const WON_COLOUR := Color(0.44, 0.85, 0.52)
 @onready var _detail_heading: Label = $TrackDetail/Page/Panel/Margin/Box/Heading
 @onready var _detail_blurb: Label = $TrackDetail/Page/Panel/Margin/Box/Blurb
 @onready var _detail_picture: TextureRect = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Picture
-@onready var _detail_normal: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Normal
+@onready var _detail_normal: Button = $TrackDetail/Page/Panel/Margin/Box/Variants/Normal
 ## Track chaos, not chaos mode - see `TrackVariant.TRACK_CHAOS`.
-@onready var _detail_track_chaos: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/TrackChaos
-@onready var _detail_hard: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Hard
-@onready var _detail_mirror: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Mirror
-@onready var _detail_reverse: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Reverse
+@onready var _detail_track_chaos: Button = $TrackDetail/Page/Panel/Margin/Box/Variants/TrackChaos
+@onready var _detail_hard: Button = $TrackDetail/Page/Panel/Margin/Box/Variants/Hard
+@onready var _detail_mirror: Button = $TrackDetail/Page/Panel/Margin/Box/Variants/Mirror
+@onready var _detail_reverse: Button = $TrackDetail/Page/Panel/Margin/Box/Variants/Reverse
 @onready var _detail_play: Button = $TrackDetail/Page/Panel/Margin/Box/Body/You/Play
 @onready var _detail_why: Label = $TrackDetail/Page/Panel/Margin/Box/Body/You/Why
 @onready var _detail_back: Button = $TrackDetail/Page/Panel/Margin/Box/Back

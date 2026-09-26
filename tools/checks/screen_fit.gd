@@ -94,7 +94,7 @@ func _check(window: Vector2i, laid_out_least: Vector2) -> int:
 	# tall as it gets.
 	var pages := 0
 	var hard: Button = menu.get_node(
-		"TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Hard")
+		"TrackDetail/Page/Panel/Margin/Box/Variants/Hard")
 	for index in TrackRoster.TOTAL:
 		if not menu.call("_has_a_page", index):
 			continue
