@@ -69,6 +69,10 @@ var platform_height := 4.0
 ## by Track.
 var lift_length := 50.0
 var lift_drop := 3.0
+## How far everything on the road keeps from a jump, past either end of it.
+## Set by Track; read by `TrackVariant.reverse`, which builds jumps of its own
+## and has to keep them clear of what is already standing on the road.
+var jump_keep_out := 12.0
 ## The half-width the road is being built at. Changed with width().
 var half_width := 8.0
 ## Whether the road being built now is floating. Changed with floating().

@@ -443,16 +443,18 @@ stretch_mode = 5
 
 [node name="Variants" type="HBoxContainer" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 8
 
 [node name="Normal" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 20
 size_flags_horizontal = 3
 toggle_mode = true
 text = "NORMAL"
 
 [node name="Hard" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 20
 size_flags_horizontal = 3
 toggle_mode = true
 text = "HARD"
@@ -464,12 +466,14 @@ theme_override_colors/font_hover_pressed_color = Color(1, 0.4, 0.4, 1)
 
 [node name="TrackChaos" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 20
 size_flags_horizontal = 3
 toggle_mode = true
 text = "CHAOS"
 
 [node name="Mirror" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
 layout_mode = 2
+theme_override_font_sizes/font_size = 20
 size_flags_horizontal = 3
 toggle_mode = true
 
@@ -484,6 +488,13 @@ mouse_filter = 2
 text = "MIRROR"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="Reverse" type="Button" parent="TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+size_flags_horizontal = 3
+toggle_mode = true
+text = "REVERSE"
 
 [node name="Board" type="VBoxContainer" parent="TrackDetail/Page/Panel/Margin/Box/Body"]
 custom_minimum_size = Vector2(330, 0)

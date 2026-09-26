@@ -11,7 +11,7 @@ ones, that comes to about a hundred timed configurations, and none of them had
 to be laid out.
 
 Written up 2026-09-25. **Built so far:** the track page (section 7) and build
-steps 1 and 2, Mirror and its plumbing, playable off the page (2026-09-26). The previous contents
+steps 1 to 3: Mirror and Reverse, playable off the page (2026-09-26). The previous contents
 of this file (the shop, customisation, statistics) were all built and are in
 the README. Git has the old text.
 
@@ -99,7 +99,7 @@ also the medal targets (see section 6).
 - [x] `TrackVariant.offered(track_file) -> Array`, read from that table. The
 	  menu calls this for every cell, so it has to be a lookup and not a build.
 - [x] Bot roads offer nothing. The gate is one race against one road.
-- [ ] Acrobatic tracks offer Mirror and nothing else. See each section for why.
+- [x] Acrobatic tracks offer Mirror and nothing else. See each section for why.
 
 ### Identity: keys, fingerprints, signatures
 
@@ -216,21 +216,21 @@ the opposite order and from the opposite side.
 
 ### The transform
 
-- [ ] Pieces in reverse order. A corner keeps its turn sign but flips
+- [x] Pieces in reverse order. A corner keeps its turn sign but flips
 	  handedness because the car is travelling the other way, so `turn = -turn`.
 	  A climb, or a corner with a rise, has `rise = -rise`. Each piece keeps
 	  its own `half_width`, and the width blending already copes with seams in
 	  either order.
-- [ ] Placements: `offset = L - (offset + length)`, `lateral = -lateral`,
+- [x] Placements: `offset = L - (offset + length)`, `lateral = -lateral`,
 	  and `phases` negated. `L` is the old length.
-- [ ] **The fork's pad has to be moved, not just flipped.** `fork()` puts
+- [x] **The fork's pad has to be moved, not just flipped.** `fork()` puts
 	  the pad `pad_at` (4 m) inside the lane from the entry, so that the split
 	  and the reward arrive together (README, *The fork*). Reversed, it would
 	  sit at the far end of the lane, where it is a reward for having already
 	  made the choice. So a `BOOST_PAD` inside a `FORK` marker's span is put
 	  back at `pad_at` from the new entry. The slalom rows in the lane stay
 	  where they are and are held to `faults()` like every other row.
-- [ ] Traps keep their `dwell` and `travel`. A reversed trap is reached at a
+- [x] Traps keep their `dwell` and `travel`. A reversed trap is reached at a
 	  different moment after GO, so its rhythm on the reversed road is a new
 	  rhythm. That is fine: the trap checks already test every phase against
 	  every phase, not the phase the clock happens to line up.
@@ -246,15 +246,19 @@ backwards, that is a long flat run, a hole, and then 15 m of road where the
 ramp was, with no ramp facing the car. A reversed jump is therefore built from
 different parts:
 
-- [ ] The old landing, less `ramp_length`, becomes level road. Its last 15 m
+- [x] The old landing, less `ramp_length`, becomes level road. Its last 15 m
 	  becomes the new ramp.
-- [ ] The hole is the same hole.
-- [ ] The new landing is the old ramp's 15 m **plus the level straight that
+- [x] The hole is the same hole.
+- [x] The new landing is the old ramp's 15 m **plus the level straight that
 	  came before the jump** (its run-up), merged into one `jump(landing=...)`.
 	  `jump()` refuses a landing under 55 m, so the old run-up must be a
 	  straight of at least 40 m. Tracks are written with a run-up of 45 m or
 	  more, so this should hold, and the check confirms it.
-- [ ] `rise = -rise`. A jump that landed high is now a jump that lands low,
+	  *As built:* the landing takes as much run-up as a usual landing wants,
+	  but stops a jump keep-out short of the first thing standing past the
+	  hole, never under 55 m. Pieces are counted in samples so the course keeps
+	  its length exactly.
+- [x] `rise = -rise`. A jump that landed high is now a jump that lands low,
 	  which `jump()` allows "down as far as a track likes". A jump that
 	  dropped more than 3.5 m would need to climb more than 3.5 m reversed,
 	  which is more than a level jump can reach. **A track with a jump like
@@ -264,15 +268,18 @@ different parts:
 	  rule was set for a level landing: "a car on a boost comes down 48 m past
 	  the hole". The drive check runs a boosted car off every reversed jump
 	  that drops, and `jump_flight.gd`'s measurements are extended to cover it.
-- [ ] Anything that ends up on a new ramp or in a hole is a fault.
+	  *Not needed yet:* every jump on a normal track is level, so no reversed
+	  jump drops. Owed the day a track with a climbing jump offers Reverse.
+- [x] Anything that ends up on a new ramp or in a hole is a fault.
 	  `TrackFeatures.adopt()` is already handed `jump_spans()` as `reserved`,
-	  so the check reads that. The Wringer and Last Light both put a trap in a
-	  ramp's landing, and reversed, that trap sits in the run-up to a ramp.
-	  That is allowed as long as it stays off the ramp itself.
+	  so the check reads that. *As built:* no track has anything on a jump or
+	  its landing; the trouble runs the other way, with furniture on a run-up
+	  landing on a reversed landing. `variants.gd` holds every variant to
+	  `track_check.gd`'s rule - nothing on a jump piece or its keep-out.
 
 ### Grid and flag
 
-- [ ] The new grid is on the old finish straight, and the new flag is at the
+- [x] The new grid is on the old finish straight, and the new flag is at the
 	  old grid. Tracks start on a straight "long enough to reach it in a
 	  straight line" and end on a run to the line, so both ends should be
 	  long enough. `problems()` already says "not enough straight for the grid
@@ -280,14 +287,15 @@ different parts:
 
 ### Where it is not offered
 
-- [ ] **Acrobatic tracks: never.** Rings are one-way by definition (a ring
+- [x] **Acrobatic tracks: never.** Rings are one-way by definition (a ring
 	  "gone through backwards does not count"), platforms and lifts are timed
 	  around where the ramp throws the car, and a high road drops off its end
 	  onto the course. None of those has a reverse that is the same kind of
 	  thing.
-- [ ] A normal track whose reverse fails any of the above just does not offer
-	  it. Its cell is greyed, and the tooltip says why in one line: *a jump on
-	  this road drops too far to be climbed*.
+- [x] A normal track whose reverse fails any of the above just does not offer
+	  it. Its way is faded on the page and the line over PLAY says why, from
+	  `TrackVariant.WHY_NOT`. Whiplash and Last Light: a pad or a row within
+	  sixty metres before a ramp, which reversed is where a car comes down.
 
 Thumbnail: the same shot. The road is the same shape.
 
@@ -485,7 +493,7 @@ and place on it, with PLAY under them and BACK across the bottom.
 - [x] The other nineteen tracks, and the acrobatic ones with only NORMAL and
 	  MIRROR.
 - [x] PLAY drives the way held down, where the track offers it.
-- [ ] REVERSE. It is in the plan and not on the page.
+- [x] REVERSE, on normal tracks' pages only.
 - [x] A way a track does not offer is dimmed, with one line saying why
 	  (`TrackVariant.why_not()`, over PLAY). HARD and CHAOS say they are
 	  still being built.
@@ -523,8 +531,8 @@ from `/root` by name, `save_path` pointed at scratch, a fault count and a
 non-zero exit.
 
 - [ ] **`tools/checks/variants.gd`**, headless. This is the one that matters.
-	  Built for Mirror: everything below except what belongs to Reverse, Hard
-	  and track chaos. For every track and every variant:
+	  Built for Mirror and Reverse: everything below except what belongs to
+	  Hard and track chaos. For every track and every variant:
 	- declared variants build with no `problems()`, `faults()` or
 	  `branch_problems()`, and undeclared variants that would pass are
 	  reported
@@ -546,11 +554,15 @@ non-zero exit.
 	  would need to climb 5 m, a reversed run-up of 30 m, and a Hard row pushed
 	  inside the dodge distance. A validator that has never rejected anything
 	  has not been shown to work.
-- [ ] **`tools/checks/variant_drive.gd`**, headless, `--fixed-fps 60`. The bot
+- [x] **`tools/checks/variant_drive.gd`**, headless, `--fixed-fps 60`. The bot
 	  drives every declared timed variant from the grid to the flag in `Solo`,
 	  and a boosted car goes off every reversed jump that drops. Then there is
 	  one two-player run on a mirrored track in `Main`, to prove the variant
 	  reaches the second scene. This is what turns "declared" into "driven".
+	  *As built:* normal tracks only, NORMAL beside each variant; the
+	  acrobatic mirrors go through `acrobatic_drive.gd -- mirror`. No
+	  reversed jump drops, so no boosted runs yet. The two-player run is
+	  `mode_routing.gd`'s.
 - [ ] `tools/checks/track_times.gd`: a time on Mirror does not touch the base
 	  time. Editing the base file drops the variant's times as well. A Hard
 	  plan that changes drops the Hard time and leaves the others alone.
@@ -649,9 +661,9 @@ this.
    `track_select.gd` and `mode_routing.gd` extended.~~ Done 2026-09-26.
    Mirror is playable end to end: time, board, flipped picture, and the
    road named `FIRST LIGHT · MIRROR` in the race.
-3. **Reverse**, starting with the jump rebuild, then `variant_drive.gd`.
-   Expect the check to find a few tracks whose reverse does not work. That is
-   the check doing its job, not the feature failing.
+3. ~~**Reverse**, starting with the jump rebuild, then `variant_drive.gd`.~~
+   Done 2026-09-26. 18 of 20 normal tracks offer it; Whiplash and Last Light
+   do not. The bot drives every offered variant to the flag.
 4. **Hard**: `harden()`, settling the density (question 6), then the drive
    check.
 5. **Track chaos**: `reroll_track_chaos()`, timed against the densest

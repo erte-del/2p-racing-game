@@ -135,6 +135,21 @@ func _init() -> void:
 	for i in 12:
 		await process_frame
 	root.get_texture().get_image().save_png("%s/12_track_page_mirror.png" % out)
+	# REVERSE held on a track that offers it, and on one that does not, whose
+	# line over PLAY is that track's own reason rather than a generic one.
+	var reverse: Button = menu.get_node("TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Reverse")
+	reverse.button_pressed = true
+	reverse.pressed.emit()
+	for i in 12:
+		await process_frame
+	root.get_texture().get_image().save_png("%s/13_track_page_reverse.png" % out)
+	menu.call("_close_track_detail")
+	menu.call("_open_track_detail", TrackRoster.FILES.find("res://tracks/17_whiplash.gd"))
+	reverse.button_pressed = true
+	reverse.pressed.emit()
+	for i in 12:
+		await process_frame
+	root.get_texture().get_image().save_png("%s/14_track_page_reverse_refused.png" % out)
 	menu.call("_close_track_detail")
 
 	# Said as well as drawn: a name cut off at one end of twenty is easy to

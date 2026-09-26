@@ -2814,20 +2814,55 @@ before anything is built. Everything downstream of that - the road, the rails,
 the checkpoints, the furniture, the checks - is handed an ordinary definition
 and never has to ask where it came from.
 
-The ways are named constants, `NORMAL`, `MIRROR`, `HARD` and `TRACK_CHAOS`,
-rather than strings typed out where they are used, so a misspelt one is a
-compile error rather than a quiet extra board nobody can find. `NORMAL` is the
-track as written. Only `MIRROR` has a transform so far. `HARD` and track chaos
-have keys and boards already, but no track offers them until they have a
-transform, so nothing can drive the base track while calling it HARD.
+The ways are named constants, `NORMAL`, `MIRROR`, `REVERSE`, `HARD` and
+`TRACK_CHAOS`, rather than strings typed out where they are used, so a misspelt
+one is a compile error rather than a quiet extra board nobody can find.
+`NORMAL` is the track as written. `MIRROR` and `REVERSE` have transforms.
+`HARD` and track chaos have keys and boards already, but no track offers them
+until they have a transform, so nothing can drive the base track while calling
+it HARD.
 
 **Mirror** swaps left and right. Every corner turns the other way, and
 everything on the road - pads, rows, traps, the fork, rings, platforms, lifts,
 kickers and the high roads off them - stands on the other side. Climbs, jumps
 and lengths are untouched. The car is the same on both sides, so a mirrored lap
 is the same lap turned round, and it is worth the same medals as the track's
-own.
+own. The bot's laps back that up: on every normal track its mirrored lap is
+within 0.6% of its lap of the track as written.
 
+**Reverse** drives the track the other way: the grid is on the old finish
+straight and the flag where the grid was. Every corner, climb and hazard is met
+in the opposite order and from the other side, so corners turn the other way,
+climbs fall, and everything on the road changes sides. A fork's pad is put back
+the same few metres in from the lane's new entry, since at the far end of the
+lane it would reward a choice already made.
+
+Jumps are the hard part, and every normal track has at least one. Read
+backwards, a jump is a long run, a hole, and fifteen metres of road where the
+ramp was, with no ramp facing the car. So each is built again from the road
+around it. The old landing, less a ramp's length, becomes level road, and its
+last fifteen metres become the new ramp. The hole stays where it was. The old
+ramp and the level straight that was its run-up become the new landing. The
+pieces are counted in samples rather than metres, so the course comes out
+exactly as long as it went in, and every placement lands back on the stretch
+of road it stood on.
+
+That last part is where a track can refuse. Nothing may stand on a jump's
+landing, and nothing held a run-up to that. A pad sixty metres before a ramp
+is a pad on the approach, and reversed it is sixty metres past the hole. So a
+reversed landing stops short of the first thing standing past the hole, with a
+jump's keep-out to spare, though never shorter than the 55 m a landing has to
+be. Where even that would reach something, the track does not offer Reverse,
+and the reason is written down beside it in `TrackVariant.WHY_NOT` for the page
+to show. Whiplash and Last Light are the two: each has a pad or a row within
+sixty metres of a ramp. Every normal jump is level, so no reversed jump has to
+climb.
+
+The acrobatic tracks offer Mirror and nothing else, and their page does not
+show the rest. Rings, platforms, lifts and high roads are all aimed at where a
+ramp throws a car, and none of them has a reverse that is the same kind of
+thing. Reverse's medals are its own to measure, so until they are, a reversed
+track has a time and a board and no medal.
 Which ways a track offers is a table in `TrackVariant` keyed by file name, and
 not a line in the track file. A time's fingerprint is taken over the whole of
 its track's file, so adding a line to all thirty would throw away every best
@@ -2874,12 +2909,29 @@ would build clean but is not offered is reported too, so no track quietly
 misses out. A mirror has to be its own inverse to the millimetre - mirrored
 twice is the track as written, which is the quickest way to catch a sign
 flipped twice or not at all - and the check is shown a mirror with one lane
-left unturned, to prove it can say no. It also works out every base track's
+left unturned, to prove it can say no. A reverse has to be its own inverse too,
+compared as the road that gets built, sample by sample, rather than piece by
+piece. Reversing twice can move where a jump's piece ends and the straight
+after it begins without moving any road. Every hole in a reversed track has to
+be where a hole was, and the check is shown a jump that would have to climb
+five metres reversed and a run-up too short to land on, and has to refuse
+both. It also works out every base track's
 fingerprint and signature the old way, by hand, and fails if either has moved:
 every best time anybody has set is held against them.
 
 ```
 Godot --path . --headless --script tools/checks/variants.gd
+```
+
+`tools/checks/variant_drive.gd` is what turns "builds clean" into "can be
+driven". The bot drives every way every normal track offers, from the grid to
+the flag in `Solo`, beside the track as written, and prints each lap against
+the original. `tools/checks/acrobatic_drive.gd -- mirror` drives the mirrored
+acrobatic tracks with that check's own driver, which lines up with rings and
+waits for lifts.
+
+```
+Godot --path . --headless --fixed-fps 60 --script tools/checks/variant_drive.gd
 ```
 
 `tools/checks/track_select.gd` holds MIRROR down on First Light's page, presses

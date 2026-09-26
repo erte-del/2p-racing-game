@@ -441,6 +441,7 @@ func lay_out(definition: TrackDefinition) -> void:
 	definition.lift_length = lift_length
 	definition.lift_drop = lift_drop
 	definition.landing_length = landing_length
+	definition.jump_keep_out = jump_keep_out
 	definition.describe()
 	TrackVariant.apply(definition, variant)
 	_definition = definition

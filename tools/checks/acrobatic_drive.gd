@@ -3,6 +3,11 @@ extends SceneTree
 # Drive every acrobatic track with the car's own controls, and count the falls.
 #   Godot --path . --headless --fixed-fps 60 --script tools/checks/acrobatic_drive.gd
 #   Godot --path . --headless --fixed-fps 60 --script tools/checks/acrobatic_drive.gd -- res://tracks/acrobatic/a03_swing_out.gd
+#   Godot --path . --headless --fixed-fps 60 --script tools/checks/acrobatic_drive.gd -- mirror
+#
+# `mirror` drives each track mirrored instead, the one way an acrobatic track
+# is offered besides as written. variants.gd builds it; this is what shows a
+# ring or a lift on the other side of the road can still be reached.
 #
 # tools/lap_times.gd is what sets the targets, and it is no use for this: it
 # turns the car by rotating it, three radians a second whatever the grip, so it
@@ -56,11 +61,16 @@ func _init() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(times.save_path))
 		times.load_times()
 
-	var args := OS.get_cmdline_user_args()
+	var args := Array(OS.get_cmdline_user_args())
+	var variant := TrackVariant.NORMAL
+	if TrackVariant.MIRROR in args:
+		variant = TrackVariant.MIRROR
+		args.erase(TrackVariant.MIRROR)
 	var files: Array = args if not args.is_empty() else TrackRoster.ACROBATIC_FILES
 	var faults := 0
 	for file: String in files:
 		settings.track_file = file
+		settings.track_variant = variant
 		var solo: Node = load("res://scenes/solo.tscn").instantiate()
 		root.add_child(solo)
 		for i in 10:
@@ -74,7 +84,7 @@ func _init() -> void:
 		var track: Track = solo.get_node("Track")
 		var tries: PackedInt32Array = result["tries"]
 		print("%-14s %s in %s, tries per ring %s"
-			% [track.definition().track_name,
+			% [TrackVariant.title(track.definition().track_name, track.variant),
 				"finished" if result["finished"] else "DID NOT FINISH",
 				RaceClock.format(solo.get("_time")), Array(tries)])
 		if not result["finished"]:

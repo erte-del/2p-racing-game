@@ -574,13 +574,12 @@ func _check_every_page(settings: Node) -> int:
 				faults += 1
 			else:
 				opened += 1
-			# HARD and track chaos are for the normal tracks only.
-			var both: bool = (menu.get_node(variants + "Hard").visible
-				and menu.get_node(variants + "TrackChaos").visible)
-			if both != (kind == TrackRoster.NORMAL):
-				print("  %s's page %s HARD and CHAOS" % [called,
-					"hides" if kind == TrackRoster.NORMAL else "shows"])
-				faults += 1
+			# HARD, track chaos and REVERSE are for the normal tracks only.
+			for way in ["Hard", "TrackChaos", "Reverse"]:
+				if menu.get_node(variants + way).visible != (kind == TrackRoster.NORMAL):
+					print("  %s's page %s %s" % [called,
+						"hides" if kind == TrackRoster.NORMAL else "shows", way])
+					faults += 1
 			menu.call("_close_track_detail")
 		menu.call("_close_track_choice")
 	print("%d pages open, each with its own name and wide shot" % opened)
@@ -634,6 +633,7 @@ func _check_the_ways(settings: Node) -> int:
 		TrackVariant.HARD: menu.get_node(VARIANTS + "Hard"),
 		TrackVariant.TRACK_CHAOS: menu.get_node(VARIANTS + "TrackChaos"),
 		TrackVariant.MIRROR: menu.get_node(VARIANTS + "Mirror"),
+		TrackVariant.REVERSE: menu.get_node(VARIANTS + "Reverse"),
 	}
 	var offered := TrackVariant.offered(file)
 	for variant: String in TrackVariant.ALL:

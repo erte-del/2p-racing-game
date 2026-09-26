@@ -24,14 +24,15 @@ const HARD := "hard"
 ## the key its times are kept under, and in the notes.
 const TRACK_CHAOS := "track_chaos"
 const MIRROR := "mirror"
+const REVERSE := "reverse"
 
 ## In the order the track page shows them.
-const ALL := [NORMAL, HARD, TRACK_CHAOS, MIRROR]
+const ALL := [NORMAL, HARD, TRACK_CHAOS, MIRROR, REVERSE]
 
 ## The ways `apply()` knows how to make so far. HARD and track chaos have a key
 ## and a board already, but no transform yet: until they do, no track offers
 ## them, so nothing can drive the base track while calling it HARD.
-const BUILT := [NORMAL, MIRROR]
+const BUILT := [NORMAL, MIRROR, REVERSE]
 
 ## What each track offers besides NORMAL, by file name, in the order of
 ## `TrackRoster.FILES` and then `ACROBATIC_FILES`.
@@ -45,25 +46,25 @@ const BUILT := [NORMAL, MIRROR]
 ## is reported, so a track does not quietly miss out on one. Bot roads are not
 ## here at all. The gate is one race against one road.
 const OFFERED := {
-	"01_first_light": [MIRROR],
-	"02_long_way_round": [MIRROR],
-	"03_the_weave": [MIRROR],
-	"04_cold_start": [MIRROR],
-	"05_overpass": [MIRROR],
-	"06_split_decision": [MIRROR],
-	"07_pinch": [MIRROR],
-	"08_switchback": [MIRROR],
-	"09_the_gauntlet": [MIRROR],
-	"10_long_haul": [MIRROR],
-	"11_the_hook": [MIRROR],
-	"12_leap_of_faith": [MIRROR],
-	"13_needle": [MIRROR],
-	"14_relentless": [MIRROR],
-	"15_rattlesnake": [MIRROR],
-	"16_grinder": [MIRROR],
+	"01_first_light": [MIRROR, REVERSE],
+	"02_long_way_round": [MIRROR, REVERSE],
+	"03_the_weave": [MIRROR, REVERSE],
+	"04_cold_start": [MIRROR, REVERSE],
+	"05_overpass": [MIRROR, REVERSE],
+	"06_split_decision": [MIRROR, REVERSE],
+	"07_pinch": [MIRROR, REVERSE],
+	"08_switchback": [MIRROR, REVERSE],
+	"09_the_gauntlet": [MIRROR, REVERSE],
+	"10_long_haul": [MIRROR, REVERSE],
+	"11_the_hook": [MIRROR, REVERSE],
+	"12_leap_of_faith": [MIRROR, REVERSE],
+	"13_needle": [MIRROR, REVERSE],
+	"14_relentless": [MIRROR, REVERSE],
+	"15_rattlesnake": [MIRROR, REVERSE],
+	"16_grinder": [MIRROR, REVERSE],
 	"17_whiplash": [MIRROR],
-	"18_bottleneck": [MIRROR],
-	"19_the_wringer": [MIRROR],
+	"18_bottleneck": [MIRROR, REVERSE],
+	"19_the_wringer": [MIRROR, REVERSE],
 	"20_last_light": [MIRROR],
 	"a01_lift_off": [MIRROR],
 	"a02_sky_stairs": [MIRROR],
@@ -75,6 +76,19 @@ const OFFERED := {
 	"a08_pinball": [MIRROR],
 	"a09_knot": [MIRROR],
 	"a10_last_leap": [MIRROR],
+}
+
+## Why a track that has a way built for it still does not offer it, in the line
+## the track page shows over PLAY. Written when the check finds a way a track
+## cannot be driven, so the reason is the check's and not a guess. Acrobatic
+## tracks have no row here: their page does not show the ways they never offer.
+const WHY_NOT := {
+	"17_whiplash": {
+		REVERSE: "Backwards, its jumps land on the pad and the rows before them.",
+	},
+	"20_last_light": {
+		REVERSE: "Backwards, its second jump lands on the pad before it.",
+	},
 }
 
 
@@ -106,7 +120,8 @@ static func why_not(track_file: String, variant: String) -> String:
 		return ""
 	if variant not in BUILT:
 		return "%s is still being built." % display_name(variant)
-	return "This track is not offered %s." % display_name(variant)
+	var reasons: Dictionary = WHY_NOT.get(track_file.get_file().get_basename(), {})
+	return reasons.get(variant, "This track is not offered %s." % display_name(variant))
 
 
 ## Turn a track as its file describes it into the way it is being driven.
@@ -117,6 +132,8 @@ static func apply(definition: TrackDefinition, variant: String) -> void:
 	match variant:
 		MIRROR:
 			mirror(definition)
+		REVERSE:
+			reverse(definition)
 	definition.targets = targets(definition.targets, variant)
 
 
@@ -143,6 +160,140 @@ static func mirror(definition: TrackDefinition) -> void:
 	for branch: BranchDefinition in definition.branches:
 		branch.lane = -branch.lane
 		mirror(branch)
+
+
+## Driven the other way: the grid goes where the finish was, and the road is
+## driven back to where it started. The same road, every corner and climb and
+## hazard met in the opposite order and from the other side - so a corner that
+## turned right turns left, a climb falls, and everything standing on the road
+## is on the other side of it.
+##
+## A jump cannot simply be read backwards. Backwards, a jump is a long run, a
+## hole, and fifteen metres of road where the ramp was with no ramp facing the
+## car. So each one is built again from the parts around it: the old landing,
+## less a ramp's length, becomes level road, and the end of it the new ramp; the
+## hole stays where it was; and the new landing is the old ramp and the level
+## straight that was its run-up, as much of that as a landing of the usual
+## length wants. A run-up too short to land on leaves a landing `problems()`
+## refuses, and the track does not offer Reverse.
+##
+## Nothing may stand on a jump's landing, and a run-up is not held to that: a
+## pad or a row sixty metres before a ramp is a pad on the approach. Turned
+## round, it is sixty metres past the hole, beyond anywhere a car comes down,
+## so the landing stops short of it rather than reaching over it - never
+## shorter than the shortest landing a jump may have. Where even that would
+## reach something, the track does not offer Reverse either.
+##
+## Only for a normal track. Rings, platforms, lifts and high roads are all
+## timed or aimed around where a ramp throws a car, and none of them has a
+## reverse that is the same kind of thing - see `why_not`.
+static func reverse(definition: TrackDefinition) -> void:
+	var total := definition.length()
+	var step := definition.step
+	var shortest := TrackLayout.new().min_jump_landing
+	for placement in definition.placements:
+		placement.offset = total - placement.offset - placement.length
+		placement.lateral = -placement.lateral
+		var phases := PackedFloat32Array()
+		for phase in placement.phases:
+			phases.append(-phase)
+		placement.phases = phases
+
+	var backwards: Array[TrackLayout.Piece] = []
+	for i in range(definition.pieces.size() - 1, -1, -1):
+		var piece: TrackLayout.Piece = definition.pieces[i]
+		piece.turn = -piece.turn
+		piece.rise = -piece.rise
+		backwards.append(piece)
+
+	var pieces: Array[TrackLayout.Piece] = []
+	var built := 0
+	var at := 0
+	while at < backwards.size():
+		var piece := backwards[at]
+		at += 1
+		if piece.kind != TrackLayout.JUMP:
+			pieces.append(piece)
+			built += _steps(piece.length, step)
+			continue
+		# Counted in samples rather than metres, the way the road is built, so
+		# the course comes out exactly as long as it went in and every
+		# placement lands back on the same stretch of road.
+		var steps := _steps(piece.length, step)
+		var hole := piece.gap if piece.gap > 0.0 else definition.jump_gap
+		var level := _steps(piece.length - hole - 2.0 * definition.ramp_length, step)
+		var lead := TrackLayout.Piece.new(TrackLayout.STRAIGHT, float(level) * step,
+			piece.half_width)
+		lead.floating = piece.floating
+		pieces.append(lead)
+		built += level
+		# As much of the run-up as the landing wants, and no more than reaches
+		# a jump's keep-out short of the first thing standing past the hole.
+		# Where the two disagree, the landing wins: a landing too short is the
+		# worse fault, and whatever it then reaches is reported by the check
+		# as standing on a jump.
+		var ramp_and_hole := definition.ramp_length + hole
+		var wanted := level
+		var clear := _first_past(definition.placements,
+			float(built) * step + ramp_and_hole) - definition.jump_keep_out
+		if clear < INF:
+			wanted = mini(wanted, int(floor(clear / step)) - built - (steps - level))
+		wanted = maxi(wanted,
+			int(ceil((ramp_and_hole + shortest) / step)) - (steps - level))
+		# The run-up, taken off the straights after it for as long as they are
+		# the same road the jump is: level, as wide, and standing the same way.
+		var taken := 0
+		while taken < wanted and at < backwards.size():
+			var next := backwards[at]
+			if (next.kind != TrackLayout.STRAIGHT or next.half_width != piece.half_width
+					or next.floating != piece.floating):
+				break
+			var has := _steps(next.length, step)
+			var take := mini(has, wanted - taken)
+			taken += take
+			if take < has:
+				next.length = float(has - take) * step
+				break
+			at += 1
+		piece.length = float(steps - level + taken) * step
+		pieces.append(piece)
+		built += steps - level + taken
+	definition.pieces = pieces
+
+	# A fork's pad is a few metres into the lane from the entry, so the split
+	# and the reward arrive together. Reversed, it would be at the far end of
+	# the lane, a reward for a choice already made - so it is put back the
+	# same distance in from the lane's new entry. A pad wholly inside the
+	# lane, to the millimetre: one that starts where the lane ends, straight
+	# out of the fork, is on the road after it and stays there.
+	for fork in definition.placements:
+		if fork.kind != TrackFeatures.FORK:
+			continue
+		var entry := fork.offset
+		var exit := fork.offset + fork.length
+		for pad in definition.placements:
+			if (pad.kind == TrackFeatures.BOOST_PAD and pad.offset > entry - 0.001
+					and pad.offset + pad.length < exit + 0.001):
+				pad.offset = entry + exit - pad.offset - pad.length
+
+
+## Where the first thing standing on the road at or past `from` begins, or
+## infinitely far off when nothing does. Things that stand in the air or mark
+## a stretch rather than stand on it are not counted, as `track_check.gd`
+## does not count them.
+static func _first_past(placements: Array[TrackFeatures.Placement], from: float) -> float:
+	var first := INF
+	for placement in placements:
+		if placement.kind in [TrackFeatures.FORK, TrackFeatures.RING,
+				TrackFeatures.PLATFORM, TrackFeatures.WEDGE, TrackFeatures.COIN]:
+			continue
+		if placement.offset + placement.length > from:
+			first = minf(first, placement.offset)
+	return first
+
+
+static func _steps(length: float, step: float) -> int:
+	return maxi(1, int(round(length / step)))
 
 
 ## What a lap of the track driven this way is worth, given what a lap of the

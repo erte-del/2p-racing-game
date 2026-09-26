@@ -214,6 +214,7 @@ const WON_COLOUR := Color(0.44, 0.85, 0.52)
 @onready var _detail_track_chaos: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/TrackChaos
 @onready var _detail_hard: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Hard
 @onready var _detail_mirror: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Mirror
+@onready var _detail_reverse: Button = $TrackDetail/Page/Panel/Margin/Box/Body/Left/Variants/Reverse
 @onready var _detail_play: Button = $TrackDetail/Page/Panel/Margin/Box/Body/You/Play
 @onready var _detail_why: Label = $TrackDetail/Page/Panel/Margin/Box/Body/You/Why
 @onready var _detail_back: Button = $TrackDetail/Page/Panel/Margin/Box/Back
@@ -296,6 +297,12 @@ func _ready() -> void:
 		_detail_mirror.get_theme_font_size("font_size"))
 	word.scale.x = -1.0
 	word.resized.connect(func() -> void: word.pivot_offset = word.size * 0.5)
+	# And the button is held to the width the word needs, as a button with its
+	# own text would be. A button with no text of its own asks for next to no
+	# room, so in a row that is short of it this one was the one squeezed, with
+	# its word spilling over the buttons either side.
+	_detail_mirror.custom_minimum_size.x = (word.get_minimum_size().x
+		+ _detail_mirror.get_theme_stylebox("normal").get_minimum_size().x)
 	_account_button.pressed.connect(_on_account_pressed)
 	_account_screen.closed.connect(_on_account_closed)
 	_boards_button.pressed.connect(_on_boards_pressed)
@@ -1026,9 +1033,12 @@ func _open_track_detail(index: int, variant := TrackVariant.NORMAL) -> void:
 	# An acrobatic track is driven NORMAL or MIRROR and nothing else. HARD would
 	# stand barriers on its landings, and track chaos would roll them there,
 	# and a barrier on a landing is a much meaner thing than one on a straight.
+	# Rings, platforms, lifts and high roads are all aimed at where a ramp
+	# throws a car, so none of them has a reverse either.
 	var acrobatic := TrackRoster.kind_of(index) == TrackRoster.ACROBATIC
 	_detail_hard.visible = not acrobatic
 	_detail_track_chaos.visible = not acrobatic
+	_detail_reverse.visible = not acrobatic
 	_track_choice.hide()
 	_track_detail.show()
 	# The way asked for is held down to start with, and the cursor is on PLAY,
