@@ -18,6 +18,11 @@ const OBSTACLE_GROUP := &"obstacle"
 ## road, where the car is slower and where nothing it does counts towards the
 ## race. The track puts its own bodies in it.
 const ROAD_GROUP := &"road"
+## Bodies in this group are nothing but floor: every face of them points up, at
+## a slope a car can drive. The road surface is, and its rails are not. So a
+## wall one of them reports is not there, and _drive does not let it stop the
+## car - see seam_lift for where such a wall comes from.
+const SURFACE_GROUP := &"road_surface"
 
 ## Which set of input actions to read, e.g. "p1" -> p1_accelerate, p1_brake,
 ## p1_steer_left, p1_steer_right.
@@ -101,6 +106,27 @@ const ROAD_GROUP := &"road"
 ## What it left the ramp with is the climb the ramp was giving it a moment
 ## before, which is what this remembers.
 @export var climb_memory := 6.0
+## How far, in metres, a car is lifted to take again a step the road stopped
+## for no reason.
+##
+## The road's collision is a mesh of triangles, two to every 2.5 m of road,
+## with a seam corner to corner across each pair that is perfectly flat. The
+## collision box is level, so on a slope it touches only at the front corners
+## of its floor. When one of those corners comes to rest within a millimetre
+## of a seam, the physics' box-against-triangle test can take the seam for the
+## edge of a wall - one standing straight up along it - and report that as the
+## contact. A car on the ground that meets a wall has its step cancelled and
+## its speed along the wall taken away, so it stops. Next step it is in the
+## same place going the same way, so it stops again, and it stays there, on the
+## floor, reading full speed at full throttle.
+##
+## The seam ahead is flat, so the step is taken again from this much higher.
+## That is far more than the millimetre the false wall lives in and far less
+## than anything that could be seen, and the car is snapped back down onto the
+## road inside the same step. Only a wall reported by a body in SURFACE_GROUP
+## does this: a rail, a platform's side or the other car is a wall that is
+## really there.
+@export var seam_lift := 0.05
 
 @export_group("Slipstream")
 ## Tucking in behind the other car gives a top-speed boost, so a trailing
@@ -899,7 +925,14 @@ func _drive(delta: float) -> void:
 	# How fast it is coming down, taken before move_and_slide lands it and
 	# takes that away.
 	var falling := -velocity.y
+	var from := global_position
+	var asked := velocity
 	move_and_slide()
+	if grounded and _stopped_by_the_surface():
+		# Stopped by a wall the road does not have; see seam_lift.
+		global_position = from + Vector3.UP * seam_lift
+		velocity = asked
+		move_and_slide()
 	_moved = true
 
 	if is_on_floor():
@@ -927,6 +960,21 @@ func _drive(delta: float) -> void:
 		_climb = 0.0
 	_last_height = global_position.y
 	_take_the_hits()
+
+
+## Whether the last move met a wall on a body that has none: the road surface
+## reporting one of its own flat seams as an edge, which seam_lift describes.
+## Every contact of every collision is looked at, since the false wall is
+## rarely the first - the floor the corner is resting on usually is.
+func _stopped_by_the_surface() -> bool:
+	for i in get_slide_collision_count():
+		var collision := get_slide_collision(i)
+		for k in collision.get_collision_count():
+			var collider := collision.get_collider(k) as Node
+			if (collider != null and collider.is_in_group(SURFACE_GROUP)
+					and collision.get_angle(k) > floor_max_angle):
+				return true
+	return false
 
 
 ## Throw the car back up if what it has just come down on is the other car.
