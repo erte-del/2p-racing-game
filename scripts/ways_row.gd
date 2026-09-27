@@ -80,6 +80,8 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	if not is_visible_in_tree():
+		return
 	# A label does not know it is inside a button, so it is told which of the
 	# button's colours to wear: the same word a plain button would show.
 	var mirror := button(TrackVariant.MIRROR)
@@ -90,8 +92,13 @@ func _process(_delta: float) -> void:
 		state = "font_focus_color"
 	elif mirror.is_hovered():
 		state = "font_hover_color"
-	(mirror.get_node("Word") as Label).add_theme_color_override("font_color",
-		mirror.get_theme_color(state))
+	# Only when it changes. Every override tells the label its theme changed,
+	# which shapes its text again and lays the row out again, and doing that
+	# every frame for a colour that is nearly always the same is all cost.
+	var word := mirror.get_node("Word") as Label
+	var colour := mirror.get_theme_color(state)
+	if word.get_theme_color("font_color") != colour:
+		word.add_theme_color_override("font_color", colour)
 
 
 ## MIRROR written mirrored, flipped left to right about its own middle so it
