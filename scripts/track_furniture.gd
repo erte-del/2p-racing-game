@@ -295,10 +295,11 @@ func _clear_the_way(
 	if lane < 0.01:
 		return
 
-	var box := BoxShape3D.new()
-	box.size = Vector3(lane, barrier_height, placement.length)
-	var query := PhysicsShapeQueryParameters3D.new()
-	query.shape = box
+	# The trap's own query, made with it: this runs every step a trap moves,
+	# and a new shape each time is a physics shape made and thrown away each
+	# time.
+	var query: PhysicsShapeQueryParameters3D = trap["query"]
+	(query.shape as BoxShape3D).size = Vector3(lane, barrier_height, placement.length)
 	query.transform = global_transform * Transform3D(
 		Basis(right, Vector3.UP, -forward),
 		trap["centre"] + right * (edge + heading * lane * 0.5)
@@ -504,10 +505,12 @@ func _build_trap(
 		middle[0] + right * (trap.lateral * half_width))
 	add_child(body)
 	_built.append(body)
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = BoxShape3D.new()
 	_traps.append({
 		"placement": trap, "body": body, "at": trap.lateral, "seconds": 0.0,
 		"centre": middle[0], "right": right, "half_width": half_width,
-		"forward": forward.normalized(),
+		"forward": forward.normalized(), "query": query,
 	})
 
 

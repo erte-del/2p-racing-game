@@ -101,16 +101,6 @@ func catalogue(force := false) -> Array:
 	return rows
 
 
-## Whether a car is on the list, as far as this machine last heard.
-func is_shared(id: String) -> bool:
-	if _own.has(id):
-		return true
-	for row: Dictionary in _rows:
-		if row.id == id:
-			return true
-	return false
-
-
 ## Whether this player is the one who shared a car.
 func is_mine(id: String) -> bool:
 	return _own.has(id)

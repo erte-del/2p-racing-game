@@ -543,11 +543,6 @@ func line() -> PackedVector3Array:
 	return _line
 
 
-## The speed the line allows at a distance along it, in m/s.
-func limit_at(offset: float) -> float:
-	return _limit[clampi(int(offset / _step), 0, _count - 1)]
-
-
 ## Throttle and steering for this step, -1 to 1 each: what the car asks of
 ## whatever is driving it.
 ##
